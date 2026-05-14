@@ -44,9 +44,9 @@ tauri-plugin-global-shortcut   = "~2.3"
 tauri-plugin-clipboard-manager = "~2.3"
 
 # --- Frontend Bridge (Types & Serialization) ---
-specta           = { version = "2.0.0-rc.24", features = ["derive", "serde_json"] }
-tauri-specta     = { version = "2.0.0-rc.24", features = ["typescript", "derive"] }
-specta-typescript = "0.0.11"
+specta           = { version = "2.0.0-rc.25", features = ["derive", "serde_json"] }
+tauri-specta     = { version = "2.0.0-rc.25", features = ["typescript", "derive"] }
+specta-typescript = "0.0.12"
 serde            = { version = "1.0.228",     features = ["derive"] }
 serde_json       = "1.0.149"
 toml             = "1.1"

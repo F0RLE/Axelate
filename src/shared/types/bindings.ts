@@ -9,656 +9,654 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 
 /** Commands */
 export const commands = {
-	// Checks backend health status
+	/**  Checks backend health status */
 	getHealth: () => typedError<string, AppError>(__TAURI_INVOKE("get_health")),
-	// Loads application configuration with module installation status
-	getConfig: () => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("get_config")),
-	// Retrieves application settings (theme, language, GPU, debug)
+	/**  Loads application configuration with module installation status */
+	getConfig: () => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("get_config")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,apiProviders:v.data.apiProviders.map(i=>({...i,models:i.models==null?i.models:i.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})),catalog:({...v.data.catalog,ai:v.data.catalog.ai.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema})),services:v.data.catalog.services.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema}))})}) } : v) as typeof v)),
+	/**  Retrieves application settings (theme, language, GPU, debug) */
 	getSettings: () => typedError<AppSettings, AppError>(__TAURI_INVOKE("get_settings")),
-	// Saves application settings
+	/**  Saves application settings */
 	saveSettings: (settings: AppSettings) => typedError<null, AppError>(__TAURI_INVOKE("save_settings", { settings })),
-	// Saves a single setting by key-value pair
+	/**  Saves a single setting by key-value pair */
 	saveSetting: (key: string, value: string) => typedError<null, AppError>(__TAURI_INVOKE("save_setting", { key, value })),
-	// Retrieves persisted settings for a specific module.
-	getModuleSettings: (moduleId: string) => typedError<{ [key in string]: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } }, AppError>(__TAURI_INVOKE("get_module_settings", { moduleId })),
-	// Saves persisted settings for a specific module.
-	saveModuleSettings: (moduleId: string, settings: { [key in string]: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } }) => typedError<null, AppError>(__TAURI_INVOKE("save_module_settings", { moduleId, settings })),
-	// Detects and returns the current system language code
+	/**  Retrieves persisted settings for a specific module. */
+	getModuleSettings: (moduleId: string) => typedError<{ [key in string]: unknown }, AppError>(__TAURI_INVOKE("get_module_settings", { moduleId })).then((v) => ((v.status === "ok" ? { ...v, data: Object.fromEntries(Object.entries(v.data).map(([k,v])=>[k,v])) } : v) as typeof v)),
+	/**  Saves persisted settings for a specific module. */
+	saveModuleSettings: (moduleId: string, settings: { [key in string]: unknown }) => typedError<null, AppError>(__TAURI_INVOKE("save_module_settings", { moduleId, settings: Object.fromEntries(Object.entries(settings).map(([k,v])=>[k,v])) })),
+	/**  Detects and returns the current system language code */
 	getSystemLanguage: () => typedError<string, AppError>(__TAURI_INVOKE("get_system_language")),
-	// Retrieves log entries since a given timestamp
-	getLogs: (since: number) => typedError<LogEntry[], AppError>(__TAURI_INVOKE("get_logs", { since })),
-	// Retrieves log entries for a single console view since a given timestamp.
-	getConsoleLogs: (viewId: string, since: number) => typedError<LogEntry[], AppError>(__TAURI_INVOKE("get_console_logs", { viewId, since })),
-	// Returns aggregated console metadata for views and runtime statuses.
+	/**  Retrieves log entries since a given timestamp */
+	getLogs: (since: number) => typedError<LogEntry[], AppError>(__TAURI_INVOKE("get_logs", { since })).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>i) } : v) as typeof v)),
+	/**  Retrieves log entries for a single console view since a given timestamp. */
+	getConsoleLogs: (viewId: string, since: number) => typedError<LogEntry[], AppError>(__TAURI_INVOKE("get_console_logs", { viewId, since })).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>i) } : v) as typeof v)),
+	/**  Returns aggregated console metadata for views and runtime statuses. */
 	getConsoleOverview: () => typedError<ConsoleOverview, AppError>(__TAURI_INVOKE("get_console_overview")),
-	// Clears all stored log entries
+	/**  Clears all stored log entries */
 	clearLogs: () => typedError<null, AppError>(__TAURI_INVOKE("clear_logs")),
-	// Clears log entries and files for a single console view.
+	/**  Clears log entries and files for a single console view. */
 	clearConsoleLogs: (viewId: string) => typedError<null, AppError>(__TAURI_INVOKE("clear_console_logs", { viewId })),
-	// Returns the root folder where launcher logs are stored.
+	/**  Returns the root folder where launcher logs are stored. */
 	getLogDir: () => typedError<string, AppError>(__TAURI_INVOKE("get_log_dir")),
-	// Opens the root folder where launcher logs are stored.
+	/**  Opens the root folder where launcher logs are stored. */
 	openLogDir: () => typedError<null, AppError>(__TAURI_INVOKE("open_log_dir")),
-	// Opens the log folder for a single console view.
+	/**  Opens the log folder for a single console view. */
 	openConsoleLogTarget: (viewId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_console_log_target", { viewId })),
-	// Adds a single log entry to the log store
+	/**  Adds a single log entry to the log store */
 	addLog: (msg: string, source: string, level: string) => typedError<null, AppError>(__TAURI_INVOKE("add_log", { msg, source, level })),
-	// Adds multiple log entries in batch from frontend
+	/**  Adds multiple log entries in batch from frontend */
 	logBatch: (logs: BatchLogEntry[]) => typedError<null, AppError>(__TAURI_INVOKE("log_batch", { logs })),
-	// Downloads and verifies a module from a Git repository
+	/**  Downloads and verifies a module from a Git repository */
 	downloadModule: (moduleId: string, repoUrl: string, expectedHash: string | null, dlType: string | null, releaseSelection: {
-	// GitHub release tag to download. `None` means the newest compatible release.
+	/**  GitHub release tag to download. `None` means the newest compatible release. */
 	tag_name: string | null,
-	// Compute target selected by the user.
+	/**  Compute target selected by the user. */
 	compute_target?: ReleaseComputeTarget,
 } | null) => typedError<string, AppError>(__TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash, dlType, releaseSelection })),
-	// Lists compatible release versions and CPU/GPU package choices for a module.
+	/**  Lists compatible release versions and CPU/GPU package choices for a module. */
 	getReleaseDownloadOptions: (moduleId: string, repoUrl: string) => typedError<ReleaseDownloadOptions, AppError>(__TAURI_INVOKE("get_release_download_options", { moduleId, repoUrl })),
-	// Imports an integration from a local folder containing `axelate-module.toml`.
+	/**  Imports an integration from a local folder containing `axelate-module.toml`. */
 	importIntegrationFolder: (path: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_folder", { path })),
-	// Imports an integration from a local `.zip`, `.tar.gz`, `.tgz`, or `.7z` archive.
+	/**  Imports an integration from a local `.zip`, `.tar.gz`, `.tgz`, or `.7z` archive. */
 	importIntegrationArchive: (path: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_archive", { path })),
-	// Imports an integration from a local folder or archive, auto-detected by path type.
+	/**  Imports an integration from a local folder or archive, auto-detected by path type. */
 	importIntegrationPath: (path: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_path", { path })),
-	// Downloads and imports an integration from a repository or archive URL.
+	/**  Downloads and imports an integration from a repository or archive URL. */
 	importIntegrationUrl: (sourceUrl: string) => typedError<string, AppError>(__TAURI_INVOKE("import_integration_url", { sourceUrl })),
-	// Resumes a paused module download using backend-owned request metadata.
+	/**  Resumes a paused module download using backend-owned request metadata. */
 	resumeDownload: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("resume_download", { moduleId })),
-	// Checks if a module is already installed locally
+	/**  Checks if a module is already installed locally */
 	checkModuleInstalled: (moduleId: string) => typedError<boolean, AppError>(__TAURI_INVOKE("check_module_installed", { moduleId })),
-	// Retrieves the filesystem path to a module's directory
+	/**  Retrieves the filesystem path to a module's directory */
 	getModulePath: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_path", { moduleId })),
-	// Deletes a module from local storage
+	/**  Deletes a module from local storage */
 	deleteModule: (moduleId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_module", { moduleId })),
-	// Lists all files in a module's directory
+	/**  Lists all files in a module's directory */
 	listModuleFiles: (moduleId: string) => typedError<string[], AppError>(__TAURI_INVOKE("list_module_files", { moduleId })),
-	// Configures download bandwidth limits
+	/**  Configures download bandwidth limits */
 	setDownloadSettings: (enabled: boolean, maxSpeed: number) => __TAURI_INVOKE<void>("set_download_settings", { enabled, maxSpeed }),
-	// Cancels an in-progress module download
+	/**  Cancels an in-progress module download */
 	cancelDownload: (moduleId: string) => __TAURI_INVOKE<boolean>("cancel_download", { moduleId }),
-	// Pauses an in-progress module download while preserving partial files for resume
+	/**  Pauses an in-progress module download while preserving partial files for resume */
 	pauseDownload: (moduleId: string) => __TAURI_INVOKE<boolean>("pause_download", { moduleId }),
-	// Retrieves real-time system statistics (CPU, RAM, GPU, disk, network)
-	getSystemStats: () => typedError<SystemStats, AppError>(__TAURI_INVOKE("get_system_stats")),
-	// Retrieves GPU information and preferred runtime backend hint
+	/**  Retrieves real-time system statistics (CPU, RAM, GPU, disk, network) */
+	getSystemStats: () => typedError<SystemStats, AppError>(__TAURI_INVOKE("get_system_stats")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,gpu:v.data.gpu==null?v.data.gpu:v.data.gpu,vram:v.data.vram==null?v.data.vram:v.data.vram}) } : v) as typeof v)),
+	/**  Retrieves GPU information and preferred runtime backend hint */
 	getGpuInfo: () => typedError<GpuInfo, AppError>(__TAURI_INVOKE("get_gpu_info")),
-	// Pauses or resumes system monitoring
+	/**  Pauses or resumes system monitoring */
 	setMonitoringPaused: (paused: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_monitoring_paused", { paused })),
-	// Retrieves list of all available modules (AI and services)
-	getModules: () => typedError<Module[], AppError>(__TAURI_INVOKE("get_modules")),
-	// Controls a module (start, stop, restart)
+	/**  Retrieves list of all available modules (AI and services) */
+	getModules: () => typedError<Module[], AppError>(__TAURI_INVOKE("get_modules")).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>({...i,config:Object.fromEntries(Object.entries(i.config).map(([k,v])=>[k,v])),configSchema:i.configSchema==null?i.configSchema:Object.fromEntries(Object.entries(i.configSchema).map(([k,v])=>[k,({...v,default:v.default==null?v.default:v.default,min:v.min==null?v.min:v.min,max:v.max==null?v.max:v.max,step:v.step==null?v.step:v.step})]))})) } : v) as typeof v)),
+	/**  Controls a module (start, stop, restart) */
 	controlModule: (request: ControlRequest) => typedError<ControlResponse, AppError>(__TAURI_INVOKE("control_module", { request })),
-	// Retrieves runtime status of a specific module
+	/**  Retrieves runtime status of a specific module */
 	getModuleStatus: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_status", { moduleId })),
-	// Creates a scoped settings-session token for a module-owned custom settings UI.
+	/**  Creates a scoped settings-session token for a module-owned custom settings UI. */
 	createModuleSettingsSession: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("create_module_settings_session", { moduleId })),
-	// Minimizes the application window
+	/**  Minimizes the application window */
 	minimizeWindow: () => typedError<null, AppError>(__TAURI_INVOKE("minimize_window")),
-	// Maximizes or unmaximizes the window
+	/**  Maximizes or unmaximizes the window */
 	maximizeWindow: () => typedError<null, AppError>(__TAURI_INVOKE("maximize_window")),
-	// Closes the window gracefully (app remains in tray)
+	/**  Closes the window gracefully (app remains in tray) */
 	closeWindow: () => typedError<null, AppError>(__TAURI_INVOKE("close_window")),
-	// Shows and focuses the window
+	/**  Shows and focuses the window */
 	showWindow: () => typedError<null, AppError>(__TAURI_INVOKE("show_window")),
-	// Hides the window
+	/**  Hides the window */
 	hideWindow: () => typedError<null, AppError>(__TAURI_INVOKE("hide_window")),
-	// Retrieves translation strings for the specified language
-	getTranslations: (lang: string) => typedError<"Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never }, AppError>(__TAURI_INVOKE("get_translations", { lang })),
-	// Retrieves current theme color palette
+	/**  Retrieves translation strings for the specified language */
+	getTranslations: (lang: string) => typedError<unknown, AppError>(__TAURI_INVOKE("get_translations", { lang })),
+	/**  Retrieves current theme color palette */
 	getThemeColors: () => typedError<{ [key in string]: string }, AppError>(__TAURI_INVOKE("get_theme_colors")),
-	// Retrieves persisted window settings (size, position, maximized state)
+	/**  Retrieves persisted window settings (size, position, maximized state) */
 	getWindowSettings: () => typedError<WindowSettings, AppError>(__TAURI_INVOKE("get_window_settings")),
-	// Saves window dimensions to disk
+	/**  Saves window dimensions to disk */
 	saveWindowSize: (width: number, height: number) => typedError<null, AppError>(__TAURI_INVOKE("save_window_size", { width, height })),
-	// Saves window screen position to disk
+	/**  Saves window screen position to disk */
 	saveWindowPosition: (x: number, y: number) => typedError<null, AppError>(__TAURI_INVOKE("save_window_position", { x, y })),
-	// Saves maximized/unmaximized state to disk
+	/**  Saves maximized/unmaximized state to disk */
 	saveMaximizedState: (maximized: boolean) => typedError<null, AppError>(__TAURI_INVOKE("save_maximized_state", { maximized })),
-	// Saves global zoom level to UI state
+	/**  Saves global zoom level to UI state */
 	saveZoomLevel: (zoom: number) => typedError<null, AppError>(__TAURI_INVOKE("save_zoom_level", { zoom })),
 	/**
 	 *  Set `WebView` zoom level and persist for current resolution.
 	 *  Uses native WebView zoom so layout metrics stay consistent with the rendered size.
 	 */
 	setWebviewZoom: (zoom: number) => typedError<null, AppError>(__TAURI_INVOKE("set_webview_zoom", { zoom })),
-	// Persist zoom for the active monitor resolution without touching the WebView.
+	/**  Persist zoom for the active monitor resolution without touching the WebView. */
 	saveCurrentResolutionZoom: (zoom: number) => typedError<null, AppError>(__TAURI_INVOKE("save_current_resolution_zoom", { zoom })),
-	// Retrieves current global `WebView` zoom level
+	/**  Retrieves current global `WebView` zoom level */
 	getWebviewZoom: () => typedError<number, AppError>(__TAURI_INVOKE("get_webview_zoom")),
 	/**
 	 *  Get the effective zoom for the current monitor resolution.
 	 *  Read-only — never auto-saves, so "user set" is always distinguishable from "defaulted".
 	 */
 	getResolutionZoom: () => typedError<number, AppError>(__TAURI_INVOKE("get_resolution_zoom")),
-	// Retrieves window configuration settings
+	/**  Retrieves window configuration settings */
 	getWindowConfig: () => __TAURI_INVOKE<WindowConfig>("get_window_config"),
-	// Calculates window layout policy based on screen size and zoom
+	/**  Calculates window layout policy based on screen size and zoom */
 	getWindowPolicy: () => typedError<WindowPolicy, AppError>(__TAURI_INVOKE("get_window_policy")),
-	// Retrieves persisted UI state (sidebar, zoom, selected modules)
-	getUiState: () => typedError<UIState, AppError>(__TAURI_INVOKE("get_ui_state")),
-	// Saves UI state to persistent storage
-	saveUiState: (state: UIState) => typedError<null, AppError>(__TAURI_INVOKE("save_ui_state", { state })),
-	// Retrieves all application state and configuration during app startup
-	getAppBootstrapData: () => typedError<BootstrapData, AppError>(__TAURI_INVOKE("get_app_bootstrap_data")),
-	// Saves anAPI key securely to system credential storage
+	/**  Retrieves persisted UI state (sidebar, zoom, selected modules) */
+	getUiState: () => typedError<UIState, AppError>(__TAURI_INVOKE("get_ui_state")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,resolution_zoom:Object.fromEntries(Object.entries(v.data.resolution_zoom).map(([k,v])=>[k,v]))}) } : v) as typeof v)),
+	/**  Saves UI state to persistent storage */
+	saveUiState: (state: UIState) => typedError<null, AppError>(__TAURI_INVOKE("save_ui_state", { state: ({...state,resolution_zoom:Object.fromEntries(Object.entries(state.resolution_zoom).map(([k,v])=>[k,v]))}) })),
+	/**  Retrieves all application state and configuration during app startup */
+	getAppBootstrapData: () => typedError<BootstrapData, AppError>(__TAURI_INVOKE("get_app_bootstrap_data")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,uiState:({...v.data.uiState,resolution_zoom:Object.fromEntries(Object.entries(v.data.uiState.resolution_zoom).map(([k,v])=>[k,v]))})}) } : v) as typeof v)),
+	/**  Saves anAPI key securely to system credential storage */
 	saveSecureKey: (service: string, key: string) => typedError<null, AppError>(__TAURI_INVOKE("save_secure_key", { service, key })),
-	// Removes a frontend-managed secret from system credential storage
+	/**  Removes a frontend-managed secret from system credential storage */
 	removeSecureKey: (service: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_secure_key", { service })),
-	// Retrieves a frontend-managed secret from system credential storage
+	/**  Retrieves a frontend-managed secret from system credential storage */
 	getSecureKey: (service: string) => typedError<string | null, AppError>(__TAURI_INVOKE("get_secure_key", { service })),
-	// Checks whether a non-empty API key exists in secure storage
+	/**  Checks whether a non-empty API key exists in secure storage */
 	hasSecureKey: (service: string) => typedError<boolean, AppError>(__TAURI_INVOKE("has_secure_key", { service })),
-	// Returns non-sensitive metadata for a stored key without exposing the secret.
+	/**  Returns non-sensitive metadata for a stored key without exposing the secret. */
 	getSecureKeyMeta: (service: string) => typedError<SecureKeyMeta, AppError>(__TAURI_INVOKE("get_secure_key_meta", { service })),
-	// Sends a chat message to the AI provider and streams the response
-	sendChatMessage: (request: ChatRequest, chatChannel: Channel<StreamChunkPayload>, thoughtChannel: Channel<StreamChunkPayload>) => typedError<ChatResponse, AppError>(__TAURI_INVOKE("send_chat_message", { request, chatChannel, thoughtChannel })),
-	// Cancels an active streamed chat request by request identifier.
+	/**  Sends a chat message to the AI provider and streams the response */
+	sendChatMessage: (request: ChatRequest, chatChannel: Channel<StreamChunkPayload>, thoughtChannel: Channel<StreamChunkPayload>) => typedError<ChatResponse, AppError>(__TAURI_INVOKE("send_chat_message", { request: ({...request,messages:request.messages.map(i=>i)}), chatChannel, thoughtChannel })),
+	/**  Cancels an active streamed chat request by request identifier. */
 	cancelChatGeneration: (requestId: string) => __TAURI_INVOKE<boolean>("cancel_chat_generation", { requestId }),
-	// Validates an API key for the specified provider
+	/**  Validates an API key for the specified provider */
 	validateApiKey: (provider: string, key: string) => typedError<boolean, AppError>(__TAURI_INVOKE("validate_api_key", { provider, key })),
-	// Validates the stored provider key without exposing it to the frontend
+	/**  Validates the stored provider key without exposing it to the frontend */
 	validateStoredApiKey: (provider: string) => typedError<boolean, AppError>(__TAURI_INVOKE("validate_stored_api_key", { provider })),
-	// Clears chat history for a specific session
+	/**  Clears chat history for a specific session */
 	clearChatHistory: (sessionId: string) => typedError<null, AppError>(__TAURI_INVOKE("clear_chat_history", { sessionId })),
-	// Retrieves chat history for a specific session
-	getChatHistory: (sessionId: string) => typedError<ChatMessage[], AppError>(__TAURI_INVOKE("get_chat_history", { sessionId })),
-	// Removes the latest user turn and any following assistant replies from a session.
+	/**  Retrieves chat history for a specific session */
+	getChatHistory: (sessionId: string) => typedError<ChatMessage[], AppError>(__TAURI_INVOKE("get_chat_history", { sessionId })).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>i) } : v) as typeof v)),
+	/**  Removes the latest user turn and any following assistant replies from a session. */
 	rewindLastTurn: (sessionId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("rewind_last_turn", { sessionId })),
-	// Counts tokens in text for the specified model
+	/**  Counts tokens in text for the specified model */
 	countTokens: (text: string, model: string | null) => typedError<number, string>(__TAURI_INVOKE("count_tokens", { text, model })),
-	// Sends an image generation request to the connected AI provider
-	generateImage: (request: ImageGenerationRequest) => typedError<ImageGenerationResponse, AppError>(__TAURI_INVOKE("generate_image", { request })),
-	// Cancels the current image generation request for the selected provider.
+	/**  Sends an image generation request to the connected AI provider */
+	generateImage: (request: ImageGenerationRequest) => typedError<ImageGenerationResponse, AppError>(__TAURI_INVOKE("generate_image", { request: ({...request,cfg_scale:request.cfg_scale==null?request.cfg_scale:request.cfg_scale,denoising_strength:request.denoising_strength==null?request.denoising_strength:request.denoising_strength}) })),
+	/**  Cancels the current image generation request for the selected provider. */
 	cancelImageGeneration: (provider: string) => typedError<null, AppError>(__TAURI_INVOKE("cancel_image_generation", { provider })),
-	// Returns the latest image-generation preview when the local image engine writes one.
+	/**  Returns the latest image-generation preview when the local image engine writes one. */
 	getImageGenerationPreview: () => typedError<{
-	// Data URL of the latest preview image.
+	/**  Data URL of the latest preview image. */
 	data_url: string,
-	// File modification timestamp in Unix milliseconds.
+	/**  File modification timestamp in Unix milliseconds. */
 	updated_at_ms: number,
-	// Current image-generation progress, normalized to 0.0..1.0 when the engine exposes it.
+	/**  Current image-generation progress, normalized to 0.0..1.0 when the engine exposes it. */
 	progress: number | null,
-	// Current sampling step when available.
+	/**  Current sampling step when available. */
 	step: number | null,
-	// Total sampling steps when available.
+	/**  Total sampling steps when available. */
 	total: number | null,
-	// Latest reported generation speed when available, for example `1.07s/it`.
+	/**  Latest reported generation speed when available, for example `1.07s/it`. */
 	speed: string | null,
-	// Estimated remaining seconds when the engine exposes it.
+	/**  Estimated remaining seconds when the engine exposes it. */
 	eta_relative: number | null,
-} | null, AppError>(__TAURI_INVOKE("get_image_generation_preview")),
-	// Deletes a previously saved chat image from disk.
+} | null, AppError>(__TAURI_INVOKE("get_image_generation_preview")).then((v) => ((v.status === "ok" ? { ...v, data: v.data==null?v.data:({...v.data,progress:v.data.progress==null?v.data.progress:v.data.progress,eta_relative:v.data.eta_relative==null?v.data.eta_relative:v.data.eta_relative}) } : v) as typeof v)),
+	/**  Deletes a previously saved chat image from disk. */
 	deleteChatImage: (filePath: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_chat_image", { filePath })),
-	// Opens the saved chat image folder in the system file manager.
+	/**  Opens the saved chat image folder in the system file manager. */
 	openChatImageLocation: (filePath: string, folderPath: string) => typedError<null, AppError>(__TAURI_INVOKE("open_chat_image_location", { filePath, folderPath })),
-	// Saves a chat image to the default Pictures/axelate directory and returns the final path.
+	/**  Saves a chat image to the default Pictures/axelate directory and returns the final path. */
 	saveChatImageDefault: (base64Data: string, mimeType: string) => typedError<SavedChatImage, AppError>(__TAURI_INVOKE("save_chat_image_default", { base64Data, mimeType })),
-	// Captures one voice utterance with the native platform recognizer.
+	/**  Captures one voice utterance with the native platform recognizer. */
 	recognizeVoiceOnce: (request: VoiceRecognitionRequest) => typedError<VoiceRecognitionResponse, AppError>(__TAURI_INVOKE("recognize_voice_once", { request })),
-	// Cancels the active native voice recognition request, if one is running.
+	/**  Cancels the active native voice recognition request, if one is running. */
 	cancelVoiceRecognition: () => typedError<null, AppError>(__TAURI_INVOKE("cancel_voice_recognition")),
-	// Opens the native Windows speech privacy settings page.
+	/**  Opens the native Windows speech privacy settings page. */
 	openVoicePrivacySettings: () => typedError<null, AppError>(__TAURI_INVOKE("open_voice_privacy_settings")),
-	// Retrieves all custom AI models configured by the user
-	getCustomModels: () => typedError<CustomModel[], AppError>(__TAURI_INVOKE("get_custom_models")),
-	// Adds a new custom AI model configuration
+	/**  Retrieves all custom AI models configured by the user */
+	getCustomModels: () => typedError<CustomModel[], AppError>(__TAURI_INVOKE("get_custom_models")).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>i) } : v) as typeof v)),
+	/**  Adds a new custom AI model configuration */
 	addCustomModel: (providerId: string, id: string, name: string, baseModelId: string) => typedError<null, AppError>(__TAURI_INVOKE("add_custom_model", { providerId, id, name, baseModelId })),
-	// Removes a custom AI model by ID
+	/**  Removes a custom AI model by ID */
 	removeCustomModel: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_custom_model", { id })),
-	// Processes file content for AI context (extracts text from files and archives)
+	/**  Processes file content for AI context (extracts text from files and archives) */
 	processFileContent: (name: string, data: number[]) => typedError<ProcessedFile, string>(__TAURI_INVOKE("process_file_content", { name, data })),
-	// Starts a local engine. Hot-swaps if another engine is active.
+	/**  Starts a local engine. Hot-swaps if another engine is active. */
 	startEngine: (config: EngineConfig) => typedError<EngineStatus, AppError>(__TAURI_INVOKE("start_engine", { config })),
-	// Stops all running engines.
+	/**  Stops all running engines. */
 	stopEngine: () => typedError<null, AppError>(__TAURI_INVOKE("stop_engine")),
-	// Stops the engine in a specific capability slot (text, image, vision).
+	/**  Stops the engine in a specific capability slot (text, image, vision). */
 	stopEngineSlot: (capability: Capability) => typedError<null, AppError>(__TAURI_INVOKE("stop_engine_slot", { capability })),
-	// Gets the current engine state (idle, starting, ready, error).
+	/**  Gets the current engine state (idle, starting, ready, error). */
 	getEngineState: () => typedError<EngineState, AppError>(__TAURI_INVOKE("get_engine_state")),
-	// Checks if an engine binary is present (in ENGINES_DIR or system PATH).
+	/**  Checks if an engine binary is present (in ENGINES_DIR or system PATH). */
 	checkEngineInstalled: (engineId: string, binaryName: string | null) => __TAURI_INVOKE<boolean>("check_engine_installed", { engineId, binaryName }),
-	// Deletes an Axelate-managed engine from local storage.
+	/**  Deletes an Axelate-managed engine from local storage. */
 	deleteEngine: (engineId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_engine", { engineId })),
-	// Returns all registered engine definitions with real-time installation status.
-	getEngineDefinitions: () => typedError<EngineDefinition[], AppError>(__TAURI_INVOKE("get_engine_definitions")),
-	// Returns the persisted user config for an engine, or defaults if none saved yet.
+	/**  Returns all registered engine definitions with real-time installation status. */
+	getEngineDefinitions: () => typedError<EngineDefinition[], AppError>(__TAURI_INVOKE("get_engine_definitions")).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>({...i,config_schema:i.config_schema==null?i.config_schema:i.config_schema})) } : v) as typeof v)),
+	/**  Returns the persisted user config for an engine, or defaults if none saved yet. */
 	getEngineConfig: (engineId: string) => typedError<EngineConfig, AppError>(__TAURI_INVOKE("get_engine_config", { engineId })),
-	// Returns the local engine modal payload in a single backend round-trip.
+	/**  Returns the local engine modal payload in a single backend round-trip. */
 	getEngineSettingsPayload: (engineId: string) => typedError<EngineSettingsPayload, AppError>(__TAURI_INVOKE("get_engine_settings_payload", { engineId })),
-	// Persists user engine config (compute mode, context_size, model_path, extra_args).
+	/**  Persists user engine config (compute mode, context_size, model_path, extra_args). */
 	setEngineConfig: (config: EngineConfig) => typedError<null, AppError>(__TAURI_INVOKE("set_engine_config", { config })),
 };
 
 /* Types */
-// Complete AI model definition
+/**  Complete AI model definition */
 export type AiModel = {
-	// Model ID (moved from dict key)
+	/**  Model ID (moved from dict key) */
 	id: string,
-	// Localization key for description
+	/**  Localization key for description */
 	descKey?: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// Human-readable description
+	/**  Human-readable description */
 	desc: string,
-	// Tier classification (Weak < Medium < Strong)
+	/**  Tier classification (Weak < Medium < Strong) */
 	tier: ModelTier,
-	// Model size classification (optional)
+	/**  Model size classification (optional) */
 	modelSize: string | null,
-	// Release date string (YYYY-MM)
+	/**  Release date string (YYYY-MM) */
 	releaseDate: string | null,
-	// Context window size in tokens
+	/**  Context window size in tokens */
 	contextWindow: number | null,
-	// Maximum output tokens allowed
+	/**  Maximum output tokens allowed */
 	maxOutputTokens: number | null,
-	// Pricing configuration
+	/**  Pricing configuration */
 	pricing: PricingConfig | null,
-	// Performance statistics
+	/**  Performance statistics */
 	stats: ModelStats,
-	// Capabilities
+	/**  Capabilities */
 	capabilities: ModelCapabilities | null,
-	// API model identifiers (mapped to `apiModels` in JSON)
+	/**  API model identifiers (mapped to `apiModels` in JSON) */
 	apiModels: ApiModelConfig | null,
 };
 
-// API model identifiers for different capabilities
+/**  API model identifiers for different capabilities */
 export type ApiModelConfig = {
-	// Model ID for text generation
+	/**  Model ID for text generation */
 	text: string | null,
-	// Model ID for image generation
+	/**  Model ID for image generation */
 	image: string | null,
 };
 
-// Configuration for an AI API provider (OpenAI, Gemini, Claude, etc.)
+/**  Configuration for an AI API provider (OpenAI, Gemini, Claude, etc.) */
 export type ApiProvider = {
-	// Unique identifier (e.g., "gpt", "gemini")
+	/**  Unique identifier (e.g., "gpt", "gemini") */
 	id: string,
-	// Display name (e.g., "GPT", "Gemini")
+	/**  Display name (e.g., "GPT", "Gemini") */
 	name: string,
-	// Localization key for description
+	/**  Localization key for description */
 	descKey?: string | null,
-	// Direct description text
+	/**  Direct description text */
 	description?: string | null,
-	// Icon/emoji for UI display
+	/**  Icon/emoji for UI display */
 	icon?: string | null,
-	// Provider type
+	/**  Provider type */
 	type: ProviderType | null,
-	// Base URL for API endpoints
+	/**  Base URL for API endpoints */
 	baseUrl?: string | null,
-	// Environment variable name for API key
+	/**  Environment variable name for API key */
 	apiKeyEnv?: string | null,
-	// Available models configuration
+	/**  Available models configuration */
 	models?: AiModel[] | null,
-	// Provider output capabilities exposed in the launcher catalog
+	/**  Provider output capabilities exposed in the launcher catalog */
 	capabilities?: string[] | null,
-	// Model aliases (UI name → API ID mappings)
+	/**  Model aliases (UI name → API ID mappings) */
 	modelAliases?: { [key in string]: string } | null,
 };
 
-// Orchestrated application configuration
+/**  Orchestrated application configuration */
 export type AppConfig = AppConfig_Serialize | AppConfig_Deserialize;
 
-// Orchestrated application configuration
+/**  Orchestrated application configuration */
 export type AppConfig_Deserialize = {
-	// Configuration version
+	/**  Configuration version */
 	version: string,
-	// Available AI providers (loaded from resources/api_providers)
+	/**  Available AI providers (loaded from resources/api_providers) */
 	apiProviders: ApiProvider[],
-	// Catalog of available apps/services (local + cloud virtual modules)
+	/**  Catalog of available apps/services (local + cloud virtual modules) */
 	catalog: ConfigCatalog_Deserialize,
 };
 
-// Orchestrated application configuration
+/**  Orchestrated application configuration */
 export type AppConfig_Serialize = {
-	// Configuration version
+	/**  Configuration version */
 	version: string,
-	// Available AI providers (loaded from resources/api_providers)
+	/**  Available AI providers (loaded from resources/api_providers) */
 	apiProviders: ApiProvider[],
-	// Catalog of available apps/services (local + cloud virtual modules)
+	/**  Catalog of available apps/services (local + cloud virtual modules) */
 	catalog: ConfigCatalog_Serialize,
 };
 
-// Application-level errors
+/**  Application-level errors */
 export type AppError =
-// Validation error (invalid input, malformed data)
+/**  Validation error (invalid input, malformed data) */
 ({ Validation: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never } |
-// Resource not found error
+/**  Resource not found error */
 ({ NotFound: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
-// Permission denied or unauthorized access
+/**  Permission denied or unauthorized access */
 ({ PermissionDenied: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; Serialization?: never; Validation?: never } |
-// Frontend tried to access a secret outside the managed allowlist
+/**  Frontend tried to access a secret outside the managed allowlist */
 ({ FrontendSecretForbidden: string }) & { Config?: never; External?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
-// File system I/O error
+/**  File system I/O error */
 ({ Io: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
-// JSON serialization/deserialization error
+/**  JSON serialization/deserialization error */
 ({ Serialization: string }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Validation?: never } |
-// Configuration loading or parsing error
+/**  Configuration loading or parsing error */
 ({ Config: string }) & { External?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
-// External service or API error
+/**  External service or API error */
 ({ External: {
-	// Unique request identifier for tracing
+	/**  Unique request identifier for tracing */
 	request_id: string | null,
-	// error message
+	/**  error message */
 	message: string,
 } }) & { Config?: never; FrontendSecretForbidden?: never; Internal?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never } |
-// Internal server error (unexpected failures)
+/**  Internal server error (unexpected failures) */
 ({ Internal: {
-	// Unique request identifier for tracing
+	/**  Unique request identifier for tracing */
 	request_id: string | null,
-	// error message
+	/**  error message */
 	message: string,
 } }) & { Config?: never; External?: never; FrontendSecretForbidden?: never; Io?: never; NotFound?: never; PermissionDenied?: never; Serialization?: never; Validation?: never };
 
-// Global application settings
+/**  Global application settings */
 export type AppSettings = {
-	// UI theme ("dark" or "light")
+	/**  UI theme ("dark" or "light") */
 	theme: string,
-	// Interface language code (e.g., "en", "ru", "zh")
+	/**  Interface language code (e.g., "en", "ru", "zh") */
 	language: string,
-	// Enable GPU acceleration for monitoring
+	/**  Enable GPU acceleration for monitoring */
 	use_gpu: boolean,
-	// Enable debug mode and logging
+	/**  Enable debug mode and logging */
 	debug_mode: boolean,
-} &
-// Dynamic extra settings (module-specific, etc.)
-({ [key in string]: string });
+} & { [key in string]: string };
 
-// Batch log entry from frontend
+/**  Batch log entry from frontend */
 export type BatchLogEntry = {
-	// Log level ("info", "warn", "error")
+	/**  Log level ("info", "warn", "error") */
 	level: string,
-	// Log message content
+	/**  Log message content */
 	message: string,
 };
 
-// Application bootstrap data sent to frontend during initialization
+/**  Application bootstrap data sent to frontend during initialization */
 export type BootstrapData = {
-	// Persisted UI state
+	/**  Persisted UI state */
 	uiState: UIState,
-	// Window configuration settings
+	/**  Window configuration settings */
 	windowConfig: WindowConfig,
-	// Detected system language
+	/**  Detected system language */
 	systemLanguage: string,
-	// Effective zoom for the current monitor resolution
+	/**  Effective zoom for the current monitor resolution */
 	initialZoom: number,
 };
 
-// Breakpoints configuration.
+/**  Breakpoints configuration. */
 export type Breakpoints = {
-	// Width for compact layout.
+	/**  Width for compact layout. */
 	compact: number,
-	// Width for medium layout.
+	/**  Width for medium layout. */
 	medium: number,
-	// Width for large layout.
+	/**  Width for large layout. */
 	large: number,
 };
 
-// What an engine can do
+/**  What an engine can do */
 export type Capability =
-// Text generation (LLM)
+/**  Text generation (LLM) */
 "text" |
-// Image generation (diffusion)
+/**  Image generation (diffusion) */
 "image" |
-// Image understanding (multimodal LLM)
+/**  Image understanding (multimodal LLM) */
 "vision";
 
-// AI chat message with role and content
+/**  AI chat message with role and content */
 export type ChatMessage = {
-	// Unique message identifier (UUID v4)
+	/**  Unique message identifier (UUID v4) */
 	id?: string,
-	// Role ("user", "assistant", "system")
+	/**  Role ("user", "assistant", "system") */
 	role: string,
-	// Message content (text or structured data)
-	content: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never },
-	// Optional signature for extended thinking
+	/**  Message content (text or structured data) */
+	content: unknown,
+	/**  Optional signature for extended thinking */
 	thought_signature: string | null,
 };
 
-// AI reply content
+/**  AI reply content */
 export type ChatReply = {
-	// Reply text
+	/**  Reply text */
 	text: string,
-	// Role (typically "assistant")
+	/**  Role (typically "assistant") */
 	role: string,
 };
 
-// AI chat request parameters
+/**  AI chat request parameters */
 export type ChatRequest = {
-	// AI provider ("openai", "gemini", "local") - largely ignored now as we route via OpenRouter
+	/**  AI provider ("openai", "gemini", "local") - largely ignored now as we route via OpenRouter */
 	provider: string,
-	// Model identifier
+	/**  Model identifier */
 	model: string,
-	// Chat history and new message
+	/**  Chat history and new message */
 	messages: ChatMessage[],
-	// Optional API key
+	/**  Optional API key */
 	api_key: string | null,
-	// Thinking level ("low", "medium", "high")
+	/**  Thinking level ("low", "medium", "high") */
 	thinking_level: string | null,
-	// Optional max output tokens
+	/**  Optional max output tokens */
 	max_tokens: number | null,
-	// Client-generated request identifier for stream isolation
+	/**  Client-generated request identifier for stream isolation */
 	request_id: string | null,
-	// Session identifier for history tracking
+	/**  Session identifier for history tracking */
 	session_id: string | null,
-	// Optional web search controls for cloud/API providers
+	/**  Optional web search controls for cloud/API providers */
 	web_search?: WebSearchOptions | null,
 };
 
-// AI chat response
+/**  AI chat response */
 export type ChatResponse = {
-	// Corresponding request identifier
+	/**  Corresponding request identifier */
 	id?: string,
-	// Whether request was successful
+	/**  Whether request was successful */
 	ok: boolean,
-	// AI reply content
+	/**  AI reply content */
 	reply: ChatReply | null,
-	// Error message if failed
+	/**  Error message if failed */
 	error: string | null,
-	// Model used
+	/**  Model used */
 	model: string | null,
-	// Thinking signature
+	/**  Thinking signature */
 	thought_signature: string | null,
-	// Token usage metrics
+	/**  Token usage metrics */
 	usage: TokenUsage | null,
 };
 
-// Application catalog containing available modules and services
+/**  Application catalog containing available modules and services */
 export type ConfigCatalog = ConfigCatalog_Serialize | ConfigCatalog_Deserialize;
 
-// Application catalog containing available modules and services
+/**  Application catalog containing available modules and services */
 export type ConfigCatalog_Deserialize = {
-	// AI generation modules (text, images, `LocalAI`)
+	/**  AI generation modules (text, images, `LocalAI`) */
 	ai: ModuleItem_Deserialize[],
-	// Service integrations and external automation
+	/**  Service integrations and external automation */
 	services: ModuleItem_Deserialize[],
-	// Starred/Favorite module IDs
+	/**  Starred/Favorite module IDs */
 	stars: string[],
 };
 
-// Application catalog containing available modules and services
+/**  Application catalog containing available modules and services */
 export type ConfigCatalog_Serialize = {
-	// AI generation modules (text, images, `LocalAI`)
+	/**  AI generation modules (text, images, `LocalAI`) */
 	ai: ModuleItem_Serialize[],
-	// Service integrations and external automation
+	/**  Service integrations and external automation */
 	services: ModuleItem_Serialize[],
-	// Starred/Favorite module IDs
+	/**  Starred/Favorite module IDs */
 	stars: string[],
 };
 
-// Configuration field schema for module settings
+/**  Configuration field schema for module settings */
 export type ConfigField = {
-	// Field type ("text", "password", "select", "checkbox")
+	/**  Field type ("text", "password", "select", "checkbox") */
 	fieldType: string,
-	// Display label in UI
+	/**  Display label in UI */
 	label: string,
-	// Optional field description/help text shown under the control.
+	/**  Optional field description/help text shown under the control. */
 	description?: string | null,
-	// Optional placeholder text for text inputs and textareas.
+	/**  Optional placeholder text for text inputs and textareas. */
 	placeholder?: string | null,
-	// Default value
-	default: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } | null,
-	// Whether field is required
+	/**  Default value */
+	default: unknown | null,
+	/**  Whether field is required */
 	required: boolean,
-	// Optional minimum numeric value for number and range controls.
+	/**  Optional minimum numeric value for number and range controls. */
 	min?: number | null,
-	// Optional maximum numeric value for number and range controls.
+	/**  Optional maximum numeric value for number and range controls. */
 	max?: number | null,
-	// Optional numeric step for number and range controls.
+	/**  Optional numeric step for number and range controls. */
 	step?: number | null,
-	// Preferred row count for multiline textareas.
+	/**  Preferred row count for multiline textareas. */
 	rows?: number | null,
-	// Optional section/group label for form grouping.
+	/**  Optional section/group label for form grouping. */
 	section?: string | null,
-	// Optional ordering hint inside a form or section.
+	/**  Optional ordering hint inside a form or section. */
 	order?: number | null,
-	// Available options for "select" fields.
+	/**  Available options for "select" fields. */
 	options?: string[] | null,
 };
 
-// Console log view metadata for frontend tabs.
+/**  Console log view metadata for frontend tabs. */
 export type ConsoleLogView = {
-	// Stable view identifier.
+	/**  Stable view identifier. */
 	id: string,
-	// Human-readable label.
+	/**  Human-readable label. */
 	label: string,
 };
 
-// Aggregated console metadata payload.
+/**  Aggregated console metadata payload. */
 export type ConsoleOverview = {
-	// Available log views including the default general tab.
+	/**  Available log views including the default general tab. */
 	views: ConsoleLogView[],
-	// Runtime status rows for engines and modules.
+	/**  Runtime status rows for engines and modules. */
 	status_items: ConsoleStatusItem[],
 };
 
-// Runtime status used by the console overview.
+/**  Runtime status used by the console overview. */
 export type ConsoleRuntimeStatus =
-// Process is currently running.
+/**  Process is currently running. */
 "running" |
-// Process is starting or switching.
+/**  Process is starting or switching. */
 "starting" |
-// Process failed or status lookup failed.
+/**  Process failed or status lookup failed. */
 "failed" |
-// Process is stopped.
+/**  Process is stopped. */
 "stopped";
 
-// Console status row for engines or modules.
+/**  Console status row for engines or modules. */
 export type ConsoleStatusItem = {
-	// Stable item identifier.
+	/**  Stable item identifier. */
 	id: string,
-	// Human-readable label.
+	/**  Human-readable label. */
 	label: string,
-	// Status category discriminator.
+	/**  Status category discriminator. */
 	kind: string,
-	// Runtime status.
+	/**  Runtime status. */
 	status: ConsoleRuntimeStatus,
-	// Additional detail text.
+	/**  Additional detail text. */
 	detail: string,
 };
 
-// Module control request from frontend
+/**  Module control request from frontend */
 export type ControlRequest = {
-	// Module identifier (optional for global actions)
+	/**  Module identifier (optional for global actions) */
 	module_id: string | null,
-	// Control action ("start", "stop", "restart")
+	/**  Control action ("start", "stop", "restart") */
 	action: string,
 };
 
-// Module control response to frontend
+/**  Module control response to frontend */
 export type ControlResponse = {
-	// Whether the operation succeeded
+	/**  Whether the operation succeeded */
 	success: boolean,
-	// Human-readable result message
+	/**  Human-readable result message */
 	message: string,
-	// Current module status after operation
+	/**  Current module status after operation */
 	status: string | null,
 };
 
-// CPU (Central Processing Unit) statistics
+/**  CPU (Central Processing Unit) statistics */
 export type CpuStats = {
-	// CPU usage percentage (0-100)
+	/**  CPU usage percentage (0-100) */
 	percent: number,
-	// Number of logical cores
+	/**  Number of logical cores */
 	cores: number,
-	// CPU model name
+	/**  CPU model name */
 	name: string,
 };
 
-// User-created fine-tuned or custom AI model
+/**  User-created fine-tuned or custom AI model */
 export type CustomModel = {
-	// Unique identifier
+	/**  Unique identifier */
 	id: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// Provider ID (e.g., "gpt", "deepseek")
+	/**  Provider ID (e.g., "gpt", "deepseek") */
 	provider_id: string,
-	// Base model identifier (e.g., "ft:gpt-3.5-turbo:...")
+	/**  Base model identifier (e.g., "ft:gpt-3.5-turbo:...") */
 	base_model_id: string,
-	// Creation timestamp (Unix epoch)
+	/**  Creation timestamp (Unix epoch) */
 	created_at: number,
 };
 
-// Disk I/O (Input/Output) statistics
+/**  Disk I/O (Input/Output) statistics */
 export type DiskStats = {
-	// Read speed (bytes/sec)
+	/**  Read speed (bytes/sec) */
 	readRate: number,
-	// Write speed (bytes/sec)
+	/**  Write speed (bytes/sec) */
 	writeRate: number,
-	// Disk utilization percentage (0-100)
+	/**  Disk utilization percentage (0-100) */
 	utilization: number,
-	// Total disk capacity (GB)
+	/**  Total disk capacity (GB) */
 	totalGb: number,
-	// Disk space currently used (GB)
+	/**  Disk space currently used (GB) */
 	usedGb: number,
-	// Disk activity percentage (0-100)
+	/**  Disk activity percentage (0-100) */
 	activityPercent: number,
 };
 
-// Preferred compute backend for a local engine.
+/**  Preferred compute backend for a local engine. */
 export type EngineComputeMode =
-// Let the engine use available GPU devices automatically.
+/**  Let the engine use available GPU devices automatically. */
 "gpu" |
-// Force CPU execution and disable GPU offload.
+/**  Force CPU execution and disable GPU offload. */
 "cpu";
 
-// Runtime configuration for starting an engine
+/**  Runtime configuration for starting an engine */
 export type EngineConfig = {
-	// Engine identifier (matches EngineDefinition.id)
+	/**  Engine identifier (matches EngineDefinition.id) */
 	engine_id: string,
-	// Preferred compute backend.
+	/**  Preferred compute backend. */
 	compute_mode?: EngineComputeMode,
-	// Context window size
+	/**  Context window size */
 	context_size?: number,
-	// Path to model file
+	/**  Path to model file */
 	model_path: string | null,
-	// Extra CLI arguments
+	/**  Extra CLI arguments */
 	extra_args?: string[],
 };
 
-// Static engine definition (from local_modules.json)
+/**  Static engine definition (from local_modules.json) */
 export type EngineDefinition = {
-	// Unique identifier (e.g. "llamacpp")
+	/**  Unique identifier (e.g. "llamacpp") */
 	id: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// Description
+	/**  Description */
 	desc?: string,
-	// Icon emoji
+	/**  Icon emoji */
 	icon?: string,
-	// What this engine can do
+	/**  What this engine can do */
 	capabilities?: Capability[],
-	// Binary name for local engines
+	/**  Binary name for local engines */
 	binary?: string | null,
-	// GitHub repository URL (for releases/downloads)
+	/**  GitHub repository URL (for releases/downloads) */
 	repo_url?: string | null,
-	// Current version
+	/**  Current version */
 	version?: string,
-	// Default port (extracted from configSchema.port.default)
+	/**  Default port (extracted from configSchema.port.default) */
 	default_port?: number,
-	// Default context window size (extracted from configSchema.contextSize.default)
+	/**  Default context window size (extracted from configSchema.contextSize.default) */
 	default_context_size?: number,
-	// Raw configuration schema for UI rendering (kept for frontend)
-	config_schema?: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } | null,
-	// Whether the engine binary is currently installed (populated at runtime, not from JSON)
+	/**  Raw configuration schema for UI rendering (kept for frontend) */
+	config_schema?: unknown | null,
+	/**  Whether the engine binary is currently installed (populated at runtime, not from JSON) */
 	installed?: boolean,
 	/**
 	 *  Compute modes present in the Axelate-managed install metadata.
@@ -666,704 +664,704 @@ export type EngineDefinition = {
 	 *  Empty means unknown, usually a system PATH install or an older install without metadata.
 	 */
 	installed_compute_modes?: EngineComputeMode[],
-	// True when the launcher connects to a user-managed external engine instead of installing it
+	/**  True when the launcher connects to a user-managed external engine instead of installing it */
 	managed_externally?: boolean,
 };
 
-// Aggregated payload for the local engine settings modal.
+/**  Aggregated payload for the local engine settings modal. */
 export type EngineSettingsPayload = {
-	// Fully merged engine config for the selected engine.
+	/**  Fully merged engine config for the selected engine. */
 	config: EngineConfig,
 };
 
-// Engine lifecycle state (for frontend)
+/**  Engine lifecycle state (for frontend) */
 export type EngineState =
-// No engine loaded
+/**  No engine loaded */
 "idle" |
-// Engine is starting up
+/**  Engine is starting up */
 ({ starting: {
-	// ID of the engine being started
+	/**  ID of the engine being started */
 	engine_id: string,
 } }) & { error?: never; ready?: never; swapping?: never } |
-// Swapping from one engine to another within a slot
+/**  Swapping from one engine to another within a slot */
 ({ swapping: {
-	// ID of the engine being stopped
+	/**  ID of the engine being stopped */
 	from: string,
-	// ID of the engine being started
+	/**  ID of the engine being started */
 	to: string,
 } }) & { error?: never; ready?: never; starting?: never } |
-// One or more engines are running
+/**  One or more engines are running */
 ({ ready: {
-	// Active slots (one per capability)
+	/**  Active slots (one per capability) */
 	slots: SlotStatus[],
 } }) & { error?: never; starting?: never; swapping?: never } |
-// Engine encountered an error
+/**  Engine encountered an error */
 ({ error: {
-	// ID of the failed engine
+	/**  ID of the failed engine */
 	engine_id: string,
-	// Error description
+	/**  Error description */
 	message: string,
 } }) & { ready?: never; starting?: never; swapping?: never };
 
-// Currently running engine
+/**  Currently running engine */
 export type EngineStatus = {
-	// Engine identifier
+	/**  Engine identifier */
 	id: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// Capabilities
+	/**  Capabilities */
 	capabilities: Capability[],
-	// HTTP endpoint (e.g. "http://localhost:8081")
+	/**  HTTP endpoint (e.g. "http://localhost:8081") */
 	endpoint: string,
-	// Is the engine healthy and ready
+	/**  Is the engine healthy and ready */
 	healthy: boolean,
 };
 
-// Public system GPU probe result used by the frontend and downloader.
+/**  Public system GPU probe result used by the frontend and downloader. */
 export type GpuInfo = {
-	// Whether a usable GPU adapter was detected.
+	/**  Whether a usable GPU adapter was detected. */
 	detected: boolean,
-	// Human-readable adapter name.
+	/**  Human-readable adapter name. */
 	name: string,
-	// Whether CUDA-capable NVIDIA hardware was detected.
+	/**  Whether CUDA-capable NVIDIA hardware was detected. */
 	cuda: boolean,
-	// Preferred runtime backend hint (`cuda`, `vulkan`, `cpu`, `hip`, `sycl`).
+	/**  Preferred runtime backend hint (`cuda`, `vulkan`, `cpu`, `hip`, `sycl`). */
 	backend: string,
-	// Total GPU memory in megabytes, when available.
+	/**  Total GPU memory in megabytes, when available. */
 	memory: number,
-	// CUDA driver major version, when available.
+	/**  CUDA driver major version, when available. */
 	cuda_driver_major: number | null,
-	// CUDA driver minor version, when available.
+	/**  CUDA driver minor version, when available. */
 	cuda_driver_minor: number | null,
 };
 
-// GPU (Graphics Processing Unit) statistics
+/**  GPU (Graphics Processing Unit) statistics */
 export type GpuStats = {
-	// GPU usage percentage (0-100)
+	/**  GPU usage percentage (0-100) */
 	usage: number,
-	// Memory currently used (bytes)
+	/**  Memory currently used (bytes) */
 	memoryUsed: number,
-	// Total available memory (bytes)
+	/**  Total available memory (bytes) */
 	memoryTotal: number,
-	// GPU temperature (Celsius)
+	/**  GPU temperature (Celsius) */
 	temp: number,
-	// GPU model name
+	/**  GPU model name */
 	name: string,
 };
 
-// Live preview payload for in-progress image generation.
+/**  Live preview payload for in-progress image generation. */
 export type ImageGenerationPreview = {
-	// Data URL of the latest preview image.
+	/**  Data URL of the latest preview image. */
 	data_url: string,
-	// File modification timestamp in Unix milliseconds.
+	/**  File modification timestamp in Unix milliseconds. */
 	updated_at_ms: number,
-	// Current image-generation progress, normalized to 0.0..1.0 when the engine exposes it.
+	/**  Current image-generation progress, normalized to 0.0..1.0 when the engine exposes it. */
 	progress: number | null,
-	// Current sampling step when available.
+	/**  Current sampling step when available. */
 	step: number | null,
-	// Total sampling steps when available.
+	/**  Total sampling steps when available. */
 	total: number | null,
-	// Latest reported generation speed when available, for example `1.07s/it`.
+	/**  Latest reported generation speed when available, for example `1.07s/it`. */
 	speed: string | null,
-	// Estimated remaining seconds when the engine exposes it.
+	/**  Estimated remaining seconds when the engine exposes it. */
 	eta_relative: number | null,
 };
 
-// Image generation request parameters
+/**  Image generation request parameters */
 export type ImageGenerationRequest = {
-	// AI provider or local engine ID
+	/**  AI provider or local engine ID */
 	provider: string,
-	// The text prompt for generation
+	/**  The text prompt for generation */
 	prompt: string,
-	// Original user text before UI prompt prefixes
+	/**  Original user text before UI prompt prefixes */
 	original_prompt: string | null,
-	// Model identifier
+	/**  Model identifier */
 	model: string,
-	// Optional settings namespace key when UI-selected module differs from provider id
+	/**  Optional settings namespace key when UI-selected module differs from provider id */
 	settings_key: string | null,
-	// Session identifier for history tracking
+	/**  Session identifier for history tracking */
 	session_id: string | null,
-	// Number of inference steps
+	/**  Number of inference steps */
 	steps: number | null,
-	// Guidance scale (CFG)
+	/**  Guidance scale (CFG) */
 	cfg_scale: number | null,
-	// Denoising strength for image-to-image capable backends
+	/**  Denoising strength for image-to-image capable backends */
 	denoising_strength: number | null,
-	// Image width in pixels
+	/**  Image width in pixels */
 	width: number | null,
-	// Image height in pixels
+	/**  Image height in pixels */
 	height: number | null,
-	// Sampler algorithm
+	/**  Sampler algorithm */
 	sampler: string | null,
-	// Random seed
+	/**  Random seed */
 	seed: number | null,
-	// Clip skip
+	/**  Clip skip */
 	clip_skip: number | null,
-	// Optional negative prompt
+	/**  Optional negative prompt */
 	negative_prompt: string | null,
-	// Number of images to generate (batch size)
+	/**  Number of images to generate (batch size) */
 	batch_size: number | null,
-	// Scheduler algorithm
+	/**  Scheduler algorithm */
 	scheduler: string | null,
 };
 
-// Image generation response
+/**  Image generation response */
 export type ImageGenerationResponse = {
-	// Base64 encoded images or URLs
+	/**  Base64 encoded images or URLs */
 	images: string[],
-	// Whether request was successful
+	/**  Whether request was successful */
 	ok: boolean,
-	// Error message if failed
+	/**  Error message if failed */
 	error: string | null,
 };
 
-// Log entry for frontend display
+/**  Log entry for frontend display */
 export type LogEntry = {
-	// Unix timestamp
+	/**  Unix timestamp */
 	timestamp: number,
-	// Log source component
+	/**  Log source component */
 	source: string,
-	// Log level ("info", "warn", "error")
+	/**  Log level ("info", "warn", "error") */
 	level: string,
-	// Log message
+	/**  Log message */
 	message: string,
-	// Resolved module/runtime identifier when the log belongs to a module.
+	/**  Resolved module/runtime identifier when the log belongs to a module. */
 	module_id: string | null,
-	// Parsed time component extracted from the message when present.
+	/**  Parsed time component extracted from the message when present. */
 	display_time: string | null,
-	// Normalized level used by the console UI.
+	/**  Normalized level used by the console UI. */
 	normalized_level: string | null,
-	// Parsed scope segment when present.
+	/**  Parsed scope segment when present. */
 	scope: string | null,
-	// Precomputed summary message for console rendering.
+	/**  Precomputed summary message for console rendering. */
 	summary_message: string | null,
-	// Human-friendly source label for console rendering.
+	/**  Human-friendly source label for console rendering. */
 	source_label: string | null,
-	// CSS-friendly source class for console rendering.
+	/**  CSS-friendly source class for console rendering. */
 	source_class: string | null,
-	// Page identifier extracted from navigation logs.
+	/**  Page identifier extracted from navigation logs. */
 	page: string | null,
-	// Action extracted from module control logs.
+	/**  Action extracted from module control logs. */
 	action: string | null,
-	// Expected manifest or artifact hint from error logs.
+	/**  Expected manifest or artifact hint from error logs. */
 	expected: string | null,
 };
 
-// Model capability flags (JSON Compatible)
+/**  Model capability flags (JSON Compatible) */
 export type ModelCapabilities = {
-	// Supports reasoning/thinking steps
+	/**  Supports reasoning/thinking steps */
 	reasoning?: boolean,
-	// Supports image input/vision
+	/**  Supports image input/vision */
 	vision?: boolean,
-	// Supports multimodal input (audio/video)
+	/**  Supports multimodal input (audio/video) */
 	multimodal?: boolean,
-	// Supports large context windows (>128k)
+	/**  Supports large context windows (>128k) */
 	longContext?: boolean,
-	// Supports token streaming
+	/**  Supports token streaming */
 	streaming?: boolean,
-	// Supports function/tool calling
+	/**  Supports function/tool calling */
 	functionCalling?: boolean,
 };
 
-// Performance characteristics of an AI model (0-10 scale)
+/**  Performance characteristics of an AI model (0-10 scale) */
 export type ModelStats = {
-	// Response speed rating
+	/**  Response speed rating */
 	speed: number,
-	// Logical reasoning capability
+	/**  Logical reasoning capability */
 	logic: number,
-	// Creative output quality
+	/**  Creative output quality */
 	creative: number,
 };
 
-// Tier classification for AI models
+/**  Tier classification for AI models */
 export type ModelTier =
-// Entry-level or fast models
+/**  Entry-level or fast models */
 "weak" |
-// Balanced models
+/**  Balanced models */
 "medium" |
-// Flagship or reasoning-heavy models
+/**  Flagship or reasoning-heavy models */
 "strong";
 
-// Complete module metadata and state
+/**  Complete module metadata and state */
 export type Module = {
-	// Unique module identifier
+	/**  Unique module identifier */
 	id: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// User-facing description
+	/**  User-facing description */
 	description: string,
-	// Semantic version (e.g., "1.0.0")
+	/**  Semantic version (e.g., "1.0.0") */
 	version: string,
-	// Author username or organization
+	/**  Author username or organization */
 	author: string,
-	// Category ("ai" or "service")
+	/**  Category ("ai" or "service") */
 	category: string,
-	// Icon/emoji for UI display
+	/**  Icon/emoji for UI display */
 	icon: string,
-	// Module-owned card preview metadata.
+	/**  Module-owned card preview metadata. */
 	preview?: ModulePreview | null,
-	// Absolute filesystem path to module directory
+	/**  Absolute filesystem path to module directory */
 	path: string,
-	// Whether module files are present locally
+	/**  Whether module files are present locally */
 	installed: boolean,
-	// Whether module is user-installed (vs. built-in)
+	/**  Whether module is user-installed (vs. built-in) */
 	local: boolean,
-	// Whether module is enabled for auto-start
+	/**  Whether module is enabled for auto-start */
 	enabled: boolean,
-	// Current runtime status ("running", "stopped", "error")
+	/**  Current runtime status ("running", "stopped", "error") */
 	status: string | null,
-	// Whether module can be deleted by user
+	/**  Whether module can be deleted by user */
 	isDeletable: boolean,
-	// Current configuration values
-	config: { [key in string]: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } },
-	// Configuration schema definition
+	/**  Current configuration values */
+	config: { [key in string]: unknown },
+	/**  Configuration schema definition */
 	configSchema: { [key in string]: ConfigField } | null,
-	// Relative path to the module-owned settings UI entry file.
+	/**  Relative path to the module-owned settings UI entry file. */
 	settingsUi: string | null,
 };
 
-// Catalog item for downloadable modules
+/**  Catalog item for downloadable modules */
 export type ModuleItem = ModuleItem_Serialize | ModuleItem_Deserialize;
 
-// Catalog item for downloadable modules
+/**  Catalog item for downloadable modules */
 export type ModuleItem_Deserialize = {
-	// Unique module identifier
+	/**  Unique module identifier */
 	id: string,
-	// Localization key for name
+	/**  Localization key for name */
 	nameKey: string,
-	// Localization key for description
+	/**  Localization key for description */
 	descKey: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// Description text
+	/**  Description text */
 	desc: string,
-	// Icon/emoji
+	/**  Icon/emoji */
 	icon: string,
-	// Optional module-owned card preview metadata.
+	/**  Optional module-owned card preview metadata. */
 	preview?: ModulePreview | null,
-	// Module type ("api" or "service")
+	/**  Module type ("api" or "service") */
 	type: string,
-	// Download type ("source" or "release")
+	/**  Download type ("source" or "release") */
 	dlType?: string | null,
-	// Engine capabilities (e.g. `["text"]`, `["image"]`)
+	/**  Engine capabilities (e.g. `["text"]`, `["image"]`) */
 	capabilities?: string[],
-	// Binary executable name for local engines (e.g. "llama-server")
+	/**  Binary executable name for local engines (e.g. "llama-server") */
 	binary?: string | null,
-	// GitHub repository URL
+	/**  GitHub repository URL */
 	repoUrl: string | null,
-	// SHA-256 hash for integrity verification
+	/**  SHA-256 hash for integrity verification */
 	expectedHash: string | null,
-	// Marks catalog entries that should render as placeholders and not be launchable yet
+	/**  Marks catalog entries that should render as placeholders and not be launchable yet */
 	comingSoon?: boolean,
-	// True when the launcher should treat this engine as user-managed and skip install checks
+	/**  True when the launcher should treat this engine as user-managed and skip install checks */
 	managedExternally?: boolean,
-	// Semantic version (e.g., "1.0.0")
+	/**  Semantic version (e.g., "1.0.0") */
 	version?: string,
-	// Raw configSchema from JSON (used by engine registry to extract typed defaults)
-	configSchema?: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } | null,
+	/**  Raw configSchema from JSON (used by engine registry to extract typed defaults) */
+	configSchema?: unknown | null,
 };
 
-// Catalog item for downloadable modules
+/**  Catalog item for downloadable modules */
 export type ModuleItem_Serialize = {
-	// Unique module identifier
+	/**  Unique module identifier */
 	id: string,
-	// Localization key for name
+	/**  Localization key for name */
 	nameKey: string,
-	// Localization key for description
+	/**  Localization key for description */
 	descKey: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// Description text
+	/**  Description text */
 	desc: string,
-	// Icon/emoji
+	/**  Icon/emoji */
 	icon: string,
-	// Optional module-owned card preview metadata.
+	/**  Optional module-owned card preview metadata. */
 	preview: ModulePreview | null,
-	// Module type ("api" or "service")
+	/**  Module type ("api" or "service") */
 	type: string,
-	// Download type ("source" or "release")
+	/**  Download type ("source" or "release") */
 	dlType: string | null,
-	// Engine capabilities (e.g. `["text"]`, `["image"]`)
+	/**  Engine capabilities (e.g. `["text"]`, `["image"]`) */
 	capabilities: string[],
-	// Binary executable name for local engines (e.g. "llama-server")
+	/**  Binary executable name for local engines (e.g. "llama-server") */
 	binary: string | null,
-	// GitHub repository URL
+	/**  GitHub repository URL */
 	repoUrl: string | null,
-	// SHA-256 hash for integrity verification
+	/**  SHA-256 hash for integrity verification */
 	expectedHash: string | null,
-	// Marks catalog entries that should render as placeholders and not be launchable yet
+	/**  Marks catalog entries that should render as placeholders and not be launchable yet */
 	comingSoon: boolean,
-	// True when the launcher should treat this engine as user-managed and skip install checks
+	/**  True when the launcher should treat this engine as user-managed and skip install checks */
 	managedExternally: boolean,
-	// Semantic version (e.g., "1.0.0")
+	/**  Semantic version (e.g., "1.0.0") */
 	version: string,
-	// Whether module is currently installed (runtime only)
+	/**  Whether module is currently installed (runtime only) */
 	installed: boolean,
-	// Raw configSchema from JSON (used by engine registry to extract typed defaults)
-	configSchema: "Null" | ({ Bool: boolean }) & { Array?: never; Number?: never; Object?: never; String?: never } | ({ Number: ({ f64: number }) & { i64?: never; u64?: never } | ({ i64: number }) & { f64?: never; u64?: never } | ({ u64: number }) & { f64?: never; i64?: never } }) & { Array?: never; Bool?: never; Object?: never; String?: never } | ({ String: string }) & { Array?: never; Bool?: never; Number?: never; Object?: never } | ({ Array: Value[] }) & { Bool?: never; Number?: never; Object?: never; String?: never } | ({ Object: { [key in string]: Value } }) & { Array?: never; Bool?: never; Number?: never; String?: never } | null,
-	// Configuration schema definition (runtime only, built from raw_config_schema)
+	/**  Raw configSchema from JSON (used by engine registry to extract typed defaults) */
+	configSchema: unknown | null,
+	/**  Configuration schema definition (runtime only, built from raw_config_schema) */
 	configSchema: { [key in string]: ConfigField } | null,
 };
 
-// Module-owned card preview metadata.
+/**  Module-owned card preview metadata. */
 export type ModulePreview = {
-	// Optional card title override.
+	/**  Optional card title override. */
 	title?: string | null,
-	// Optional card description override.
+	/**  Optional card description override. */
 	description?: string | null,
-	// Optional emoji/text sticker shown when no image is provided.
+	/**  Optional emoji/text sticker shown when no image is provided. */
 	sticker?: string | null,
-	// Optional image URL or data URL for the card preview.
+	/**  Optional image URL or data URL for the card preview. */
 	image?: string | null,
-	// Optional directory with localized preview JSON files.
+	/**  Optional directory with localized preview JSON files. */
 	i18n?: string | null,
 };
 
-// Network I/O statistics
+/**  Network I/O statistics */
 export type NetworkStats = {
-	// Download speed (bytes/sec)
+	/**  Download speed (bytes/sec) */
 	downloadRate: number,
-	// Upload speed (bytes/sec)
+	/**  Upload speed (bytes/sec) */
 	uploadRate: number,
-	// Total bytes received since boot
+	/**  Total bytes received since boot */
 	totalReceived: number,
-	// Total bytes sent since boot
+	/**  Total bytes sent since boot */
 	totalSent: number,
-	// Network utilization percentage (0-100)
+	/**  Network utilization percentage (0-100) */
 	utilization: number,
-	// Network activity percentage (0-100)
+	/**  Network activity percentage (0-100) */
 	activityPercent: number,
 };
 
-// Pricing configuration for a model
+/**  Pricing configuration for a model */
 export type PricingConfig = {
-	// Input-side cost or score shown in the launcher UI
+	/**  Input-side cost or score shown in the launcher UI */
 	input: number | null,
-	// Output-side cost or score shown in the launcher UI
+	/**  Output-side cost or score shown in the launcher UI */
 	output: number | null,
-	// Currency code
+	/**  Currency code */
 	currency: string | null,
-	// Additional notes
+	/**  Additional notes */
 	notes: string | null,
 };
 
-// Processed file content result
+/**  Processed file content result */
 export type ProcessedFile = {
-	// File name
+	/**  File name */
 	name: string,
-	// Extracted text content
+	/**  Extracted text content */
 	content: string,
-	// Whether file was a ZIP archive
+	/**  Whether file was a ZIP archive */
 	is_archive: boolean,
-	// Processing error if any
+	/**  Processing error if any */
 	error: string | null,
-	// Estimated token count for extracted text content.
+	/**  Estimated token count for extracted text content. */
 	token_estimate: number,
 };
 
-// Type of AI provider
+/**  Type of AI provider */
 export type ProviderType =
-// Standard OpenAI API
+/**  Standard OpenAI API */
 "openai" |
-// Google Gemini API
+/**  Google Gemini API */
 "google" |
-// Anthropic Claude API (via OpenRouter or direct)
+/**  Anthropic Claude API (via OpenRouter or direct) */
 "anthropic" |
-// OpenAI-compatible local or cloud API
+/**  OpenAI-compatible local or cloud API */
 "openai-compatible" |
-// Generic API provider
+/**  Generic API provider */
 "api" |
-// Local module inference
+/**  Local module inference */
 "local";
 
-// RAM (Random Access Memory) statistics
+/**  RAM (Random Access Memory) statistics */
 export type RamStats = {
-	// RAM usage percentage (0-100)
+	/**  RAM usage percentage (0-100) */
 	percent: number,
-	// RAM currently used (GB)
+	/**  RAM currently used (GB) */
 	usedGb: number,
-	// Total RAM capacity (GB)
+	/**  Total RAM capacity (GB) */
 	totalGb: number,
-	// RAM available for allocation (GB)
+	/**  RAM available for allocation (GB) */
 	availableGb: number,
 };
 
-// User-facing compute target for release package selection.
+/**  User-facing compute target for release package selection. */
 export type ReleaseComputeTarget =
-// Let Axelate choose the best compatible package for this machine.
+/**  Let Axelate choose the best compatible package for this machine. */
 "auto" |
-// Prefer a GPU package, for example CUDA, Vulkan, HIP, or SYCL.
+/**  Prefer a GPU package, for example CUDA, Vulkan, HIP, or SYCL. */
 "gpu" |
-// Prefer a CPU package.
+/**  Prefer a CPU package. */
 "cpu" |
-// Download both CPU and GPU packages when both are compatible.
+/**  Download both CPU and GPU packages when both are compatible. */
 "both";
 
-// User-visible release download options for a single module.
+/**  User-visible release download options for a single module. */
 export type ReleaseDownloadOptions = {
-	// Module identifier these options belong to.
+	/**  Module identifier these options belong to. */
 	module_id: string,
-	// GitHub release versions in newest-first order.
+	/**  GitHub release versions in newest-first order. */
 	versions: ReleaseDownloadVersion[],
 };
 
-// Explicit release package selection passed from the frontend.
+/**  Explicit release package selection passed from the frontend. */
 export type ReleaseDownloadSelection = {
-	// GitHub release tag to download. `None` means the newest compatible release.
+	/**  GitHub release tag to download. `None` means the newest compatible release. */
 	tag_name: string | null,
-	// Compute target selected by the user.
+	/**  Compute target selected by the user. */
 	compute_target?: ReleaseComputeTarget,
 };
 
-// User-visible package variant for one compute target.
+/**  User-visible package variant for one compute target. */
 export type ReleaseDownloadVariant = {
-	// Compute target represented by this variant.
+	/**  Compute target represented by this variant. */
 	compute_target: ReleaseComputeTarget,
-	// Asset filenames that will be downloaded.
+	/**  Asset filenames that will be downloaded. */
 	assets: string[],
-	// Combined download size in bytes.
+	/**  Combined download size in bytes. */
 	total_size: number,
 };
 
-// User-visible package choices for a GitHub release version.
+/**  User-visible package choices for a GitHub release version. */
 export type ReleaseDownloadVersion = {
-	// GitHub release tag.
+	/**  GitHub release tag. */
 	tag_name: string,
-	// GitHub release publish timestamp when available.
+	/**  GitHub release publish timestamp when available. */
 	published_at: string | null,
-	// CPU package choice for this release, when compatible.
+	/**  CPU package choice for this release, when compatible. */
 	cpu: ReleaseDownloadVariant | null,
-	// GPU package choice for this release, when compatible.
+	/**  GPU package choice for this release, when compatible. */
 	gpu: ReleaseDownloadVariant | null,
-	// Recommended package target for this machine.
+	/**  Recommended package target for this machine. */
 	recommended: ReleaseComputeTarget,
 };
 
-// Result of saving a generated chat image to disk.
+/**  Result of saving a generated chat image to disk. */
 export type SavedChatImage = {
-	// Absolute path to the saved image file.
+	/**  Absolute path to the saved image file. */
 	file_path: string,
-	// Absolute path to the folder containing the saved image.
+	/**  Absolute path to the folder containing the saved image. */
 	folder_path: string,
 };
 
-// Non-sensitive metadata for a securely stored key.
+/**  Non-sensitive metadata for a securely stored key. */
 export type SecureKeyMeta = {
-	// Whether a non-empty key exists for the requested service.
+	/**  Whether a non-empty key exists for the requested service. */
 	exists: boolean,
-	// Character length of the stored key, if present.
+	/**  Character length of the stored key, if present. */
 	length: number,
 };
 
-// Currently selected module in UI
+/**  Currently selected module in UI */
 export type SelectedModule = {
-	// Module identifier
+	/**  Module identifier */
 	id: string,
-	// Display name
+	/**  Display name */
 	name: string,
-	// Localization key for name
+	/**  Localization key for name */
 	nameKey: string | null,
-	// Icon/emoji
+	/**  Icon/emoji */
 	icon: string,
-	// Module type
+	/**  Module type */
 	type: string,
-	// Localization key for description
+	/**  Localization key for description */
 	descKey: string | null,
-	// Description text
+	/**  Description text */
 	desc: string,
 };
 
-// Status of a single capability slot
+/**  Status of a single capability slot */
 export type SlotStatus = {
-	// Which capability this slot serves
+	/**  Which capability this slot serves */
 	capability: Capability,
-	// Engine running in this slot
+	/**  Engine running in this slot */
 	engine: EngineStatus,
 };
 
-// Streaming payload delivered from the backend to the frontend chat channels.
+/**  Streaming payload delivered from the backend to the frontend chat channels. */
 export type StreamChunkPayload = {
-	// Correlates the chunk with the originating frontend request.
+	/**  Correlates the chunk with the originating frontend request. */
 	request_id: string,
-	// Identifies the assistant message currently being streamed.
+	/**  Identifies the assistant message currently being streamed. */
 	message_id: string,
-	// Describes how the frontend should handle this stream event.
+	/**  Describes how the frontend should handle this stream event. */
 	kind: StreamPayloadKind,
-	// The incremental text fragment emitted by the model.
+	/**  The incremental text fragment emitted by the model. */
 	content: string,
 };
 
-// Kind of streaming payload delivered to frontend chat channels.
+/**  Kind of streaming payload delivered to frontend chat channels. */
 export type StreamPayloadKind =
-// A visible assistant text fragment.
+/**  A visible assistant text fragment. */
 "chat_chunk" |
-// A reasoning/thinking text fragment.
+/**  A reasoning/thinking text fragment. */
 "thought_chunk" |
-// End-of-stream marker after all chunks have been delivered.
+/**  End-of-stream marker after all chunks have been delivered. */
 "done";
 
-// Complete system statistics snapshot
+/**  Complete system statistics snapshot */
 export type SystemStats = {
-	// CPU usage and information
+	/**  CPU usage and information */
 	cpu: CpuStats,
-	// RAM usage and availability
+	/**  RAM usage and availability */
 	ram: RamStats,
-	// GPU usage (if available)
+	/**  GPU usage (if available) */
 	gpu: GpuStats | null,
-	// VRAM usage (if GPU present)
+	/**  VRAM usage (if GPU present) */
 	vram: VramStats | null,
-	// Disk I/O statistics
+	/**  Disk I/O statistics */
 	disk: DiskStats,
-	// Network I/O statistics
+	/**  Network I/O statistics */
 	network: NetworkStats,
-	// Current process ID
+	/**  Current process ID */
 	pid: number,
-	// CPU usage of the current process (0-100)
+	/**  CPU usage of the current process (0-100) */
 	appCpu: number,
-	// Memory used by the current process (bytes)
+	/**  Memory used by the current process (bytes) */
 	appMemory: number,
 };
 
-// Thresholds configuration.
+/**  Thresholds configuration. */
 export type Thresholds = {
-	// Warning threshold width.
+	/**  Warning threshold width. */
 	warningWidth: number,
-	// Warning threshold height.
+	/**  Warning threshold height. */
 	warningHeight: number,
-	// Small screen threshold width.
+	/**  Small screen threshold width. */
 	smallScreenWidth: number,
-	// Small screen threshold height.
+	/**  Small screen threshold height. */
 	smallScreenHeight: number,
 };
 
-// Token usage statistics
+/**  Token usage statistics */
 export type TokenUsage = {
-	// Tokens in the prompt
+	/**  Tokens in the prompt */
 	prompt_tokens: number,
-	// Tokens in the completion
+	/**  Tokens in the completion */
 	completion_tokens: number,
-	// Total tokens used
+	/**  Total tokens used */
 	total_tokens: number,
 };
 
-// UI State that persists across sessions
+/**  UI State that persists across sessions */
 export type UIState = {
-	// Sidebar collapsed state
+	/**  Sidebar collapsed state */
 	sidebar_collapsed: boolean,
-	// User manually overrode responsive sidebar compaction
+	/**  User manually overrode responsive sidebar compaction */
 	sidebar_manual_override?: boolean,
-	// Sidebar width in pixels
+	/**  Sidebar width in pixels */
 	sidebar_width: number,
-	// Hidden navigation items (page IDs)
+	/**  Hidden navigation items (page IDs) */
 	hidden_nav_items: string[],
-	// Hidden system monitor items
+	/**  Hidden system monitor items */
 	hidden_monitors: string[],
-	// Card widths map (`card_id` -> "full" | "half")
+	/**  Card widths map (`card_id` -> "full" | "half") */
 	card_widths: { [key in string]: string },
-	// Download settings
+	/**  Download settings */
 	download_limit_enabled: boolean,
-	// Maximum download speed in MB/s
+	/**  Maximum download speed in MB/s */
 	download_max_speed: number,
-	// Selected modules by category
+	/**  Selected modules by category */
 	selected_modules: { [key in string]: SelectedModule },
-	// Global Zoom Level
+	/**  Global Zoom Level */
 	zoom_level: number,
-	// Selected AI Models (`AppID` -> `ModelKey`)
+	/**  Selected AI Models (`AppID` -> `ModelKey`) */
 	selected_ai_models: { [key in string]: string },
-	// Last visited page ID
+	/**  Last visited page ID */
 	last_page: string | null,
 	/**
 	 *  Per-resolution zoom levels ("WxH" -> value)
 	 *  Per-resolution zoom levels (e.g., "1920x1080" -> 1.2)
 	 */
 	resolution_zoom: { [key in string]: number },
-	// Sound effects enabled state
+	/**  Sound effects enabled state */
 	sound_enabled: boolean,
-	// Selected reasoning level by AI provider
+	/**  Selected reasoning level by AI provider */
 	ai_thinking_level?: { [key in string]: string },
-	// Enables provider-side internet search by AI provider
+	/**  Enables provider-side internet search by AI provider */
 	ai_web_search_enabled?: { [key in string]: boolean },
-	// Per-provider local model output token limits.
+	/**  Per-provider local model output token limits. */
 	local_max_output_tokens?: { [key in string]: number },
-	// Last directory used by the custom integration import dialog.
+	/**  Last directory used by the custom integration import dialog. */
 	integration_import_last_directory?: string | null,
-	// Preferred launcher interface language
+	/**  Preferred launcher interface language */
 	preferred_language?: string | null,
-	// Request to reopen the chat and reveal the latest message after background work.
+	/**  Request to reopen the chat and reveal the latest message after background work. */
 	pending_chat_reveal?: boolean,
 };
 
-// One-shot voice recognition request.
+/**  One-shot voice recognition request. */
 export type VoiceRecognitionRequest = {
-	// Preferred UI language code, for example `en`, `ru`, or `ru-RU`.
+	/**  Preferred UI language code, for example `en`, `ru`, or `ru-RU`. */
 	language: string | null,
 };
 
-// One-shot voice recognition response.
+/**  One-shot voice recognition response. */
 export type VoiceRecognitionResponse = {
-	// Recognized final text.
+	/**  Recognized final text. */
 	text: string,
-	// Native recognizer status.
+	/**  Native recognizer status. */
 	status: string,
-	// Native confidence bucket when available.
+	/**  Native confidence bucket when available. */
 	confidence: string | null,
 };
 
-// VRAM (Video RAM) statistics
+/**  VRAM (Video RAM) statistics */
 export type VramStats = {
-	// VRAM usage percentage (0-100)
+	/**  VRAM usage percentage (0-100) */
 	percent: number,
-	// VRAM currently used (GB)
+	/**  VRAM currently used (GB) */
 	usedGb: number,
-	// Total VRAM capacity (GB)
+	/**  Total VRAM capacity (GB) */
 	totalGb: number,
 };
 
-// Optional web search configuration for provider-backed chat requests.
+/**  Optional web search configuration for provider-backed chat requests. */
 export type WebSearchOptions = {
-	// Enables provider-side web search.
+	/**  Enables provider-side web search. */
 	enabled?: boolean,
-	// Search engine preference (`auto`, `native`, `exa`, ...).
+	/**  Search engine preference (`auto`, `native`, `exa`, ...). */
 	engine?: string | null,
-	// Maximum results per search call.
+	/**  Maximum results per search call. */
 	max_results?: number | null,
-	// Maximum results across all search calls in one request.
+	/**  Maximum results across all search calls in one request. */
 	max_total_results?: number | null,
-	// Search context size (`low`, `medium`, `high`).
+	/**  Search context size (`low`, `medium`, `high`). */
 	search_context_size?: string | null,
-	// Optional allow-list of domains.
+	/**  Optional allow-list of domains. */
 	allowed_domains?: string[],
-	// Optional deny-list of domains.
+	/**  Optional deny-list of domains. */
 	excluded_domains?: string[],
 };
 
-// Overall window configuration combining breakpoints and thresholds.
+/**  Overall window configuration combining breakpoints and thresholds. */
 export type WindowConfig = {
-	// Breakpoint settings.
+	/**  Breakpoint settings. */
 	breakpoints: Breakpoints,
-	// Threshold settings.
+	/**  Threshold settings. */
 	thresholds: Thresholds,
 };
 
-// Layout policy based on screen size and current window dimensions.
+/**  Layout policy based on screen size and current window dimensions. */
 export type WindowPolicy = {
-	// True if the screen is considered "small" (mobile/tablet/small laptop).
+	/**  True if the screen is considered "small" (mobile/tablet/small laptop). */
 	isSmallScreen: boolean,
-	// True if a layout warning should be shown.
+	/**  True if a layout warning should be shown. */
 	showWarning: boolean,
 };
 
-// Persistent window state.
+/**  Persistent window state. */
 export type WindowSettings = {
-	// Window width.
+	/**  Window width. */
 	width: number,
-	// Window height.
+	/**  Window height. */
 	height: number,
-	// Horizontal screen position.
+	/**  Horizontal screen position. */
 	x: number | null,
-	// Vertical screen position.
+	/**  Vertical screen position. */
 	y: number | null,
-	// True if the window is maximized.
+	/**  True if the window is maximized. */
 	maximized: boolean,
 };
 
