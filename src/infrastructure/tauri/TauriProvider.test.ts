@@ -43,12 +43,22 @@ function setupWebMode(): {
     win: Record<string, unknown>;
     origInternals: unknown;
     provider: TauriProvider;
+    openExternal: ReturnType<typeof vi.fn>;
 } {
     const win = globalThis as unknown as Record<string, unknown>;
     const origInternals = win['__TAURI_INTERNALS__'];
     delete win['__TAURI_INTERNALS__'];
+    const openExternal = vi.fn();
 
-    return { win, origInternals, provider: new TauriProvider(createTracer()) };
+    return {
+        win,
+        origInternals,
+        openExternal,
+        provider: new TauriProvider(createTracer(), {
+            hasTauriGlobals: () => false,
+            openExternal,
+        }),
+    };
 }
 
 import { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
@@ -413,12 +423,11 @@ describe('TauriProvider', () => {
             await expect(provider.writeToClipboard('copied text')).rejects.toThrow('denied');
         });
 
-        it('should reject in web mode', async () => {
+        it('should use browser clipboard fallback in web mode', async () => {
             const { provider: webProvider } = setupWebMode();
 
-            await expect(webProvider.writeToClipboard('text')).rejects.toThrow(
-                'Clipboard write is unavailable outside Tauri',
-            );
+            await expect(webProvider.writeToClipboard('text')).resolves.toBeUndefined();
+            expect(mockedTauriInvoke).not.toHaveBeenCalled();
         });
     });
 
@@ -461,12 +470,11 @@ describe('TauriProvider', () => {
             });
         });
 
-        it('should reject outside Tauri', async () => {
-            const { provider: webProvider } = setupWebMode();
+        it('should use the runtime fallback outside Tauri', async () => {
+            const { provider: webProvider, openExternal } = setupWebMode();
 
-            await expect(webProvider.openUrl('https://example.com')).rejects.toThrow(
-                'External URL opening is unavailable outside Tauri',
-            );
+            await expect(webProvider.openUrl('https://example.com')).resolves.toBeUndefined();
+            expect(openExternal).toHaveBeenCalledWith('https://example.com');
         });
     });
 

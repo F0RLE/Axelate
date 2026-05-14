@@ -318,7 +318,7 @@ describe('ChatController', () => {
             _state: { isSending: boolean };
         };
 
-        controller.init();
+        const initPromise = controller.init();
         internals._state.isSending = true;
         resolvePreview({
             data_url: 'data:image/png;base64,abc',
@@ -329,6 +329,7 @@ describe('ChatController', () => {
             speed: null,
             eta_relative: null,
         });
+        await initPromise;
         await Promise.resolve();
         await Promise.resolve();
 

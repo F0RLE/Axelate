@@ -337,6 +337,7 @@ impl<'a> LifecycleExecutor<'a> {
         let lifecycle_lock = module_lifecycle_lock(&self.module_id).await;
         let _lifecycle_guard = lifecycle_lock.lock().await;
         tracing::info!("Stopping module: {}", self.module_id);
+        let script_entry_path = self.resolve_script_entry_path(manifest)?;
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
@@ -439,11 +440,6 @@ impl<'a> LifecycleExecutor<'a> {
                 }
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
-        }
-
-        let script_entry_path = self.resolve_script_entry_path(manifest)?;
-        if let Some(entry_path) = script_entry_path.as_ref() {
-            self.kill_matching_script_processes(entry_path).await?;
         }
 
         if self

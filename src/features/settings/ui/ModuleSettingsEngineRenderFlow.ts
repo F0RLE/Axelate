@@ -213,38 +213,4 @@ export class ModuleSettingsEngineRenderFlow {
             options.config,
         );
     }
-
-    private _renderTextFields(options: {
-        container: HTMLElement;
-        appId: string;
-        config: EngineConfig | null;
-        translate: TranslateFn;
-        getTextFields: ModuleSettingsEngineRenderOptions['getTextFields'];
-    }): void {
-        const fieldTargets: Record<string, string> = {
-            context_size: `#local-engine-context-${options.appId}`,
-            llamacpp_system_prompt: `#local-engine-system-prompt-${options.appId}`,
-        };
-
-        options.getTextFields(options.translate).forEach((field) => {
-            const targetSelector = fieldTargets[field.key];
-            if (targetSelector === undefined) {
-                // eslint-disable-next-line no-console
-                console.warn(
-                    `[ModuleSettingsEngineRenderFlow] Missing target for text field "${field.key}" in ${options.appId}`,
-                );
-                return;
-            }
-            const target = options.container.querySelector(targetSelector);
-            if (!(target instanceof HTMLElement)) {
-                return;
-            }
-
-            this._deps.renderFieldRow(target, {
-                ...field,
-                appId: options.appId,
-                config: options.config,
-            });
-        });
-    }
 }
