@@ -55,13 +55,13 @@ toml             = "1.1"
 tokio        = { version = "1.52.1", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
 reqwest      = { version = "0.13.2", features = ["json", "stream", "native-tls", "gzip"], default-features = false }
 futures-util = "0.3.32"
-scraper      = "0.26.0"
+scraper      = "0.27.0"
 
 # --- System, Hardware & Low Level ---
 sysinfo      = "0.38.4"
 nvml-wrapper = "0.12.1" # NVIDIA Management Library
 wmi          = "0.18.4" # Windows Management Instrumentation
-machine-uid  = "0.5.4"  # Hardware ID generation
+machine-uid  = "0.6.0"  # Hardware ID generation
 dirs         = "6.0.0"
 once_cell    = "1.21.4"
 thiserror    = "2.0.18"
@@ -99,7 +99,7 @@ bitflags = { version = "2.11.1", features = ["serde"] }
 async-trait = "0.1.89"
 flate2 = "1.1.9"
 tar = "0.4.45"
-sevenz-rust2 = "0.20.2"
+sevenz-rust2 = "0.21.0"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [
