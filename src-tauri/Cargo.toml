@@ -52,16 +52,16 @@ serde_json       = "1.0.149"
 toml             = "1.1"
 
 # --- Async Core & Networking ---
-tokio        = { version = "1.52.2", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
+tokio        = { version = "1.52.3", features = ["rt-multi-thread", "macros", "time", "sync", "process", "fs"] }
 reqwest      = { version = "0.13.3", features = ["json", "stream", "native-tls", "gzip"], default-features = false }
 futures-util = "0.3.32"
-scraper      = "0.26.0"
+scraper      = "0.27.0"
 
 # --- System, Hardware & Low Level ---
 sysinfo      = "0.38.4"
 nvml-wrapper = "0.12.1" # NVIDIA Management Library
 wmi          = "0.18.4" # Windows Management Instrumentation
-machine-uid  = "0.5.4"  # Hardware ID generation
+machine-uid  = "0.6.0"  # Hardware ID generation
 dirs         = "6.0.0"
 once_cell    = "1.21.4"
 thiserror    = "2.0.18"
