@@ -39,6 +39,6 @@
         "check-size": "node .github/scripts/workflow.mjs check-size"
     },
     "engines": {
-        "node": ">=20.0.0"
+        "node": ">=26.1.0"
     }
 }
