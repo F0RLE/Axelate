@@ -305,7 +305,7 @@ describe('AppUiModuleFlow', () => {
         await flow.handleIntegrationImport('guide');
 
         expect(openExternalUrl).toHaveBeenCalledWith(
-            'https://github.com/F0RLE/Axelate/blob/nightly/docs/en/CUSTOM_INTEGRATIONS.md',
+            'https://github.com/F0RLE/Axelate/blob/nightly/docs/localization/en/CUSTOM_INTEGRATIONS.md',
         );
         expect(platformService.importIntegrationPath).not.toHaveBeenCalled();
         expect(platformService.importIntegrationUrl).not.toHaveBeenCalled();

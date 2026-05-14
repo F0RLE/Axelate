@@ -9,7 +9,7 @@ import { open } from '@tauri-apps/plugin-dialog';
 import { downloadDir } from '@tauri-apps/api/path';
 
 const CUSTOM_INTEGRATION_GUIDE_URL =
-    'https://github.com/F0RLE/Axelate/blob/nightly/docs/en/CUSTOM_INTEGRATIONS.md';
+    'https://github.com/F0RLE/Axelate/blob/nightly/docs/localization/en/CUSTOM_INTEGRATIONS.md';
 
 type ModalBridge = {
     isAppSelectionOpen(): boolean;
