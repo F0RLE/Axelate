@@ -47,6 +47,8 @@ type AppUIDeps = {
 // Note: Window interface extensions are defined in core.ts
 
 export class AppUI {
+    private static readonly _urlPattern = /https?:\/\/[^\s<>"')\]]+/iu;
+
     private readonly _chrome: AppUiChrome;
     private readonly _toastManager: ToastManager;
     private readonly _modalManager: ModalManager;
@@ -266,7 +268,32 @@ export class AppUI {
         id: string | null = null,
         onClick: (() => void) | null = null,
     ): void {
-        this._toastManager.show(message, type, duration, title, id, onClick);
+        this._toastManager.show(
+            message,
+            type,
+            duration,
+            title,
+            id,
+            onClick ?? this._createLinkToastAction(message),
+        );
+    }
+
+    private _createLinkToastAction(message: string): (() => void) | null {
+        const url = AppUI._extractFirstUrl(message);
+        if (url === null) {
+            return null;
+        }
+
+        return () => {
+            void this._deps.openExternalUrl(url).catch((error: unknown) => {
+                this._deps.tracer.warn(`[AppUI] Failed to open toast link: ${String(error)}`);
+            });
+        };
+    }
+
+    private static _extractFirstUrl(message: string): string | null {
+        const match = AppUI._urlPattern.exec(message);
+        return match?.[0].replace(/[.,!?;:]+$/u, '') ?? null;
     }
 
     // --- Action Feedback ---

@@ -19,6 +19,7 @@ describe('AppUI lifecycle', () => {
     let openModuleSettingsMock: ReturnType<typeof vi.fn>;
     let stopAiProviderMock: ReturnType<typeof vi.fn>;
     let reloadCatalogMock: ReturnType<typeof vi.fn<() => Promise<void>>>;
+    let openExternalUrlMock: ReturnType<typeof vi.fn<(_url: string) => Promise<void>>>;
     let getCatalogCategoryMock: ReturnType<typeof vi.fn>;
     let tracerMock: LoggerService;
     let platformServiceMock: {
@@ -44,6 +45,7 @@ describe('AppUI lifecycle', () => {
         openModuleSettingsMock = vi.fn();
         stopAiProviderMock = vi.fn();
         reloadCatalogMock = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+        openExternalUrlMock = vi.fn<(_url: string) => Promise<void>>().mockResolvedValue(undefined);
         getCatalogCategoryMock = vi.fn().mockReturnValue([]);
         tracerMock = {
             info: vi.fn(),
@@ -122,7 +124,7 @@ describe('AppUI lifecycle', () => {
                 reloadCatalog: async () => {
                     await reloadCatalogMock();
                 },
-                openExternalUrl: vi.fn().mockResolvedValue(undefined),
+                openExternalUrl: openExternalUrlMock,
             },
         );
     }
@@ -166,6 +168,43 @@ describe('AppUI lifecycle', () => {
         appUI.destroy();
 
         expect(testEventBus.listenerCount('page:change')).toBe(initialCount);
+    });
+
+    it('opens the first URL when an error toast is clicked', () => {
+        appUI = createAppUI();
+
+        appUI.showToast(
+            'Error 402: Payment Required. Please check your balance at https://openrouter.ai/settings/credits.',
+            'error',
+        );
+
+        const toast = document.querySelector('.toast');
+        if (!(toast instanceof HTMLElement)) {
+            throw new Error('Toast was not created');
+        }
+
+        expect(toast.classList.contains('toast--actionable')).toBe(true);
+
+        toast.click();
+
+        expect(openExternalUrlMock).toHaveBeenCalledWith('https://openrouter.ai/settings/credits');
+    });
+
+    it('keeps explicitly provided toast actions ahead of URL auto-actions', () => {
+        appUI = createAppUI();
+        const onClick = vi.fn();
+
+        appUI.showToast('Open https://example.com', 'info', 3000, null, null, onClick);
+
+        const toast = document.querySelector('.toast');
+        if (!(toast instanceof HTMLElement)) {
+            throw new Error('Toast was not created');
+        }
+
+        toast.click();
+
+        expect(onClick).toHaveBeenCalledOnce();
+        expect(openExternalUrlMock).not.toHaveBeenCalled();
     });
 
     it('should remove language-changed listener on destroy', () => {
