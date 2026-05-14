@@ -22,7 +22,7 @@ pub(super) async fn process_cloud_image_request(
         .filter(|value| !value.trim().is_empty())
         .ok_or_else(|| AppError::Validation("OpenRouter API key is missing".to_string()))?;
 
-    let client = build_image_client(Duration::from_secs(180))?;
+    let client = build_image_client(Duration::from_mins(3))?;
     let response = client
         .post("https://openrouter.ai/api/v1/chat/completions")
         .header(reqwest::header::AUTHORIZATION, format!("Bearer {api_key}"))

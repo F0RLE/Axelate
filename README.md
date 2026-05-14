@@ -48,8 +48,8 @@ It is not yet a finished marketplace, managed platform, or polished MCP-first op
 
 Install on Windows first:
 
-- Node.js 20+
-- npm 10+
+- Node.js 26.1.0+
+- npm 11+
 - Rust via `rustup` (`rust-toolchain.toml` pins the tested version)
 - WebView2 Runtime
 - Windows SDK

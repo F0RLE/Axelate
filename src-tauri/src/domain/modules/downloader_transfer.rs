@@ -178,7 +178,7 @@ pub(super) fn build_client(module_id: &str) -> Result<reqwest::Client, AppError>
 fn construct_client_builder() -> reqwest::ClientBuilder {
     reqwest::Client::builder()
         .user_agent(format!("Axelate/1.0.0 (Tauri; {})", std::env::consts::OS))
-        .timeout(std::time::Duration::from_secs(600))
+        .timeout(std::time::Duration::from_mins(10))
 }
 
 pub(super) fn build_public_client() -> Result<reqwest::Client, AppError> {

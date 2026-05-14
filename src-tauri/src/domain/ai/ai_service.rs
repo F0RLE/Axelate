@@ -18,7 +18,7 @@ pub use super::types::{
 };
 
 const CLOUD_AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
-const LOCAL_AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30 * 60);
+const LOCAL_AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(30);
 
 struct PreparedRequestExecution {
     provider: OpenAiCompatibleProvider,

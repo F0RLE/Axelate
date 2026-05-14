@@ -20,7 +20,7 @@ type ModuleSettingsPayload = HashMap<String, Value>;
 
 const MODULE_SETTINGS_SCHEME: &str = "module-settings";
 const MODULE_SETTINGS_LABEL_PREFIX: &str = "module-settings";
-const MODULE_SETTINGS_SESSION_TTL: Duration = Duration::from_secs(60 * 60);
+const MODULE_SETTINGS_SESSION_TTL: Duration = Duration::from_hours(1);
 const MODULE_SETTINGS_MAX_SESSIONS: usize = 128;
 const HOST_INDEX_HTML: &str = include_str!("../../../resources/module_settings_host/index.html");
 const HOST_SCRIPT: &str = include_str!("../../../resources/module_settings_host/host.js");

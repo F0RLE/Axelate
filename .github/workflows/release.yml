@@ -68,7 +68,7 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.95.0
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b # node24

@@ -36,7 +36,7 @@ pub(super) async fn process_comfyui_request(
     settings_service: &SettingsService,
 ) -> Result<Vec<String>, AppError> {
     let settings_context = load_image_request_settings_context(request, settings_service).await?;
-    let client = build_image_client(Duration::from_secs(120))?;
+    let client = build_image_client(Duration::from_mins(2))?;
     let comfyui = build_comfyui_request_context(request, &settings_context, &client).await?;
     let workflow = build_comfyui_workflow(
         &request.prompt,
@@ -443,7 +443,7 @@ async fn wait_for_comfyui_images(
     prompt_id: &str,
     image_generation_state: &ImageGenerationState,
 ) -> Result<Vec<String>, AppError> {
-    let deadline = Instant::now() + Duration::from_secs(600);
+    let deadline = Instant::now() + Duration::from_mins(10);
 
     loop {
         if image_generation_state

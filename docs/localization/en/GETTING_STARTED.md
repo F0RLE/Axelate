@@ -8,8 +8,8 @@ For day-to-day contributor work after setup, continue with [Development Workflow
 
 ## Requirements
 
-- Node.js 20+
-- npm 10+
+- Node.js 26.1.0+
+- npm 11+
 - Rust via `rustup` (`rust-toolchain.toml` pins the tested version)
 - Windows: Visual Studio Build Tools, Windows SDK, and WebView2 Runtime
 
