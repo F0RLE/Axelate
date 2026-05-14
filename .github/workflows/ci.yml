@@ -40,6 +40,7 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b # node24
+        continue-on-error: true
         with:
           workspaces: "src-tauri -> target"
           cache-targets: false
@@ -91,6 +92,7 @@ jobs:
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b # node24
+        continue-on-error: true
         with:
           workspaces: "src-tauri -> target"
           cache-targets: false
