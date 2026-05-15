@@ -261,7 +261,7 @@ async fn spawn_runtime_command(
 
     command.spawn().map_err(|e| AppError::Internal {
         request_id: None,
-        message: format!("Failed to spawn {} module runtime: {}", runtime_label, e),
+        message: format!("Failed to spawn {runtime_label} module runtime: {e}"),
     })
 }
 
