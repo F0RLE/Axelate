@@ -1,12 +1,8 @@
 export class AxelateClient {
     constructor(env = globalThis.process?.env ?? {}) {
-        this.baseUrl = String(env.AXELATE_HTTP_API_BASE ?? '').replace(/\/$/u, '');
-        this.token = String(env.AXELATE_HTTP_API_TOKEN ?? '');
-        this.moduleId = String(env.AXELATE_MODULE_ID ?? '');
-
-        if (!this.baseUrl || !this.token || !this.moduleId) {
-            throw new Error('Axelate integration environment is missing.');
-        }
+        this.baseUrl = validateBaseUrl(requiredEnv(env, 'AXELATE_HTTP_API_BASE')).replace(/\/$/u, '');
+        this.token = requiredEnv(env, 'AXELATE_HTTP_API_TOKEN');
+        this.moduleId = requiredEnv(env, 'AXELATE_MODULE_ID');
     }
 
     async request(method, path, payload) {
@@ -60,6 +56,25 @@ export class AxelateClient {
             ...options,
         });
     }
+}
+
+function requiredEnv(env, name) {
+    const value = String(env[name] ?? '');
+    if (value.trim().length === 0) {
+        throw new Error(`Missing required Axelate integration env var: ${name}`);
+    }
+
+    return value;
+}
+
+function validateBaseUrl(value) {
+    const url = new URL(value);
+    const allowedHosts = new Set(['localhost', '127.0.0.1', '[::1]']);
+    if (!['http:', 'https:'].includes(url.protocol) || !allowedHosts.has(url.hostname)) {
+        throw new Error('AXELATE_HTTP_API_BASE must be an http(s) loopback URL.');
+    }
+
+    return value;
 }
 
 async function readResponseBody(response) {

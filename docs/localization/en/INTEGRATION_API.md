@@ -125,7 +125,8 @@ const response = await fetch(`${baseUrl}/v1/ai/text`, {
 
 const result = await response.json();
 
-const settingsResponse = await fetch(`${baseUrl}/v1/modules/${moduleId}/settings`, {
+const modulePathId = encodeURIComponent(moduleId);
+const settingsResponse = await fetch(`${baseUrl}/v1/modules/${modulePathId}/settings`, {
     headers: { Authorization: `Bearer ${token}` },
 });
 const { settings } = await settingsResponse.json();
@@ -135,11 +136,13 @@ const { settings } = await settingsResponse.json();
 
 ```python
 import os
+import urllib.parse
 import requests
 
 base_url = os.environ["AXELATE_HTTP_API_BASE"]
 token = os.environ["AXELATE_HTTP_API_TOKEN"]
 module_id = os.environ["AXELATE_MODULE_ID"]
+module_path_id = urllib.parse.quote(module_id, safe="")
 headers = {"Authorization": f"Bearer {token}"}
 
 response = requests.post(
@@ -154,7 +157,7 @@ response = requests.post(
 result = response.json()
 
 settings = requests.get(
-    f"{base_url}/v1/modules/{module_id}/settings",
+    f"{base_url}/v1/modules/{module_path_id}/settings",
     headers=headers,
     timeout=30,
 ).json()["settings"]

@@ -14,6 +14,12 @@ npm run integration:doctor -- ./my-integration
 
 Then import the folder in the launcher integrations screen and launch it.
 
+For an existing app, keep the app code in your integration folder, declare its
+entrypoint in `axelate-module.toml`, and use the launcher-provided environment
+variables at process start. Store generated state in
+`AXELATE_MODULE_RUNTIME_DIR`, call `/v1/ai/text` or `/v1/ai/image` through the
+local API, then run `integration:doctor` before importing the folder.
+
 ## Repository Helpers
 
 - `npm run integration:new -- <folder>` creates a minimal Python integration.

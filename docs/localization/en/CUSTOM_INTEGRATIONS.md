@@ -5,6 +5,12 @@ launcher can import a folder, a local archive, or a GitHub repository/archive UR
 Archives may be `.zip`, `.tar.gz`, `.tgz`, or `.7z`.
 
 For a guided development flow, use [Integration Development](INTEGRATION_DEVELOPMENT.md).
+For a new integration, prefer the scaffold first:
+
+```bash
+npm run integration:new -- ./my-integration --id my-integration --name "My Integration"
+npm run integration:doctor -- ./my-integration
+```
 
 ## Minimal Layout
 

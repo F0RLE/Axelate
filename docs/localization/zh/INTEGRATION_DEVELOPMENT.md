@@ -14,6 +14,11 @@ npm run integration:doctor -- ./my-integration
 
 然后在 Axelate 的 Integrations 页面导入这个文件夹并启动卡片。
 
+如果要接入已有应用，把应用代码放在集成目录里，在 `axelate-module.toml`
+中声明入口文件，并在进程启动时读取启动器提供的环境变量。生成的状态写入
+`AXELATE_MODULE_RUNTIME_DIR`，通过 `/v1/ai/text` 或 `/v1/ai/image` 调用 AI，
+然后运行 `integration:doctor`，再导入该文件夹。
+
 ## 仓库工具
 
 - `npm run integration:new -- <folder>` 创建一个最小 Python 集成。
@@ -124,5 +129,4 @@ iframe 协议：
 
 ## 信任规则
 
-导入的集成是用户选择运行的本地代码。目前它们不是经过 review、签名或 sandbox
-隔离的 packages。
+导入的集成是用户选择运行的本地代码。目前它们不是经过审查、签名或沙箱隔离的包。
