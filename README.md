@@ -90,8 +90,8 @@ npm run verify
 Release tags must match the versions in `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`:
 
 ```bash
-git tag v0.1.5
-git push origin v0.1.5
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 For the full release checklist, see [Releases](docs/localization/en/RELEASES.md).
