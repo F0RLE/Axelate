@@ -116,16 +116,27 @@ import urllib.error
 import urllib.request
 
 
+def required_env(name: str) -> str:
+    value = os.environ.get(name)
+    if value is None or value.strip() == "":
+        raise RuntimeError(f"Missing required environment variable: {name}")
+    return value
+
+
 def validate_base_url(value: str) -> str:
     parsed = urllib.parse.urlparse(value)
-    if parsed.scheme not in {"http", "https"}:
-        raise ValueError("AXELATE_HTTP_API_BASE must use http or https.")
+    if parsed.scheme not in {"http", "https"} or parsed.hostname not in {
+        "localhost",
+        "127.0.0.1",
+        "::1",
+    }:
+        raise ValueError("AXELATE_HTTP_API_BASE must be an http(s) loopback URL.")
     return value.rstrip("/")
 
 
-BASE_URL = validate_base_url(os.environ["AXELATE_HTTP_API_BASE"])
-TOKEN = os.environ["AXELATE_HTTP_API_TOKEN"]
-MODULE_ID = os.environ["AXELATE_MODULE_ID"]
+BASE_URL = validate_base_url(required_env("AXELATE_HTTP_API_BASE"))
+TOKEN = required_env("AXELATE_HTTP_API_TOKEN")
+MODULE_ID = required_env("AXELATE_MODULE_ID")
 MODULE_PATH_ID = urllib.parse.quote(MODULE_ID)
 
 
@@ -140,8 +151,16 @@ def request(method: str, path: str, payload: dict | None = None) -> dict:
             "Content-Type": "application/json",
         },
     )
-    with urllib.request.urlopen(req, timeout=120) as response:
-        return json.loads(response.read().decode("utf-8"))
+    try:
+        with urllib.request.urlopen(req, timeout=120) as response:
+            text = response.read().decode("utf-8")
+    except urllib.error.HTTPError as error:
+        body = error.read().decode("utf-8", errors="replace")
+        raise RuntimeError(f"{method} {path} failed with HTTP {error.code}: {body}") from error
+    except urllib.error.URLError as error:
+        raise RuntimeError(f"{method} {path} failed: {error.reason}") from error
+
+    return json.loads(text) if text.strip() else {}
 
 
 def main() -> None:
@@ -157,11 +176,7 @@ def main() -> None:
 
 
 if __name__ == "__main__":
-    try:
-        main()
-    except urllib.error.HTTPError as error:
-        print(error.read().decode("utf-8"))
-        raise
+    main()
 `,
 );
 
