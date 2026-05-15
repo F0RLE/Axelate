@@ -20,9 +20,9 @@
     -webkit-app-region: no-drag;
     z-index: auto;
     box-sizing: border-box;
-    transition:
-        width 0.28s var(--ease-smooth),
-        padding 0.28s var(--ease-smooth);
+    contain: layout paint style;
+    will-change: width;
+    transition: width 0.22s var(--ease-smooth);
 }
 
 /* ... */
@@ -44,9 +44,7 @@
     padding: 0;
     transition:
         background 0.2s ease,
-        opacity 0.2s ease,
-        padding 0.28s var(--ease-smooth),
-        margin 0.28s var(--ease-smooth);
+        opacity 0.2s ease;
 }
 
 .logo-icon-wrapper {
@@ -258,9 +256,10 @@
     overflow: hidden;
     white-space: nowrap;
     margin: 0;
+    transform: translateX(-4px);
     transition:
-        width 0.3s var(--ease-smooth),
-        opacity 0.2s ease;
+        opacity 0.16s ease,
+        transform 0.16s var(--ease-smooth);
 }
 
 #sidebar.collapsed .sidebar-title-wrapper {
@@ -330,7 +329,10 @@
     opacity: 0;
     visibility: hidden;
     transform: translateX(-10px);
-    transition: all 0.2s;
+    transition:
+        opacity 0.2s ease,
+        transform 0.2s ease,
+        visibility 0.2s ease;
     box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
     z-index: 10;
 }
@@ -369,12 +371,7 @@
 #sidebar .main-menu,
 #sidebar .bottom-menu,
 #sidebar .nav-section {
-    transition:
-        margin 0.28s var(--ease-smooth),
-        padding 0.28s var(--ease-smooth),
-        width 0.28s var(--ease-smooth),
-        gap 0.28s var(--ease-smooth),
-        transform 0.28s var(--ease-smooth);
+    transition: none;
 }
 
 #system-monitor {
@@ -415,17 +412,12 @@
     position: relative;
     overflow: hidden;
     transition:
-        height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        max-height 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
-        margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        gap 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        justify-content 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         background 0.2s ease,
         border-color 0.2s ease,
         box-shadow 0.2s ease,
-        color 0.2s ease;
+        color 0.2s ease,
+        transform 0.2s ease;
     height: 44px;
     max-height: 44px;
     outline: none;
@@ -525,26 +517,21 @@
     white-space: nowrap;
     text-overflow: ellipsis;
     transform-origin: left center;
+    transform: translateX(0);
     transition:
-        opacity 0.24s var(--ease-smooth),
-        width 0.28s var(--ease-smooth),
-        margin 0.28s var(--ease-smooth),
-        transform 0.28s var(--ease-smooth),
-        visibility 0.28s;
+        opacity 0.18s ease,
+        transform 0.18s var(--ease-smooth);
 }
 
 body.snapping #sidebar {
-    transition:
-        width 0.3s var(--ease-smooth),
-        padding 0.3s var(--ease-smooth);
+    transition: width 0.22s var(--ease-smooth);
 }
 
 body.snapping .nav-btn span,
 body.snapping #sidebar.collapsed .nav-btn span {
     transition:
-        opacity 0.3s var(--ease-smooth),
-        width 0.3s var(--ease-smooth),
-        visibility 0.3s;
+        opacity 0.16s ease,
+        transform 0.16s var(--ease-smooth);
 }
 
 #sidebar:not(.collapsed).monitor-hidden .nav-btn {

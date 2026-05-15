@@ -85,7 +85,13 @@ export class AppUiModuleLifecycle {
 
         void this._deps.platformService
             .stop(previousApp)
-            .then(() => {
+            .then((stopped) => {
+                if (!stopped) {
+                    this._deps.tracer.warn(
+                        `[AppUI] Previous module ${previousApp.id} did not report a successful stop`,
+                    );
+                    return;
+                }
                 const prevName =
                     previousApp.name ?? card.dataset['currentModuleName'] ?? previousModuleId;
                 if (!this._deps.platformService.isApiModule(previousApp)) {

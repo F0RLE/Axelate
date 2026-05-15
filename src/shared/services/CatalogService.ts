@@ -7,13 +7,24 @@ import type { IBridge } from '@/shared/types/IBridge';
 import type { IApp, IModule, IConfigField, ICatalogData } from '@/shared/types/coreTypes';
 import type { AppConfig, ModuleItem, ApiProvider } from '@/shared/types/bindings';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import type { CatalogLoadSnapshot, EngineDefinition } from './CatalogLoadSnapshot';
 
-type CatalogLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+type CatalogLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
+const EMPTY_CONFIG: AppConfig = {
+    version: '1.0.0',
+    apiProviders: [],
+    catalog: {
+        ai: [],
+        services: [],
+        stars: [],
+    },
+};
 
 export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
+    private _integrationWatcherUnlisten: (() => void) | null = null;
+    private _integrationWatcherBinding = false;
+    private _destroyed = false;
 
     constructor(
         private readonly _bridge: IBridge,
@@ -24,6 +35,8 @@ export class CatalogService {
      * Asynchronously loads the application catalog from the Tauri backend.
      */
     public async loadCatalog(): Promise<void> {
+        this._destroyed = false;
+        this._bindIntegrationWatcher();
         const snapshot = await this._loadSnapshot();
 
         try {
@@ -38,14 +51,48 @@ export class CatalogService {
             // Hydrate with schemas, providers & engine install status
             this._hydrateApps(snapshot.config, snapshot.installedModules, snapshot.engineDefs);
 
-            // Final check for fallbacks
-            this._ensureFallbacks();
-
             const event = new CustomEvent('catalog-loaded');
             globalThis.dispatchEvent(event);
         } catch (e) {
             this._tracer.error(`[CatalogService] Failed to load catalog: ${String(e)}`);
         }
+    }
+
+    public destroy(): void {
+        this._destroyed = true;
+        this._integrationWatcherUnlisten?.();
+        this._integrationWatcherUnlisten = null;
+        this._integrationWatcherBinding = false;
+    }
+
+    private _bindIntegrationWatcher(): void {
+        if (
+            this._integrationWatcherBinding ||
+            this._integrationWatcherUnlisten !== null ||
+            !this._bridge.isTauri()
+        ) {
+            return;
+        }
+
+        this._integrationWatcherBinding = true;
+        void this._bridge
+            .listen('integrations_changed', () => {
+                void this.loadCatalog();
+            })
+            .then((unlisten) => {
+                if (this._destroyed) {
+                    unlisten();
+                    this._integrationWatcherBinding = false;
+                    return;
+                }
+                this._integrationWatcherUnlisten = unlisten;
+            })
+            .catch((error: unknown) => {
+                this._integrationWatcherBinding = false;
+                this._tracer.warn(
+                    `[CatalogService] Failed to subscribe to integrations watcher: ${String(error)}`,
+                );
+            });
     }
 
     private async _loadSnapshot(): Promise<CatalogLoadSnapshot> {
@@ -62,17 +109,12 @@ export class CatalogService {
         };
     }
 
-    /**
-     * Loads the configuration from backend or fallback.
-     */
-    private async _loadConfig(): Promise<AppConfig> {
+    private async _loadConfig(): Promise<AppConfig | null> {
         try {
             return await this._bridge.invoke<AppConfig>('get_config');
         } catch (e) {
-            this._tracer.warn(
-                `[CatalogService] Backend config failed, using fallback: ${String(e)}`,
-            );
-            return FALLBACK_CONFIG;
+            this._tracer.warn(`[CatalogService] Backend config failed: ${String(e)}`);
+            return null;
         }
     }
 
@@ -148,6 +190,12 @@ export class CatalogService {
         const installedMap = new Map(installedModules.map((m) => [m.id.toLowerCase(), m]));
         // Build a fast lookup for engine installation status
         const engineInstallMap = new Map(engineDefs.map((e) => [e.id.toLowerCase(), e.installed]));
+        const engineComputeModesMap = new Map(
+            engineDefs.map((engine) => [
+                engine.id.toLowerCase(),
+                (engine.installed_compute_modes ?? []) as Array<'gpu' | 'cpu'>,
+            ]),
+        );
 
         const mergeAppSchema = (app: IApp) => {
             const isApi =
@@ -168,6 +216,7 @@ export class CatalogService {
             } else if (app.type === 'local' && engineInstallMap.has(app.id.toLowerCase())) {
                 // Use real-time detection from is_engine_installed()
                 app.installed = engineInstallMap.get(app.id.toLowerCase()) ?? false;
+                app.installedComputeModes = engineComputeModesMap.get(app.id.toLowerCase()) ?? [];
             } else if (app.type === 'local' && installedModule) {
                 // Non-engine local modules should render as installed immediately.
                 // Otherwise the modal first paints the "download" style and only then
@@ -213,7 +262,7 @@ export class CatalogService {
         if (discovered.length === 0) return;
 
         this._appData.services.push(...discovered);
-        this._tracer.info(
+        this._tracer.debug(
             `[CatalogService] Added ${String(discovered.length)} discovered integration(s).`,
         );
     }
@@ -241,34 +290,6 @@ export class CatalogService {
     }
 
     /**
-     * Ensures each category has at least one app from fallbacks if empty.
-     */
-    private _ensureFallbacks(): void {
-        const fallbackAi = FALLBACK_CONFIG.catalog.ai;
-        const fallbackServices = FALLBACK_CONFIG.catalog.services;
-
-        if (this._appData.ai.length === 0) {
-            this._tracer.warn(
-                `[CatalogService] AI catalog still empty (fallback source has ${String(fallbackAi.length)} items), injecting fallbacks.`,
-            );
-            this._appData.ai = this._mapModuleItems(fallbackAi, 'ai');
-            this._tracer.info(
-                `[CatalogService] AI catalog now has ${String(this._appData.ai.length)} items.`,
-            );
-        }
-
-        if (this._appData.services.length === 0) {
-            this._tracer.warn(
-                `[CatalogService] Services catalog still empty (fallback source has ${String(fallbackServices.length)} items), injecting fallbacks.`,
-            );
-            this._appData.services = this._mapModuleItems(fallbackServices, 'services');
-            this._tracer.info(
-                `[CatalogService] Services catalog now has ${String(this._appData.services.length)} items.`,
-            );
-        }
-    }
-
-    /**
      * Returns the current catalog data.
      */
     public getCatalog(): ICatalogData {
@@ -285,25 +306,32 @@ export class CatalogService {
         );
     }
 
-    /**
-     * Validates the configuration and returns a fallback if invalid.
-     */
     private _ensureValidConfig(config: AppConfig | null): AppConfig {
-        const fallback = FALLBACK_CONFIG;
-
         if (!config) {
-            this._tracer.warn('[CatalogService] Config is null. Using FALLBACK_CONFIG.');
-            return fallback;
+            this._tracer.warn('[CatalogService] Config is unavailable. Using empty catalog.');
+            return EMPTY_CONFIG;
         }
 
-        if (config.catalog.ai.length === 0 && config.catalog.services.length === 0) {
-            const aiLen = config.catalog.ai.length;
-            const srvLen = config.catalog.services.length;
-            this._tracer.warn(
-                `[CatalogService] Config invalid or empty (AI: ${String(aiLen)}, Services: ${String(srvLen)}). FORCING FALLBACK_CONFIG.`,
-            );
-            return fallback;
+        if (!this._hasCatalogArrays(config)) {
+            this._tracer.warn('[CatalogService] Config shape is invalid. Using empty catalog.');
+            return EMPTY_CONFIG;
         }
         return config;
+    }
+
+    private _hasCatalogArrays(config: AppConfig): boolean {
+        const candidate = config as unknown as {
+            catalog?: {
+                ai?: unknown;
+                services?: unknown;
+            };
+            apiProviders?: unknown;
+        };
+
+        return (
+            Array.isArray(candidate.catalog?.ai) &&
+            Array.isArray(candidate.catalog.services) &&
+            Array.isArray(candidate.apiProviders)
+        );
     }
 }

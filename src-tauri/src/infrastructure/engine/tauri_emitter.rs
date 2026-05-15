@@ -30,13 +30,6 @@ impl TauriEngineEmitter {
     }
 }
 
-fn canonical_image_engine_id(engine_id: &str) -> &str {
-    match engine_id {
-        "stable-diffusion" => "sdcpp",
-        value => value,
-    }
-}
-
 fn parse_step_totals(line: &str) -> Option<(u32, u32)> {
     for token in line.split_whitespace() {
         let Some((step, total)) = token.split_once('/') else {
@@ -129,46 +122,58 @@ fn current_time_ms_f64() -> f64 {
 
 impl EngineEventEmitter for TauriEngineEmitter {
     fn emit_swapping(&self, from: &str, to: &str) {
-        let _ = self
+        if let Err(error) = self
             .handle
-            .emit("ai:engine:swapping", json!({ "from": from, "to": to }));
+            .emit("ai:engine:swapping", json!({ "from": from, "to": to }))
+        {
+            tracing::warn!("Failed to emit engine swapping event: {error}");
+        }
     }
 
     fn emit_starting(&self, engine_id: &str) {
-        let _ = self
+        if let Err(error) = self
             .handle
-            .emit("ai:engine:starting", json!({ "engine_id": engine_id }));
+            .emit("ai:engine:starting", json!({ "engine_id": engine_id }))
+        {
+            tracing::warn!("Failed to emit engine starting event for {engine_id}: {error}");
+        }
     }
 
     fn emit_ready(&self, engine_id: &str, endpoint: &str) {
-        let _ = self.handle.emit(
+        if let Err(error) = self.handle.emit(
             "ai:engine:ready",
             json!({ "engine_id": engine_id, "endpoint": endpoint }),
-        );
+        ) {
+            tracing::warn!("Failed to emit engine ready event for {engine_id}: {error}");
+        }
     }
 
     fn emit_error(&self, engine_id: &str, message: &str) {
-        let _ = self.handle.emit(
+        if let Err(error) = self.handle.emit(
             "ai:engine:error",
             json!({ "engine_id": engine_id, "message": message }),
-        );
+        ) {
+            tracing::warn!("Failed to emit engine error event for {engine_id}: {error}");
+        }
     }
 
     fn emit_log(&self, engine_id: &str, line: &str) {
-        if engine_id == "sdcpp" || engine_id == "stable-diffusion" {
+        if engine_id == "sdcpp" {
             crate::app::tray::update_background_generation_progress(&self.handle, line);
             if let Some(progress) = parse_sdcpp_progress_line(line) {
                 let state = Arc::clone(&self.image_generation_state);
-                let provider = canonical_image_engine_id(engine_id).to_string();
+                let provider = engine_id.to_string();
                 tauri::async_runtime::spawn(async move {
                     state.update_progress(&provider, progress).await;
                 });
             }
         }
-        let _ = self.handle.emit(
+        if let Err(error) = self.handle.emit(
             "ai:engine:log",
             json!({ "engine_id": engine_id, "line": line }),
-        );
+        ) {
+            tracing::warn!("Failed to emit engine log event for {engine_id}: {error}");
+        }
     }
 }
 

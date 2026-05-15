@@ -175,7 +175,6 @@ export class SidebarUI extends BaseComponent {
                 this._isCollapsed = !this._isCollapsed;
                 this._hasManualSidebarOverride = false;
             }
-            this._startSnappingAnimation();
             this._updateAutoCompactState();
             this._applySidebarWidth();
             this._persistSidebarPreferenceState();
@@ -311,7 +310,7 @@ export class SidebarUI extends BaseComponent {
             return;
         }
         const isMonitorVisible = this._monitorVisibilityController.update(elements);
-        void this._windowService?.setMonitoringPaused(!isMonitorVisible);
+        void this._windowService?.setMonitoringPauseReason('monitor-hidden', !isMonitorVisible);
     }
 
     private async _findSidebar(): Promise<HTMLElement | null> {

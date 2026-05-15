@@ -160,6 +160,31 @@ describe('ModuleSettingsCustomUiController', () => {
         expect(status?.textContent).toContain('Failed to load module settings UI.');
     });
 
+    it('ignores host messages from other windows', async () => {
+        const harness = createHarness();
+
+        await harness.controller.render(harness.container, {
+            id: 'sample-integration',
+            name: 'Sample Integration',
+            category: 'automation',
+            type: 'local',
+            settingsUi: 'settings-ui/index.html',
+        });
+
+        globalThis.dispatchEvent(
+            new MessageEvent('message', {
+                source: globalThis.window,
+                data: {
+                    channel: 'axelate:module-settings-host',
+                    type: 'host-ready',
+                },
+            }),
+        );
+
+        const status = harness.container.querySelector('.module-settings-webui-status');
+        expect(status?.classList.contains('hidden')).toBe(false);
+    });
+
     it('shows a failure state when the host reports an error', async () => {
         const harness = createHarness();
 

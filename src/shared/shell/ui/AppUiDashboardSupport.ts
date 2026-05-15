@@ -24,6 +24,7 @@ type AppUiDashboardControllerDeps = {
     openModuleSettings: (app: IApp) => void;
     clearModuleCard: (category: string) => void;
     removeSelectedModule: (category: string) => void;
+    stopSelectedApp: (app: IApp, category: string) => Promise<boolean>;
     openAppSelection: (category: string) => void;
     updateMultiSlotBadge: () => void;
     activateAiSlot: (category: 'ai_text' | 'ai_image', app: IApp) => void;
@@ -193,9 +194,13 @@ export class AppUiDashboardSupport {
             mouseEvent.preventDefault();
             mouseEvent.stopPropagation();
             const category = this._deps.selectionState.resolveCategoryFromCard(card);
+            const app = this._deps.selectionState.get(category);
             this._deps.tracer.info(`[AppUI] Middle-click close for ${category}`);
             this._deps.clearModuleCard(category);
             this._deps.removeSelectedModule(category);
+            if (app !== undefined) {
+                void this._deps.stopSelectedApp(app, category);
+            }
         } else if (mouseEvent.button === 2) {
             mouseEvent.stopPropagation();
             mouseEvent.stopImmediatePropagation();
@@ -290,6 +295,7 @@ export class AppUiDashboardSupport {
         const closeButton = this._deps.chrome.createCloseBadge(category, (resolvedCategory) => {
             this._deps.clearModuleCard(resolvedCategory);
             this._deps.removeSelectedModule(resolvedCategory);
+            void this._deps.stopSelectedApp(app, category);
         });
         card.appendChild(closeButton);
     }

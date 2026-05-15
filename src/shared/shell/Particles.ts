@@ -81,6 +81,7 @@ export class Particles {
     private _animationFrameId: number | null = null;
     private _animationTimerId: ReturnType<typeof setTimeout> | null = null;
     private _resizeFrameId: number | null = null;
+    private _motionQuery: MediaQueryList | null = null;
     private readonly _cleanupAbort: AbortController = new AbortController();
 
     constructor(private readonly _runtime: ParticlesRuntime = createDefaultParticlesRuntime()) {
@@ -195,6 +196,7 @@ export class Particles {
         this._canvas.remove();
         this._particles = [];
         this._particlesByColor = {};
+        this._motionQuery = null;
     }
 
     private _init(): void {
@@ -268,7 +270,7 @@ export class Particles {
             { signal },
         );
 
-        const motionQuery = this._runtime.matchMedia('(prefers-reduced-motion: reduce)');
+        const motionQuery = this._getMotionQuery();
         const handleMotion = (): void => {
             if (motionQuery.matches) this.stop();
             else this.start();
@@ -287,21 +289,28 @@ export class Particles {
     }
 
     private _checkReducedMotionAndStart(): void {
-        const motionQuery = this._runtime.matchMedia('(prefers-reduced-motion: reduce)');
+        const motionQuery = this._getMotionQuery();
         if (!motionQuery.matches) {
             this.start();
         }
     }
 
     public start(): void {
+        if (!this._isTauriRuntime) return;
+
         if (!this._isRunning) {
-            const motionQuery = this._runtime.matchMedia('(prefers-reduced-motion: reduce)');
+            const motionQuery = this._getMotionQuery();
             if (motionQuery.matches) return;
 
             this._isRunning = true;
             this._lastFrameTime = performance.now();
             this._scheduleAnimationFrame();
         }
+    }
+
+    private _getMotionQuery(): MediaQueryList {
+        this._motionQuery ??= this._runtime.matchMedia('(prefers-reduced-motion: reduce)');
+        return this._motionQuery;
     }
 
     public stop(): void {

@@ -3,6 +3,7 @@ import { ModuleCardRenderer } from './ModuleCardRenderer';
 import type { ModuleCardDownloadAction } from './ModuleCardActions';
 import type { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { getAiSlotForCapability, isAiCategory } from '../../utils/moduleCategoryPolicy';
+import { escapeCssSelectorValue } from '../../utils/cssSelectors';
 
 type DownloadProgressPayload = {
     module_id: string;
@@ -14,6 +15,7 @@ type AppInteractionHandler = (event: MouseEvent, app: IApp, category: string) =>
 type DownloadHandler = (app: IApp, action: ModuleCardDownloadAction) => void;
 type ProgressEventHandler = (event: Event) => void;
 type TranslateFunc = (key: string, fallback: string) => string;
+export type IntegrationImportAction = 'local' | 'archive' | 'url' | 'guide';
 
 export async function cancelModalDownload(options: {
     app: IApp;
@@ -60,9 +62,8 @@ export function createModalDownloadProgressHandler(): ProgressEventHandler {
             return;
         }
 
-        const card = list.querySelector<HTMLElement>(
-            `.app-card[data-app-id="${payload.module_id}"]`,
-        );
+        const escapedModuleId = escapeCssSelectorValue(payload.module_id);
+        const card = list.querySelector<HTMLElement>(`.app-card[data-app-id="${escapedModuleId}"]`);
         if (card === null) {
             return;
         }
@@ -91,6 +92,7 @@ export function populateModalAppList(options: {
     cardRenderer: ModuleCardRenderer;
     onAppInteraction: AppInteractionHandler;
     onDownload: DownloadHandler;
+    onIntegrationImport?: (action: IntegrationImportAction) => void;
     translate: TranslateFunc;
 }): void {
     const visibleApps = options.selectionPolicy.getVisibleApps(
@@ -99,9 +101,14 @@ export function populateModalAppList(options: {
         options.currentFilter,
     );
 
+    const shouldShowIntegrationImport = options.category === 'services';
+
     options.listElement.innerHTML = '';
-    options.listElement.classList.toggle('app-grid-empty', visibleApps.length === 0);
-    if (visibleApps.length === 0) {
+    options.listElement.classList.toggle(
+        'app-grid-empty',
+        visibleApps.length === 0 && !shouldShowIntegrationImport,
+    );
+    if (visibleApps.length === 0 && !shouldShowIntegrationImport) {
         renderModalEmptyState(options.listElement, options.translate);
         return;
     }
@@ -121,6 +128,12 @@ export function populateModalAppList(options: {
         );
         options.listElement.appendChild(card);
     });
+
+    if (shouldShowIntegrationImport) {
+        options.listElement.appendChild(
+            createIntegrationImportCard(options.translate, options.onIntegrationImport),
+        );
+    }
 }
 
 export function transitionSelectionButton(options: {
@@ -221,4 +234,105 @@ function resetModalDownloadButton(button: HTMLButtonElement, translate: Translat
         label.style.display = '';
         label.textContent = translate('ui.launcher.module.download', 'Download');
     }
+}
+
+function createIntegrationImportCard(
+    translate: TranslateFunc,
+    onIntegrationImport?: (action: IntegrationImportAction) => void,
+): HTMLElement {
+    const card = document.createElement('div');
+    card.className = 'app-card module-selection-card integration-import-card';
+    card.tabIndex = 0;
+    card.setAttribute(
+        'aria-label',
+        translate('ui.launcher.integrations.import.card_title', 'Add integration'),
+    );
+    card.addEventListener('click', () => {
+        onIntegrationImport?.('archive');
+    });
+    card.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') {
+            return;
+        }
+
+        event.preventDefault();
+        onIntegrationImport?.('archive');
+    });
+
+    const help = createIntegrationHelpBadge(translate, onIntegrationImport);
+    const icon = document.createElement('div');
+    icon.className = 'module-selection-card-icon integration-import-icon';
+    icon.innerHTML = '<svg class="icon" viewBox="0 0 24 24"><use href="#icon-plus"></use></svg>';
+
+    const title = document.createElement('div');
+    title.className = 'module-selection-card-title';
+    title.textContent = translate('ui.launcher.integrations.import.card_title', 'Add integration');
+
+    const desc = document.createElement('div');
+    desc.className = 'module-selection-card-description';
+    desc.textContent = translate(
+        'ui.launcher.integrations.import.card_desc',
+        'Import a custom integration from a folder, archive, or repository link.',
+    );
+
+    const actions = document.createElement('div');
+    actions.className = 'module-selection-card-actions integration-import-actions';
+    actions.append(
+        createIntegrationImportButton(
+            'local',
+            translate('ui.launcher.integrations.import.folder', 'Folder'),
+            onIntegrationImport,
+        ),
+        createIntegrationImportButton(
+            'url',
+            translate('ui.launcher.integrations.import.url', 'Link'),
+            onIntegrationImport,
+        ),
+    );
+
+    card.append(help, icon, title, desc, actions);
+    return card;
+}
+
+function createIntegrationHelpBadge(
+    translate: TranslateFunc,
+    onIntegrationImport?: (action: IntegrationImportAction) => void,
+): HTMLButtonElement {
+    const badge = document.createElement('button');
+    badge.type = 'button';
+    badge.className = 'module-action-badge right integration-help-badge';
+    badge.title = translate('ui.launcher.integrations.import.guide_title', 'Integration guide');
+    badge.setAttribute('aria-label', badge.title);
+    const icon = document.createElement('span');
+    icon.className = 'badge-icon';
+    icon.setAttribute('aria-hidden', 'true');
+    icon.textContent = '?';
+    badge.append(icon);
+    badge.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onIntegrationImport?.('guide');
+    });
+
+    return badge;
+}
+
+function createIntegrationImportButton(
+    action: Exclude<IntegrationImportAction, 'guide'>,
+    label: string,
+    onIntegrationImport?: (action: IntegrationImportAction) => void,
+): HTMLButtonElement {
+    const button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'modal-btn modal-btn-primary integration-import-action-btn';
+    button.title = label;
+    button.setAttribute('aria-label', label);
+    button.textContent = label;
+    button.addEventListener('click', (event) => {
+        event.preventDefault();
+        event.stopPropagation();
+        onIntegrationImport?.(action);
+    });
+
+    return button;
 }

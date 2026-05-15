@@ -30,7 +30,10 @@ pub async fn get_app_bootstrap_data(
 ) -> Result<BootstrapData, AppError> {
     tracing::debug!("[Bootstrap] Collecting application data...");
 
-    let ui_state = ui_service.get_ui_state().await.unwrap_or_default();
+    let ui_state = ui_service.get_ui_state().await.unwrap_or_else(|error| {
+        tracing::warn!("Failed to load UI state during bootstrap, using defaults: {error}");
+        UIState::default()
+    });
     let window_config = window_settings::get_window_config();
     let system_language = settings::get_language_sync();
 

@@ -38,7 +38,46 @@ export class AISettingsKeyController {
             target.value = normalizedValue;
         }
         delete target.dataset['storedMasked'];
+        delete target.dataset['storedRevealed'];
         target.dataset['keyDirty'] = 'true';
+    }
+
+    public async removeClearedStoredKey(input: KeyInput, providerId: string): Promise<boolean> {
+        if (input.value.trim() !== '') {
+            return false;
+        }
+
+        if (input.dataset['keyRemoveInFlight'] === 'true') {
+            return false;
+        }
+
+        input.dataset['keyRemoveInFlight'] = 'true';
+        try {
+            const settingsService = this._requireSettingsService();
+            await settingsService.removeSecureKey(providerId);
+            this.clearStoredKeyMask(input);
+            this._showToast(
+                this._options.getTranslator()('ui.settings.key_removed', 'API key removed'),
+                'success',
+            );
+            return true;
+        } catch (error: unknown) {
+            this._options.tracer.error('[AISettingsKeyController] Key removal failed:', error);
+            this._showToast(
+                this._options.getTranslator()('ui.settings.key_remove_error', 'Key remove error'),
+                'error',
+            );
+            return false;
+        } finally {
+            delete input.dataset['keyRemoveInFlight'];
+        }
+    }
+
+    public resetButtonState(button: KeyButton, label: string): void {
+        button.disabled = false;
+        button.style.width = '';
+        button.classList.remove('success', 'error', 'checking');
+        button.textContent = label;
     }
 
     public maybeClearStoredMask(event: Event): void {
@@ -113,22 +152,27 @@ export class AISettingsKeyController {
             const isStoredMask = input.dataset['storedMasked'] === 'true';
             const isDirtyReplacement = input.dataset['keyDirty'] === 'true';
             const key = input.value.trim();
+            const shouldRemoveStoredKey = isDirtyReplacement && key === '';
             const shouldValidateTypedKey =
                 (isDirtyReplacement && key !== '') || (!isStoredMask && key !== '');
             const shouldValidateStoredKey = !isDirtyReplacement && isStoredMask && key !== '';
 
             let isValid = false;
-            if (shouldValidateTypedKey) {
+            if (shouldRemoveStoredKey) {
+                await this._requireSettingsService().removeSecureKey(providerId);
+                this.clearStoredKeyMask(input);
+                this.updateButtonState(button, 'success', this._options.icons.check);
+                this._showToast(t('ui.settings.key_removed', 'API key removed'), 'success');
+                return;
+            } else if (shouldValidateTypedKey) {
                 isValid = await this._validateKey(providerId, key);
             } else if (shouldValidateStoredKey) {
-                isValid = Boolean(
-                    await this._options.getSettingsService()?.validateStoredApiKey(providerId),
-                );
+                isValid = await this._requireSettingsService().validateStoredApiKey(providerId);
             }
 
             if (isValid) {
                 if (shouldValidateTypedKey && key !== '') {
-                    await this._options.getSettingsService()?.saveSecureKey(providerId, key);
+                    await this._requireSettingsService().saveSecureKey(providerId, key);
                     this.applyStoredKeyMask(input, key.length);
                 }
                 this.updateButtonState(button, 'success', this._options.icons.check);
@@ -173,6 +217,7 @@ export class AISettingsKeyController {
     public clearStoredKeyMask(input: KeyInput): void {
         delete input.dataset['storedMasked'];
         delete input.dataset['storedRevealed'];
+        delete input.dataset['keyDirty'];
         input.value = '';
         input.classList.add('is-masked');
         input.placeholder = this._options.getTranslator()(
@@ -204,6 +249,15 @@ export class AISettingsKeyController {
             this._options.tracer.error('[AISettingsKeyController] Key validation failed:', error);
             return false;
         }
+    }
+
+    private _requireSettingsService(): SettingsService {
+        const settingsService = this._options.getSettingsService();
+        if (settingsService === null) {
+            throw new Error('Settings service is unavailable');
+        }
+
+        return settingsService;
     }
 
     private _showToast(message: string, type: string): void {

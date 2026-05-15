@@ -184,7 +184,7 @@ pub fn emit_extraction_progress(
 }
 
 pub fn emit_progress(event: ProgressEvent<'_>) {
-    let _ = event.app.emit(
+    if let Err(error) = event.app.emit(
         "download_progress",
         DownloadProgress {
             module_id: event.module_id.to_string(),
@@ -195,5 +195,11 @@ pub fn emit_progress(event: ProgressEvent<'_>) {
             total: event.total,
             speed: event.speed,
         },
-    );
+    ) {
+        tracing::warn!(
+            module_id = event.module_id,
+            status = event.status,
+            "Failed to emit download progress: {error}"
+        );
+    }
 }

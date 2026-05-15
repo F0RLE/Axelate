@@ -1,12 +1,12 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ChatGenerationController } from './ChatGenerationController';
-import { CUSTOM_IMAGE_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
 
 describe('ChatGenerationController', () => {
     const aiBridge = {
         getImageGenerationPreview: vi.fn(),
         removeChunkListener: vi.fn(),
         removeReplaceChunkListener: vi.fn(),
+        removeThoughtListener: vi.fn(),
     };
 
     const baseOptions = {
@@ -25,6 +25,7 @@ describe('ChatGenerationController', () => {
         handleError: vi.fn(),
         isDestroyed: vi.fn().mockReturnValue(false),
         isSending: vi.fn().mockReturnValue(true),
+        isImageProvider: vi.fn((providerId: string | null) => providerId === 'selected-image'),
         tracer: {
             debug: vi.fn(),
         },
@@ -164,12 +165,10 @@ describe('ChatGenerationController', () => {
         vi.useRealTimers();
     });
 
-    it('treats cloud and custom image providers as image flows', () => {
+    it('uses the injected image-provider resolver', () => {
         const controller = new ChatGenerationController(baseOptions as never);
 
-        expect(controller.isImageProvider('gpt-image')).toBe(true);
-        expect(controller.isImageProvider('seedream-image')).toBe(true);
-        expect(controller.isImageProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
+        expect(controller.isImageProvider('selected-image')).toBe(true);
         expect(controller.isImageProvider('gpt')).toBe(false);
         expect(controller.isImageProvider(null)).toBe(false);
     });
@@ -194,13 +193,35 @@ describe('ChatGenerationController', () => {
         expect(baseOptions.handleError).toHaveBeenCalled();
     });
 
+    it('removes failed image generation placeholders and reports the error as a toast', async () => {
+        const controller = new ChatGenerationController(baseOptions as never);
+        const imageHandle = {
+            setStatus: vi.fn(),
+            setPreview: vi.fn(),
+            finalize: vi.fn(),
+            fail: vi.fn(),
+            cancel: vi.fn(),
+            discard: vi.fn(),
+        };
+
+        await controller.handleChatResponse(
+            { ok: false, error: 'image failed', model: 'sdcpp' } as never,
+            null,
+            imageHandle,
+        );
+
+        expect(imageHandle.discard).toHaveBeenCalledOnce();
+        expect(imageHandle.fail).not.toHaveBeenCalled();
+        expect(baseOptions.handleError).toHaveBeenCalled();
+    });
+
     it('adds assistant text tokens to the context counter', async () => {
         const controller = new ChatGenerationController(baseOptions as never);
 
         await controller.handleChatResponse(
             {
                 ok: true,
-                message: 'answer',
+                reply: { text: 'answer' },
                 usage: { prompt_tokens: 11, completion_tokens: 7, total_tokens: 18 },
             } as never,
             null,
@@ -215,7 +236,7 @@ describe('ChatGenerationController', () => {
         const controller = new ChatGenerationController(baseOptions as never);
 
         await controller.handleChatResponse(
-            { ok: true, message: 'answer', thought_signature: 'sig-1' } as never,
+            { ok: true, reply: { text: 'answer' }, thought_signature: 'sig-1' } as never,
             null,
             null,
         );

@@ -2,6 +2,29 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SettingsService } from './SettingsService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type * as Bindings from '@/shared/types/bindings';
+
+const mocks = vi.hoisted(() => ({
+    invokeSafe: vi.fn(),
+    commands: {
+        controlModule: vi.fn(),
+    },
+}));
+
+vi.mock('@/shared/api/invoke', (): { invokeSafe: (...args: unknown[]) => unknown } => ({
+    invokeSafe: (...args: unknown[]): unknown => mocks.invokeSafe(...args) as unknown,
+}));
+
+vi.mock('@/shared/types/bindings', async (importOriginal) => {
+    const actual = await importOriginal<typeof Bindings>();
+    return {
+        ...actual,
+        commands: {
+            ...actual.commands,
+            controlModule: mocks.commands.controlModule,
+        },
+    };
+});
 
 function createMockTauri(): TauriProvider {
     return {
@@ -9,6 +32,7 @@ function createMockTauri(): TauriProvider {
         isTauri: vi.fn(() => true),
         listen: vi.fn().mockResolvedValue(() => {}),
         saveSecureKey: vi.fn().mockResolvedValue(undefined),
+        removeSecureKey: vi.fn().mockResolvedValue(undefined),
         getSecureKey: vi.fn().mockResolvedValue(null),
         hasSecureKey: vi.fn().mockResolvedValue(false),
         getSecureKeyMeta: vi.fn().mockResolvedValue({ exists: false, length: 0 }),
@@ -21,9 +45,17 @@ describe('SettingsService', () => {
     let tracer: Pick<LoggerService, 'error'>;
 
     beforeEach(() => {
+        vi.clearAllMocks();
         tauri = createMockTauri();
         tracer = { error: vi.fn() };
         service = new SettingsService(tauri, tracer);
+        mocks.commands.controlModule.mockReturnValue(
+            Promise.resolve({
+                status: 'ok',
+                data: { success: true, message: 'ok', status: 'running' },
+            }),
+        );
+        mocks.invokeSafe.mockImplementation((promise: Promise<unknown>) => promise);
     });
 
     describe('loadSettings', () => {
@@ -106,18 +138,32 @@ describe('SettingsService', () => {
 
     describe('controlService', () => {
         it('should return true on success', async () => {
-            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(undefined);
             const result = await service.controlService('start', 'ollama');
             expect(result).toBe(true);
-            expect(tauri.invoke).toHaveBeenCalledWith('control_service', {
+            expect(mocks.commands.controlModule).toHaveBeenCalledWith({
+                module_id: 'ollama',
                 action: 'start',
-                service: 'ollama',
             });
+            expect(mocks.invokeSafe).toHaveBeenCalled();
         });
 
         it('should return false on error', async () => {
-            (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'error',
+                error: { message: 'fail' },
+            });
             const result = await service.controlService('stop', 'ollama');
+            expect(result).toBe(false);
+        });
+
+        it('should return false when backend reports unsuccessful control', async () => {
+            mocks.invokeSafe.mockResolvedValueOnce({
+                status: 'ok',
+                data: { success: false, message: 'not implemented', status: null },
+            });
+
+            const result = await service.controlService('restart', 'ollama');
+
             expect(result).toBe(false);
         });
     });
@@ -180,10 +226,18 @@ describe('SettingsService', () => {
     });
 
     describe('saveSecureKey', () => {
-        it('should invoke save_secure_key with correct args', async () => {
+        it('should store cloud provider keys in the shared OpenRouter slot', async () => {
             await service.saveSecureKey('gemini', 'my-api-key');
             expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
-                service: 'gemini_api_key',
+                service: 'openrouter_api_key',
+                key: 'my-api-key',
+            });
+        });
+
+        it('should keep provider-specific slots for unknown providers', async () => {
+            await service.saveSecureKey('unknown-provider', 'my-api-key');
+            expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
+                service: 'unknown-provider_api_key',
                 key: 'my-api-key',
             });
         });
@@ -191,6 +245,33 @@ describe('SettingsService', () => {
         it('should handle error gracefully', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
             await expect(service.saveSecureKey('x', 'k')).rejects.toThrow('fail');
+        });
+    });
+
+    describe('removeSecureKey', () => {
+        it('should remove secure key through tauri provider helper', async () => {
+            await service.removeSecureKey('gemini');
+
+            expect(tauri.removeSecureKey).toHaveBeenCalledWith('openrouter_api_key');
+            expect(tauri.invoke).not.toHaveBeenCalledWith('remove_secure_key', expect.anything());
+        });
+
+        it('should fall back to invoke when helper is unavailable', async () => {
+            delete (tauri as unknown as { removeSecureKey?: unknown }).removeSecureKey;
+
+            await service.removeSecureKey('gemini');
+
+            expect(tauri.invoke).toHaveBeenCalledWith('remove_secure_key', {
+                service: 'openrouter_api_key',
+            });
+        });
+
+        it('should propagate remove errors', async () => {
+            (tauri.removeSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(
+                new Error('fail'),
+            );
+
+            await expect(service.removeSecureKey('gemini')).rejects.toThrow('fail');
         });
     });
 
@@ -216,7 +297,7 @@ describe('SettingsService', () => {
 
             expect(result).toBe(true);
             expect(tauri.invoke).toHaveBeenCalledWith('has_secure_key', {
-                service: 'gemini_api_key',
+                service: 'openrouter_api_key',
             });
         });
 
@@ -237,7 +318,7 @@ describe('SettingsService', () => {
             const result = await service.getSecureKeyMeta('gemini');
 
             expect(result).toEqual(meta);
-            expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('gemini_api_key');
+            expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('openrouter_api_key');
         });
 
         it('should return empty metadata on error', async () => {
@@ -258,7 +339,7 @@ describe('SettingsService', () => {
             const result = await service.getSecureKey('gemini');
 
             expect(result).toBe('secret');
-            expect(tauri.getSecureKey).toHaveBeenCalledWith('gemini_api_key');
+            expect(tauri.getSecureKey).toHaveBeenCalledWith('openrouter_api_key');
         });
 
         it('should return null on error', async () => {

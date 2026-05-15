@@ -23,7 +23,7 @@ const CUSTOM_PROVIDER_SPECS: readonly CustomProviderSpec[] = [
         nameKey: 'ui.launcher.app.custom_text.name',
         desc: 'Use any OpenRouter text model by pasting its model ID manually.',
         descKey: 'ui.launcher.app.custom_text.desc',
-        icon: '🧩',
+        icon: '🔤',
     },
     {
         id: CUSTOM_IMAGE_PROVIDER_ID,
@@ -33,7 +33,7 @@ const CUSTOM_PROVIDER_SPECS: readonly CustomProviderSpec[] = [
         nameKey: 'ui.launcher.app.custom_image.name',
         desc: 'Use any OpenRouter image model by pasting its model ID manually.',
         descKey: 'ui.launcher.app.custom_image.desc',
-        icon: '🎛️',
+        icon: '🪄',
     },
 ];
 

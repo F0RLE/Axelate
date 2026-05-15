@@ -86,17 +86,12 @@ impl GpuInfo {
             "cuda" => AcceleratorClass::NvidiaCuda,
             "hip" => AcceleratorClass::AmdGpu,
             "sycl" => AcceleratorClass::IntelGpu,
-            "vulkan" => {
-                if gpu_name_brand(&self.name) == GpuBrand::Amd {
-                    AcceleratorClass::AmdGpu
-                } else if gpu_name_brand(&self.name) == GpuBrand::Intel {
-                    AcceleratorClass::IntelGpu
-                } else if self.detected {
-                    AcceleratorClass::GenericGpu
-                } else {
-                    AcceleratorClass::CpuOnly
-                }
-            }
+            "vulkan" => match gpu_name_brand(&self.name) {
+                GpuBrand::Amd => AcceleratorClass::AmdGpu,
+                GpuBrand::Intel => AcceleratorClass::IntelGpu,
+                _ if self.detected => AcceleratorClass::GenericGpu,
+                _ => AcceleratorClass::CpuOnly,
+            },
             "cpu" => AcceleratorClass::CpuOnly,
             _ => {
                 if self.detected {
@@ -176,7 +171,7 @@ async fn probe_gpu_info_uncached() -> GpuInfo {
 fn probe_gpu_from_names(names: Option<Vec<String>>) -> GpuInfo {
     match names {
         Some(names) if !names.is_empty() => gpu_probe_from_names(&names),
-        _ => default_probe(),
+        _ => nvidia_probe_from_nvml().unwrap_or_else(default_probe),
     }
 }
 
@@ -207,6 +202,7 @@ async fn probe_windows_gpu_names() -> Option<Vec<String>> {
 }
 
 #[cfg(target_os = "windows")]
+#[allow(clippy::manual_let_else)]
 fn query_windows_gpu_names_wmi() -> Option<Vec<String>> {
     #[derive(serde::Deserialize)]
     #[serde(rename_all = "PascalCase")]
@@ -214,10 +210,15 @@ fn query_windows_gpu_names_wmi() -> Option<Vec<String>> {
         name: Option<String>,
     }
 
-    let connection = wmi::WMIConnection::new().ok()?;
-    let controllers: Vec<VideoController> = connection
-        .raw_query("SELECT Name FROM Win32_VideoController")
-        .ok()?;
+    let connection = match wmi::WMIConnection::new() {
+        Ok(connection) => connection,
+        Err(_) => return None,
+    };
+    let controllers: Vec<VideoController> =
+        match connection.raw_query("SELECT Name FROM Win32_VideoController") {
+            Ok(controllers) => controllers,
+            Err(_) => return None,
+        };
     let names = controllers
         .into_iter()
         .filter_map(|controller| controller.name)
@@ -225,7 +226,7 @@ fn query_windows_gpu_names_wmi() -> Option<Vec<String>> {
         .filter(|name| !name.is_empty())
         .collect::<Vec<_>>();
 
-    Some(names)
+    normalize_names(names)
 }
 
 #[cfg(target_os = "macos")]
@@ -293,8 +294,15 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
         .or_else(|| names.first().cloned())
         .unwrap_or_else(|| "Integrated / No GPU".to_string());
 
-    let backend = preferred_backend_for_gpu_name(&primary_name);
-    let detected = gpu_name_brand(&primary_name) != GpuBrand::Software;
+    let brand = gpu_name_brand(&primary_name);
+    if brand == GpuBrand::Software {
+        if let Some(probe) = nvidia_probe_from_nvml() {
+            return probe;
+        }
+    }
+
+    let backend = preferred_backend_for_gpu_brand(brand);
+    let detected = brand != GpuBrand::Software;
     let (cuda_driver_major, cuda_driver_minor) = if backend == "cuda" {
         detect_cuda_driver_version()
     } else {
@@ -315,8 +323,36 @@ fn gpu_probe_from_names(names: &[String]) -> GpuInfo {
     }
 }
 
-fn preferred_backend_for_gpu_name(name: &str) -> &'static str {
-    match gpu_name_brand(name) {
+fn nvidia_probe_from_nvml() -> Option<GpuInfo> {
+    let Ok(nvml) = Nvml::init() else {
+        return None;
+    };
+    let Ok(device_count) = nvml.device_count() else {
+        return None;
+    };
+    if device_count == 0 {
+        return None;
+    }
+    let Ok(version) = nvml.sys_cuda_driver_version() else {
+        return None;
+    };
+
+    let major = u32::try_from(cuda_driver_version_major(version)).ok()?;
+    let minor = u32::try_from(cuda_driver_version_minor(version)).ok();
+
+    Some(GpuInfo {
+        detected: true,
+        name: "NVIDIA CUDA GPU".to_string(),
+        cuda: true,
+        backend: "cuda".to_string(),
+        memory: 0,
+        cuda_driver_major: Some(major),
+        cuda_driver_minor: minor,
+    })
+}
+
+const fn preferred_backend_for_gpu_brand(brand: GpuBrand) -> &'static str {
+    match brand {
         GpuBrand::Nvidia => "cuda",
         GpuBrand::Amd => "hip",
         GpuBrand::Intel => "sycl",
@@ -511,8 +547,13 @@ mod tests {
         assert_eq!(intel.backend, "sycl");
 
         let fallback = gpu_probe_from_names(&[String::from("Microsoft Basic Display Adapter")]);
-        assert_eq!(fallback.backend, "cpu");
-        assert!(!fallback.detected);
+        if fallback.detected {
+            assert_eq!(fallback.backend, "cuda");
+            assert!(fallback.cuda);
+        } else {
+            assert_eq!(fallback.backend, "cpu");
+            assert!(!fallback.detected);
+        }
     }
 
     #[test]
@@ -553,6 +594,17 @@ mod tests {
 
         assert_eq!(probe.name, "NVIDIA GeForce RTX 4070");
         assert_eq!(probe.backend, "cuda");
+    }
+
+    #[test]
+    fn nvml_fallback_is_used_when_windows_gpu_names_are_unavailable() {
+        let probe = probe_gpu_from_names(None);
+        if probe.detected {
+            assert_eq!(probe.backend, "cuda");
+            assert!(probe.cuda);
+        } else {
+            assert_eq!(probe.backend, "cpu");
+        }
     }
 
     #[test]

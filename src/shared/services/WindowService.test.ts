@@ -6,6 +6,23 @@ import { WindowService, type IWindowConfig } from './WindowService';
 import type { IBridge } from '@/shared/types/IBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
+vi.mock('@tauri-apps/api/window', () => ({
+    getCurrentWindow: () => {
+        const windowApi = (
+            globalThis as unknown as {
+                __AXELATE_TEST_WINDOW__?: { getCurrentWindow?: () => unknown };
+            }
+        ).__AXELATE_TEST_WINDOW__;
+        return windowApi?.getCurrentWindow?.();
+    },
+    LogicalSize: class {
+        public constructor(
+            public readonly width: number,
+            public readonly height: number,
+        ) {}
+    },
+}));
+
 describe('WindowService', () => {
     let mockBridge: {
         isTauri: ReturnType<typeof vi.fn>;
@@ -18,12 +35,11 @@ describe('WindowService', () => {
         getResolutionZoom: ReturnType<typeof vi.fn>;
         setResolutionZoom: ReturnType<typeof vi.fn>;
     };
-    let mockTracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+    let mockTracer: Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
     let service: WindowService;
     let mockRuntime: {
         addEventListener: ReturnType<typeof vi.fn>;
         removeEventListener: ReturnType<typeof vi.fn>;
-        close: ReturnType<typeof vi.fn>;
         getScreenSize: ReturnType<typeof vi.fn>;
         getInnerSize: ReturnType<typeof vi.fn>;
         setAppZoomCss: ReturnType<typeof vi.fn>;
@@ -57,6 +73,7 @@ describe('WindowService', () => {
         };
 
         mockTracer = {
+            debug: vi.fn(),
             info: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),
@@ -73,7 +90,6 @@ describe('WindowService', () => {
                     nativeRemoveEventListener(...args);
                 },
             ),
-            close: vi.fn(),
             getScreenSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
             getInnerSize: vi.fn().mockReturnValue({ width: 1920, height: 1080 }),
             setAppZoomCss: vi.fn(),
@@ -204,9 +220,12 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('minimize_window');
         });
 
-        it('should log in web mode for minimize', async () => {
+        it('should skip native minimize outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.minimize(); // should not throw
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native minimize unavailable outside Tauri',
+            );
         });
 
         it('should call maximize_window via bridge', async () => {
@@ -214,9 +233,12 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('maximize_window');
         });
 
-        it('should log in web mode for toggleMaximize', async () => {
+        it('should skip native maximize outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.toggleMaximize();
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native maximize unavailable outside Tauri',
+            );
         });
 
         it('should call close_window via bridge', async () => {
@@ -240,10 +262,12 @@ describe('WindowService', () => {
             expect(calls).toEqual(['save', 'close']);
         });
 
-        it('should call globalThis.close in web mode', async () => {
+        it('should skip native close outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.close();
-            expect(mockRuntime.close).toHaveBeenCalled();
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native close unavailable outside Tauri',
+            );
         });
     });
 
@@ -265,9 +289,12 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('minimize_window');
         });
 
-        it('should log in web mode', async () => {
+        it('should skip native hide-to-tray outside Tauri', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             await service.hideToTray(); // should not throw
+            expect(mockTracer.info).toHaveBeenCalledWith(
+                '[WindowService] Native hide-to-tray unavailable outside Tauri',
+            );
         });
     });
 
@@ -475,6 +502,45 @@ describe('WindowService', () => {
             await service.setMonitoringPaused(true);
             expect(mockBridge.invoke).not.toHaveBeenCalled();
         });
+
+        it('should skip duplicate monitoring pause states', async () => {
+            await service.setMonitoringPauseReason('window-inactive', true);
+            await service.setMonitoringPauseReason('window-inactive', true);
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(1);
+            expect(mockBridge.invoke).toHaveBeenCalledWith('set_monitoring_paused', {
+                paused: true,
+            });
+        });
+
+        it('should aggregate monitoring pause reasons before resuming', async () => {
+            await service.setMonitoringPauseReason('window-inactive', true);
+            await service.setMonitoringPauseReason('monitor-hidden', true);
+            await service.setMonitoringPauseReason('window-inactive', false);
+            await service.setMonitoringPauseReason('monitor-hidden', false);
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(2);
+            expect(mockBridge.invoke).toHaveBeenNthCalledWith(1, 'set_monitoring_paused', {
+                paused: true,
+            });
+            expect(mockBridge.invoke).toHaveBeenNthCalledWith(2, 'set_monitoring_paused', {
+                paused: false,
+            });
+        });
+
+        it('should retry the same monitoring state after a failed apply', async () => {
+            mockBridge.invoke
+                .mockRejectedValueOnce(new Error('temporary failure'))
+                .mockResolvedValueOnce(undefined);
+
+            await service.setMonitoringPauseReason('window-inactive', true);
+            await service.setMonitoringPauseReason('window-inactive', true);
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(2);
+            expect(mockTracer.error).toHaveBeenCalledWith(
+                '[WindowService] Failed to set monitoring state',
+            );
+        });
     });
 
     // ---------------------------------------------------------- checkPolicy
@@ -550,14 +616,12 @@ describe('WindowService', () => {
             const mockCenter = vi.fn().mockResolvedValue(undefined);
             const mockLogicalSize = vi.fn();
 
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        setSize: mockSetSize,
-                        center: mockCenter,
-                    }),
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    setSize: mockSetSize,
+                    center: mockCenter,
                     LogicalSize: mockLogicalSize,
-                },
+                }),
             });
 
             await service.setSize(800, 600);
@@ -567,14 +631,12 @@ describe('WindowService', () => {
         });
 
         it('should handle error gracefully', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        setSize: vi.fn().mockRejectedValue(new Error('fail')),
-                        center: vi.fn(),
-                    }),
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    setSize: vi.fn().mockRejectedValue(new Error('fail')),
+                    center: vi.fn(),
                     LogicalSize: vi.fn(),
-                },
+                }),
             });
 
             await service.setSize(800, 600); // should not throw
@@ -585,8 +647,8 @@ describe('WindowService', () => {
             await service.setSize(800, 600); // no throw, no calls
         });
 
-        it('should skip if __TAURI__.window is missing', async () => {
-            vi.stubGlobal('__TAURI__', {});
+        it('should skip if the Tauri window handle is missing', async () => {
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {});
             await service.setSize(800, 600); // should not throw
         });
     });
@@ -594,12 +656,10 @@ describe('WindowService', () => {
     // ---------------------------------------------------------- isMaximized
     describe('isMaximized', () => {
         it('should return true when Tauri window is maximized', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: vi.fn().mockResolvedValue(true),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: vi.fn().mockResolvedValue(true),
+                }),
             });
 
             const result = await service.isMaximized();
@@ -607,12 +667,10 @@ describe('WindowService', () => {
         });
 
         it('should return false when Tauri window is not maximized', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: vi.fn().mockResolvedValue(false),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: vi.fn().mockResolvedValue(false),
+                }),
             });
 
             const result = await service.isMaximized();
@@ -620,20 +678,18 @@ describe('WindowService', () => {
         });
 
         it('should return false on error', async () => {
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: vi.fn().mockRejectedValue(new Error('fail')),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: vi.fn().mockRejectedValue(new Error('fail')),
+                }),
             });
 
             const result = await service.isMaximized();
             expect(result).toBe(false);
         });
 
-        it('should return false if __TAURI__.window is missing', async () => {
-            vi.stubGlobal('__TAURI__', {});
+        it('should return false if the Tauri window handle is missing', async () => {
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {});
             const result = await service.isMaximized();
             expect(result).toBe(false);
         });
@@ -666,14 +722,12 @@ describe('WindowService', () => {
 
         it('should save window state (maximized) when Tauri window resolves', async () => {
             const mockIsMaximized = vi.fn().mockResolvedValue(true);
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: mockIsMaximized,
-                        innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
-                        outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                    outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                }),
             });
 
             await service.init(mockWindowConfig, 1);
@@ -692,14 +746,12 @@ describe('WindowService', () => {
             const mockInnerSize = vi.fn().mockResolvedValue({ width: 1000, height: 600 });
             const mockOuterPos = vi.fn().mockResolvedValue({ x: 100, y: 50 });
 
-            vi.stubGlobal('__TAURI__', {
-                window: {
-                    getCurrentWindow: () => ({
-                        isMaximized: mockIsMaximized,
-                        innerSize: mockInnerSize,
-                        outerPosition: mockOuterPos,
-                    }),
-                },
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: mockInnerSize,
+                    outerPosition: mockOuterPos,
+                }),
             });
 
             await service.init(mockWindowConfig, 1);
@@ -717,6 +769,86 @@ describe('WindowService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('save_window_position', {
                 x: 100,
                 y: 50,
+            });
+        });
+
+        it('should await immediate window state save', async () => {
+            const mockIsMaximized = vi.fn().mockResolvedValue(true);
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                    outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                }),
+            });
+
+            await service.saveImmediate();
+
+            expect(mockBridge.invoke).toHaveBeenCalledWith('save_maximized_state', {
+                maximized: true,
+            });
+        });
+
+        it('should cancel pending debounced save when saving immediately', async () => {
+            const mockIsMaximized = vi.fn().mockResolvedValue(true);
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: vi.fn().mockResolvedValue({ width: 1280, height: 720 }),
+                    outerPosition: vi.fn().mockResolvedValue({ x: 0, y: 0 }),
+                }),
+            });
+
+            service.scheduleSave();
+            await service.saveImmediate();
+            vi.advanceTimersByTime(1500);
+            await vi.runAllTimersAsync();
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(1);
+            expect(mockBridge.invoke).toHaveBeenCalledWith('save_maximized_state', {
+                maximized: true,
+            });
+        });
+
+        it('should serialize overlapping window state saves', async () => {
+            let releaseFirst!: () => void;
+            const mockIsMaximized = vi
+                .fn()
+                .mockImplementationOnce(
+                    () =>
+                        new Promise<boolean>((resolve) => {
+                            releaseFirst = () => {
+                                resolve(false);
+                            };
+                        }),
+                )
+                .mockResolvedValueOnce(true);
+            const mockInnerSize = vi.fn().mockResolvedValue({ width: 1000, height: 600 });
+            const mockOuterPos = vi.fn().mockResolvedValue({ x: 100, y: 50 });
+
+            vi.stubGlobal('__AXELATE_TEST_WINDOW__', {
+                getCurrentWindow: () => ({
+                    isMaximized: mockIsMaximized,
+                    innerSize: mockInnerSize,
+                    outerPosition: mockOuterPos,
+                }),
+            });
+
+            const first = service.saveImmediate();
+            const second = service.saveImmediate();
+            await Promise.resolve();
+
+            expect(mockIsMaximized).toHaveBeenCalledTimes(1);
+            releaseFirst();
+            await first;
+            await second;
+
+            expect(mockIsMaximized).toHaveBeenCalledTimes(2);
+            expect(mockBridge.invoke).toHaveBeenNthCalledWith(1, 'save_maximized_state', {
+                maximized: false,
+            });
+            expect(mockBridge.invoke).toHaveBeenLastCalledWith('save_maximized_state', {
+                maximized: true,
             });
         });
     });
@@ -806,6 +938,17 @@ describe('WindowService', () => {
             await Promise.resolve();
 
             expect(unlisten).toHaveBeenCalledTimes(1);
+        });
+
+        it('should log tauri move listener registration failures', async () => {
+            mockBridge.listen.mockRejectedValue(new Error('listen failed'));
+
+            await service.init(mockWindowConfig, 1);
+            await Promise.resolve();
+
+            expect(mockTracer.warn).toHaveBeenCalledWith(
+                expect.stringContaining('Failed to subscribe to window move events'),
+            );
         });
     });
 

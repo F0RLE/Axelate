@@ -13,14 +13,15 @@ type EngineFieldType = 'number' | 'text' | 'select' | 'password' | 'textarea';
 type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 
 type ModuleSettingsEngineFieldControllerDeps = {
-    getSettings: () => Record<string, string | number | undefined>;
-    setConfig: (config: EngineConfig) => void;
+    getSettings: () => Record<string, string | number | null | undefined>;
+    setConfig: (config: EngineConfig) => Promise<void>;
     debouncedSave: (key: string, value: string | number | boolean | null) => void;
     showSaveIndicator: () => void;
+    showSaveErrorIndicator: () => void;
     translate: (key: string, fallback: string) => string;
     getModelFileName: (modelPath: string) => string;
     getModelFileFilters: (
-        fileKind: 'model' | 'vae' | 'llm',
+        fileKind: 'model',
         isImage: boolean,
     ) => Array<{ name: string; extensions: string[] }>;
     tracer: Pick<LoggerService, 'error'>;
@@ -78,7 +79,7 @@ export class ModuleSettingsEngineFieldController {
             input.parentElement?.classList.remove('focused');
         });
 
-        const handleSave = () => this.handleSave(input, options);
+        const handleSave = () => void this.handleSave(input, options);
 
         if (
             options.type === 'text' ||
@@ -100,13 +101,18 @@ export class ModuleSettingsEngineFieldController {
         container: HTMLElement,
         input: HTMLInputElement,
         isImage: boolean,
-        fileKind: 'model' | 'vae' | 'llm',
+        fileKind: 'model',
     ): void {
         const browseBtn = document.createElement('button');
         browseBtn.className = 'btn btn-secondary local-engine-browse-btn';
         browseBtn.textContent = this._deps.translate('ui.settings.engine.browse', 'Browse');
 
         browseBtn.onclick = async () => {
+            if (browseBtn.disabled) {
+                return;
+            }
+
+            browseBtn.disabled = true;
             try {
                 const selected = await open({
                     multiple: false,
@@ -121,17 +127,21 @@ export class ModuleSettingsEngineFieldController {
                     input.dataset['fullPath'] = selected;
                     input.value = this._deps.getModelFileName(selected);
                     input.title = selected;
-                    input.dispatchEvent(new Event('change'));
+                    window.setTimeout(() => {
+                        input.dispatchEvent(new Event('change'));
+                    }, 0);
                 }
             } catch (error: unknown) {
                 this._deps.tracer.error('[ModuleSettingsUI] Failed to open file dialog', error);
+            } finally {
+                browseBtn.disabled = false;
             }
         };
 
         container.appendChild(browseBtn);
     }
 
-    public handleSave(
+    public async handleSave(
         input: EngineInputElement,
         options: {
             key: string;
@@ -143,7 +153,7 @@ export class ModuleSettingsEngineFieldController {
             max?: number;
             defaultValue?: number | string;
         },
-    ): void {
+    ): Promise<void> {
         let rawValue = input.value.trim();
         if (options.isFile === true && input instanceof HTMLInputElement) {
             rawValue = input.dataset['fullPath']?.trim() ?? rawValue;
@@ -159,8 +169,13 @@ export class ModuleSettingsEngineFieldController {
             (options.config as unknown as Record<string, string | number | string[] | null>)[
                 options.key
             ] = formatEngineFieldSaveValue(options.key, value);
-            this._deps.setConfig(options.config);
-            this._deps.showSaveIndicator();
+            try {
+                await this._deps.setConfig(options.config);
+                this._deps.showSaveIndicator();
+            } catch (error: unknown) {
+                this._deps.tracer.error('[ModuleSettingsUI] Failed to save engine setting', error);
+                this._deps.showSaveErrorIndicator();
+            }
         }
     }
 }

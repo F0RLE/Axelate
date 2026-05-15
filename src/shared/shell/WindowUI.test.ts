@@ -55,6 +55,7 @@ describe('WindowUI lifecycle', () => {
         const service = {
             checkPolicy: vi.fn().mockResolvedValue({ isSmallScreen: false, showWarning: false }),
             setMonitoringPaused: vi.fn().mockResolvedValue(undefined),
+            setMonitoringPauseReason: vi.fn().mockResolvedValue(undefined),
             checkResolutionChange: vi.fn(),
             isMaximized: vi.fn().mockResolvedValue(false),
             toggleMaximize: vi.fn().mockResolvedValue(undefined),
@@ -292,6 +293,14 @@ describe('WindowUI lifecycle', () => {
         document.dispatchEvent(blockedShortcut);
         expect(blockedShortcut.defaultPrevented).toBe(true);
 
+        const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            bubbles: true,
+            cancelable: true,
+        });
+        document.dispatchEvent(tabEvent);
+        expect(tabEvent.defaultPrevented).toBe(true);
+
         const plainContext = new MouseEvent('contextmenu', {
             bubbles: true,
             cancelable: true,
@@ -330,7 +339,7 @@ describe('WindowUI lifecycle', () => {
         expect(dblClick.defaultPrevented).toBe(true);
     });
 
-    it('should block window-level shortcuts while a dialog is open', () => {
+    it('should block window-level shortcuts while a dialog is open but still allow reload', () => {
         document.body.innerHTML = `
             <div id="splash-screen" class="hidden"></div>
             <dialog id="global-width-warning"></dialog>
@@ -364,7 +373,7 @@ describe('WindowUI lifecycle', () => {
         });
         document.dispatchEvent(refreshEvent);
         expect(refreshEvent.defaultPrevented).toBe(true);
-        expect(reloadSpy).not.toHaveBeenCalled();
+        expect(reloadSpy).toHaveBeenCalled();
     });
 
     it('should manage monitoring, wheel zoom, tooltip suppression and maximize icon rebuild', async () => {
@@ -380,7 +389,7 @@ describe('WindowUI lifecycle', () => {
 
         ui = createWindowUI();
         const service = (ui as unknown as { _service: WindowService })._service as unknown as {
-            setMonitoringPaused: ReturnType<typeof vi.fn>;
+            setMonitoringPauseReason: ReturnType<typeof vi.fn>;
             changeZoom: ReturnType<typeof vi.fn>;
             persistZoom: ReturnType<typeof vi.fn>;
         };
@@ -407,12 +416,12 @@ describe('WindowUI lifecycle', () => {
         const focusSpy = vi.spyOn(document, 'hasFocus').mockReturnValue(false);
         document.dispatchEvent(new Event('visibilitychange'));
         globalThis.dispatchEvent(new Event('blur'));
-        expect(service.setMonitoringPaused).toHaveBeenCalledWith(true);
+        expect(service.setMonitoringPauseReason).toHaveBeenCalledWith('window-inactive', true);
 
         focusSpy.mockReturnValue(true);
         Object.defineProperty(document, 'hidden', { configurable: true, value: false });
         globalThis.dispatchEvent(new Event('focus'));
-        expect(service.setMonitoringPaused).toHaveBeenCalledWith(false);
+        expect(service.setMonitoringPauseReason).toHaveBeenCalledWith('window-inactive', false);
 
         document.dispatchEvent(
             new WheelEvent('wheel', {

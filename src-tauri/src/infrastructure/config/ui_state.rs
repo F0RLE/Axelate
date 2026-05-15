@@ -80,3 +80,52 @@ fn clamp_zoom(zoom: f64) -> f64 {
 
     zoom.clamp(SCALING_MIN_ZOOM, SCALING_MAX_ZOOM)
 }
+
+#[cfg(test)]
+mod tests {
+    use super::normalize_ui_state;
+    use crate::models::UIState;
+
+    #[test]
+    fn normalize_ui_state_preserves_local_max_output_tokens() {
+        let mut state = UIState::default();
+        state
+            .local_max_output_tokens
+            .insert("llamacpp".to_string(), 8192);
+
+        let normalized = normalize_ui_state(state);
+
+        assert_eq!(
+            normalized.local_max_output_tokens.get("llamacpp"),
+            Some(&8192)
+        );
+    }
+
+    #[test]
+    fn ui_state_deserializes_without_local_max_output_tokens() {
+        let state_result = serde_json::from_str::<UIState>(
+            r#"{
+                "sidebar_collapsed": false,
+                "sidebar_width": 280,
+                "hidden_nav_items": [],
+                "hidden_monitors": [],
+                "card_widths": {},
+                "download_limit_enabled": false,
+                "download_max_speed": 50,
+                "selected_modules": {},
+                "zoom_level": 1.0,
+                "selected_ai_models": {},
+                "last_page": null,
+                "resolution_zoom": {},
+                "sound_enabled": true
+            }"#,
+        );
+        assert!(
+            state_result.is_ok(),
+            "UI state with omitted optional maps should remain readable"
+        );
+        if let Ok(state) = state_result {
+            assert!(state.local_max_output_tokens.is_empty());
+        }
+    }
+}

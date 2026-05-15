@@ -7,10 +7,15 @@ import type {
     IImageGenerationResponse,
 } from '../types/aiTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { StreamChunkPayload } from '@/shared/types/bindings';
 import type { AITransportContext } from './AIBridgeContext';
+import { isCloudProviderId } from '@/shared/utils/providerSupport';
 
-type AIChatTransportLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+type AIChatTransportLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 const STALE_REQUEST_CANCEL_TIMEOUT_MS = 750;
+const AI_REQUEST_TIMEOUT_MESSAGE = 'AI request timed out';
+const CLOUD_CHAT_REQUEST_TIMEOUT_MS = 90_000;
+const LOCAL_CHAT_REQUEST_TIMEOUT_MS = 30 * 60_000;
 
 /**
  * Safely extracts a human-readable error string from any error shape.
@@ -28,19 +33,12 @@ function extractError(error: unknown): string {
     return JSON.stringify(error);
 }
 
-interface IStreamChunkEnvelope {
-    request_id: string;
-    message_id: string;
-    kind: 'chat_chunk' | 'thought_chunk' | 'done';
-    content: string;
-}
-
 export interface IChatTransport {
     init(): Promise<void>;
     send(request: IChatRequest): Promise<IBridgeResponse>;
+    sendSilent(request: IChatRequest): Promise<IBridgeResponse>;
     cancelActiveChatRequest(): Promise<boolean>;
     generateImage(request: IImageGenerationRequest): Promise<IBridgeResponse>;
-    generateImageBackground(request: IImageGenerationRequest): Promise<IBridgeResponse>;
     onStream(listener: (chunk: string) => void): () => void;
     onThought(listener: (chunk: string) => void): () => void;
     setContext(context: AITransportContext): void;
@@ -74,7 +72,7 @@ export class AIChatTransport implements IChatTransport {
             // Setup global listener for streaming chunks if needed here,
             // or let the bridge handle the subscription via onStream.
             // For now, we follow the pattern that Transport manages the low-level listener.
-            this._tracer.info('[AIChatTransport] Transport initialized');
+            this._tracer.debug('[AIChatTransport] Transport initialized');
         }
         await Promise.resolve();
     }
@@ -97,11 +95,18 @@ export class AIChatTransport implements IChatTransport {
             request_id: requestId,
         };
         this._activeChatRequestId = requestId;
+        let streamDoneResolved = false;
         let resolveStreamDone: (() => void) | null = null;
         const streamDone = new Promise<void>((resolve) => {
-            resolveStreamDone = resolve;
+            resolveStreamDone = () => {
+                if (streamDoneResolved) {
+                    return;
+                }
+                streamDoneResolved = true;
+                resolve();
+            };
         });
-        const chatChannel = new Channel<IStreamChunkEnvelope>();
+        const chatChannel = new Channel<StreamChunkPayload>();
         chatChannel.onmessage = (payload) => {
             if (!this._isPayloadForRequest(payload, requestId)) {
                 return;
@@ -119,12 +124,18 @@ export class AIChatTransport implements IChatTransport {
             this._emitListeners(this._streamListeners, payload.content);
         };
 
-        const thoughtChannel = new Channel<IStreamChunkEnvelope>();
+        const thoughtChannel = new Channel<StreamChunkPayload>();
         thoughtChannel.onmessage = (payload) => {
-            if (
-                !this._isPayloadForRequest(payload, requestId) ||
-                payload.kind !== 'thought_chunk'
-            ) {
+            if (!this._isPayloadForRequest(payload, requestId)) {
+                return;
+            }
+
+            if (payload.kind === 'done') {
+                resolveStreamDone?.();
+                return;
+            }
+
+            if (payload.kind !== 'thought_chunk') {
                 return;
             }
 
@@ -138,8 +149,8 @@ export class AIChatTransport implements IChatTransport {
                     chatChannel,
                     thoughtChannel,
                 }),
-                90000,
-                'AI request timed out',
+                this._chatRequestTimeoutMs(requestWithId),
+                AI_REQUEST_TIMEOUT_MESSAGE,
             );
 
             if (
@@ -153,6 +164,53 @@ export class AIChatTransport implements IChatTransport {
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] IPC error:', error);
+            if (errorMsg === AI_REQUEST_TIMEOUT_MESSAGE) {
+                await this._cancelStaleActiveRequest(requestId);
+            }
+            return { ok: false, error: errorMsg };
+        } finally {
+            if (this._activeChatRequestId === requestId) {
+                this._activeChatRequestId = null;
+            }
+        }
+    }
+
+    public async sendSilent(request: IChatRequest): Promise<IBridgeResponse> {
+        if (this._context?.tauriProvider.isTauri() !== true) {
+            return { ok: false, error: 'IPC host unavailable' };
+        }
+
+        if (this._activeChatRequestId !== null) {
+            await this._cancelStaleActiveRequest(this._activeChatRequestId);
+        }
+
+        const requestId = this._generateRequestId();
+        const requestWithId: IChatRequest = {
+            ...request,
+            request_id: requestId,
+        };
+        this._activeChatRequestId = requestId;
+        const chatChannel = new Channel<StreamChunkPayload>();
+        const thoughtChannel = new Channel<StreamChunkPayload>();
+
+        try {
+            const response = await this._runWithTimeout(
+                this._context.tauriProvider.invoke<IChatResponse>('send_chat_message', {
+                    request: requestWithId,
+                    chatChannel,
+                    thoughtChannel,
+                }),
+                this._chatRequestTimeoutMs(requestWithId),
+                AI_REQUEST_TIMEOUT_MESSAGE,
+            );
+
+            return this._normalizeResponse(response);
+        } catch (error: unknown) {
+            const errorMsg = extractError(error);
+            this._tracer.error('[AIChatTransport] Silent IPC error:', error);
+            if (errorMsg === AI_REQUEST_TIMEOUT_MESSAGE) {
+                await this._cancelStaleActiveRequest(requestId);
+            }
             return { ok: false, error: errorMsg };
         } finally {
             if (this._activeChatRequestId === requestId) {
@@ -163,14 +221,22 @@ export class AIChatTransport implements IChatTransport {
 
     private async _cancelStaleActiveRequest(requestId: string): Promise<void> {
         try {
-            await this._runWithTimeout(
+            const cancelled = await this._runWithTimeout(
                 this._context?.tauriProvider.invoke<boolean>('cancel_chat_generation', {
                     requestId,
                 }) ?? Promise.resolve(false),
                 STALE_REQUEST_CANCEL_TIMEOUT_MS,
                 'Stale AI request cancel timed out',
             );
-            this._tracer.info('[AIChatTransport] Cancelled stale active request before restart');
+            if (cancelled) {
+                this._tracer.info(
+                    '[AIChatTransport] Cancelled stale active request before restart',
+                );
+            } else {
+                this._tracer.warn(
+                    '[AIChatTransport] Stale active request was not registered for cancellation',
+                );
+            }
         } catch (error: unknown) {
             this._tracer.warn('[AIChatTransport] Failed to cancel stale active request:', error);
         } finally {
@@ -191,9 +257,17 @@ export class AIChatTransport implements IChatTransport {
         }
 
         try {
-            return await this._context.tauriProvider.invoke<boolean>('cancel_chat_generation', {
-                requestId,
-            });
+            const cancelled = await this._runWithTimeout(
+                this._context.tauriProvider.invoke<boolean>('cancel_chat_generation', {
+                    requestId,
+                }),
+                STALE_REQUEST_CANCEL_TIMEOUT_MS,
+                'AI request cancel timed out',
+            );
+            if (cancelled && this._activeChatRequestId === requestId) {
+                this._activeChatRequestId = null;
+            }
+            return cancelled;
         } catch (error: unknown) {
             this._tracer.error('[AIChatTransport] IPC cancel error:', error);
             return false;
@@ -212,7 +286,11 @@ export class AIChatTransport implements IChatTransport {
             return await this._context.tauriProvider
                 .invoke<IImageGenerationResponse>('generate_image', { request })
                 .then((response) => {
-                    if (response.ok && response.images.length > 0) {
+                    if (
+                        response.ok &&
+                        Array.isArray(response.images) &&
+                        response.images.length > 0
+                    ) {
                         return { ok: true, images: response.images };
                     }
                     return { ok: false, error: response.error ?? 'Failed to generate image' };
@@ -220,26 +298,6 @@ export class AIChatTransport implements IChatTransport {
         } catch (error: unknown) {
             const errorMsg = extractError(error);
             this._tracer.error('[AIChatTransport] IPC image error:', error);
-            return { ok: false, error: errorMsg };
-        }
-    }
-
-    /**
-     * Starts an image generation job that survives window closure.
-     */
-    public async generateImageBackground(
-        request: IImageGenerationRequest,
-    ): Promise<IBridgeResponse> {
-        if (this._context?.tauriProvider.isTauri() !== true) {
-            return { ok: false, error: 'IPC host unavailable' };
-        }
-
-        try {
-            await this._context.tauriProvider.invoke('generate_image_background', { request });
-            return { ok: true };
-        } catch (error: unknown) {
-            const errorMsg = extractError(error);
-            this._tracer.error('[AIChatTransport] IPC background image error:', error);
             return { ok: false, error: errorMsg };
         }
     }
@@ -282,7 +340,7 @@ export class AIChatTransport implements IChatTransport {
         timeoutMs: number,
         timeoutMessage: string,
     ): Promise<T> {
-        let timeoutId!: ReturnType<typeof setTimeout>;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeoutPromise = new Promise<never>((_, reject) => {
             timeoutId = setTimeout(() => {
                 reject(new Error(timeoutMessage));
@@ -292,12 +350,14 @@ export class AIChatTransport implements IChatTransport {
         try {
             return await Promise.race([operation, timeoutPromise]);
         } finally {
-            clearTimeout(timeoutId);
+            if (timeoutId !== undefined) {
+                clearTimeout(timeoutId);
+            }
         }
     }
 
     private async _waitForStreamFinalization(streamDone: Promise<void>): Promise<void> {
-        let timeoutId!: ReturnType<typeof setTimeout>;
+        let timeoutId: ReturnType<typeof setTimeout> | undefined;
         const timeout = new Promise<'timeout'>((resolve) => {
             timeoutId = setTimeout(() => {
                 resolve('timeout');
@@ -310,7 +370,9 @@ export class AIChatTransport implements IChatTransport {
                 this._tracer.warn('[AIChatTransport] Stream finalization marker was not received');
             }
         } finally {
-            clearTimeout(timeoutId);
+            if (timeoutId !== undefined) {
+                clearTimeout(timeoutId);
+            }
         }
     }
 
@@ -362,12 +424,22 @@ export class AIChatTransport implements IChatTransport {
 
     private _emitListeners(listeners: ReadonlySet<(chunk: string) => void>, payload: string): void {
         listeners.forEach((listener) => {
-            listener(payload);
+            try {
+                listener(payload);
+            } catch (error) {
+                this._tracer.error('[AIChatTransport] Stream listener failed:', error);
+            }
         });
     }
 
-    private _isPayloadForRequest(payload: IStreamChunkEnvelope, requestId: string): boolean {
+    private _isPayloadForRequest(payload: StreamChunkPayload, requestId: string): boolean {
         return payload.request_id === requestId;
+    }
+
+    private _chatRequestTimeoutMs(request: IChatRequest): number {
+        return isCloudProviderId(request.provider)
+            ? CLOUD_CHAT_REQUEST_TIMEOUT_MS
+            : LOCAL_CHAT_REQUEST_TIMEOUT_MS;
     }
 
     public destroy(): void {

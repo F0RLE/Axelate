@@ -14,7 +14,7 @@ export type EngineFieldDefinition = {
     fullWidth?: boolean;
     showInfoButton?: boolean;
     isFile?: boolean;
-    fileKind?: 'model' | 'vae' | 'llm';
+    fileKind?: 'model';
     description?: string;
 };
 
@@ -26,6 +26,29 @@ export type ImageEngineFieldGroups = {
 };
 
 export class ModuleSettingsEngineFieldCatalog {
+    public buildComputeModeField(
+        t: TranslateFn,
+        availableModes: Array<'gpu' | 'cpu'> = ['gpu', 'cpu'],
+    ): EngineFieldDefinition {
+        const options = availableModes.length > 0 ? availableModes : ['gpu', 'cpu'];
+        return {
+            label: t('ui.settings.engine.compute_mode', 'Compute Device'),
+            key: 'compute_mode',
+            type: 'select',
+            isEngineConfig: true,
+            options,
+            optionLabels: {
+                gpu: t('ui.settings.engine.compute_gpu', 'GPU'),
+                cpu: t('ui.settings.engine.compute_cpu', 'CPU'),
+            },
+            defaultValue: 'gpu',
+            description: t(
+                'ui.settings.engine.compute_mode_hint',
+                'Choose whether this engine starts on the GPU or CPU.',
+            ),
+        };
+    }
+
     public buildCoreModelField(
         t: TranslateFn,
         modelPlaceholder: string,
@@ -49,7 +72,7 @@ export class ModuleSettingsEngineFieldCatalog {
                 ? {
                       description: t(
                           'ui.settings.engine.image_model_path_hint',
-                          'Main image model. Use your SD model here, or a qwen-image*.gguf file for Qwen Image.',
+                          'Main diffusion model file.',
                       ),
                   }
                 : {}),
@@ -58,18 +81,6 @@ export class ModuleSettingsEngineFieldCatalog {
 
     public buildTextEngineFields(t: TranslateFn): EngineFieldDefinition[] {
         return [
-            {
-                label: t('ui.settings.engine.compute_mode', 'Compute Device'),
-                key: 'compute_mode',
-                type: 'select',
-                isEngineConfig: true,
-                options: ['gpu', 'cpu'],
-                optionLabels: {
-                    gpu: t('ui.settings.engine.compute_mode_gpu', 'GPU'),
-                    cpu: t('ui.settings.engine.compute_mode_cpu', 'CPU'),
-                },
-                defaultValue: 'gpu',
-            },
             {
                 label: t('ui.settings.engine.context_size', 'Context Window'),
                 key: 'context_size',
@@ -99,19 +110,25 @@ export class ModuleSettingsEngineFieldCatalog {
         return {
             promptFields: [
                 {
-                    label: t('ui.settings.engine.sd_positive_prompt', 'Positive Prompt Prefix'),
+                    label: t('ui.settings.engine.sd_positive_prompt', 'Positive Prompt'),
                     key: `${appId}_positive_prompt`,
                     type: 'textarea',
                     isEngineConfig: false,
-                    placeholder: 'e.g. score_9, score_8_up...',
+                    placeholder: t(
+                        'ui.settings.engine.sd_positive_prompt_placeholder',
+                        'Describe the image style, subject, lighting, and details.',
+                    ),
                     defaultValue: '',
                 },
                 {
-                    label: t('ui.settings.engine.sd_negative_prompt', 'Negative Prompt Prefix'),
+                    label: t('ui.settings.engine.sd_negative_prompt', 'Negative Prompt'),
                     key: `${appId}_negative_prompt`,
                     type: 'textarea',
                     isEngineConfig: false,
-                    placeholder: 'e.g. score_4, text, watermark...',
+                    placeholder: t(
+                        'ui.settings.engine.sd_negative_prompt_placeholder',
+                        'Things to avoid: blurry, low quality, watermark, distortion.',
+                    ),
                     defaultValue: '',
                 },
             ],
@@ -174,23 +191,40 @@ export class ModuleSettingsEngineFieldCatalog {
                     type: 'select',
                     isEngineConfig: false,
                     options: [
-                        'dpm++ 2m',
-                        'dpm++ 2m v2',
-                        'dpm++ 2s a',
-                        'euler a',
+                        'euler',
+                        'euler_a',
                         'heun',
                         'dpm2',
-                        'euler',
+                        'dpm++2s_a',
+                        'dpm++2m',
+                        'dpm++2mv2',
                         'ipndm',
                         'ipndm_v',
-                        'er sde',
-                        'ddim trailing',
-                        'res multistep',
-                        'res 2s',
                         'lcm',
+                        'ddim_trailing',
                         'tcd',
+                        'res_multistep',
+                        'res_2s',
+                        'er_sde',
                     ],
-                    defaultValue: 'euler a',
+                    optionLabels: {
+                        euler: 'Euler',
+                        euler_a: 'Euler A',
+                        heun: 'Heun',
+                        dpm2: 'DPM2',
+                        'dpm++2s_a': 'DPM++ 2S A',
+                        'dpm++2m': 'DPM++ 2M',
+                        'dpm++2mv2': 'DPM++ 2M v2',
+                        ipndm: 'IPNDM',
+                        ipndm_v: 'IPNDM V',
+                        lcm: 'LCM',
+                        ddim_trailing: 'DDIM trailing',
+                        tcd: 'TCD',
+                        res_multistep: 'Res multistep',
+                        res_2s: 'Res 2S',
+                        er_sde: 'ER SDE',
+                    },
+                    defaultValue: 'euler_a',
                 },
                 {
                     label: t('ui.settings.engine.sd_scheduler', 'Scheduler'),
@@ -200,16 +234,29 @@ export class ModuleSettingsEngineFieldCatalog {
                     options: [
                         'discrete',
                         'karras',
-                        'sgm uniform',
                         'exponential',
                         'ays',
                         'gits',
-                        'smoothstep',
-                        'kl optimal',
+                        'sgm_uniform',
                         'simple',
+                        'smoothstep',
+                        'kl_optimal',
                         'lcm',
-                        'bong tangent',
+                        'bong_tangent',
                     ],
+                    optionLabels: {
+                        discrete: 'Discrete',
+                        karras: 'Karras',
+                        exponential: 'Exponential',
+                        ays: 'AYS',
+                        gits: 'GITS',
+                        sgm_uniform: 'SGM uniform',
+                        simple: 'Simple',
+                        smoothstep: 'Smoothstep',
+                        kl_optimal: 'KL optimal',
+                        lcm: 'LCM',
+                        bong_tangent: 'Bong tangent',
+                    },
                     defaultValue: 'discrete',
                 },
             ],
@@ -247,10 +294,6 @@ export class ModuleSettingsEngineFieldCatalog {
         };
     }
 
-    public buildImageCompanionFields(_t: TranslateFn, _appId: string): EngineFieldDefinition[] {
-        return [];
-    }
-
     public buildImageExtraArgsField(t: TranslateFn): EngineFieldDefinition {
         return {
             label: t('ui.settings.engine.extra_args', 'Extra Arguments'),
@@ -263,7 +306,7 @@ export class ModuleSettingsEngineFieldCatalog {
             showInfoButton: true,
             description: t(
                 'ui.settings.engine.extra_args_hint',
-                'Advanced startup flags only. Qwen Image companion files are auto-detected next to the selected model or can be passed here.',
+                'Advanced startup flags appended to sd.cpp.',
             ),
         };
     }

@@ -19,7 +19,7 @@ export function createMockStore(initial?: Partial<IUIState>): UiStateStore {
         ai_thinking_level: {},
         ai_web_search_enabled: {},
         local_max_output_tokens: {},
-        ai_session_id: null,
+        integration_import_last_directory: null,
         pending_chat_reveal: false,
         ...initial,
     };

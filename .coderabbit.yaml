@@ -1,18 +1,79 @@
 # yaml-language-server: $schema=https://coderabbit.ai/integrations/schema.v2.json
+language: "en-US"
+tone_instructions: "Be direct and concise. Prioritize correctness, security, data loss, broken user flows, and missing tests over style-only comments."
+
 reviews:
-  review_status: false
-  path_filters:
-    - "!src/dist/**"
-    - "!src/coverage/**"
-    - "!src/node_modules/**"
-    - "!src-tauri/target/**"
-    - "!src-tauri/gen/**"
-    - "!src/shared/types/bindings.ts"
-    - "!docs/localization/**"
-    - "!**/*.lock"
-    - "!**/package-lock.json"
-  auto_review:
-    enabled: true
-    drafts: true
-    base_branches:
-      - "nightly"
+    profile: "chill"
+    request_changes_workflow: false
+    high_level_summary: true
+    review_status: false
+    collapse_walkthrough: true
+    poem: false
+    suggested_labels: true
+    auto_apply_labels: false
+    labeling_instructions:
+        - label: "frontend"
+          instructions: "Use for changes under src app, features, shared UI, services, styles, tests, or frontend tooling."
+        - label: "backend"
+          instructions: "Use for Rust, Tauri commands, src-tauri resources, engine runtime, module lifecycle, secure storage, logging, or IPC bindings."
+        - label: "security"
+          instructions: "Use when changes affect secrets, authentication, filesystem access, command execution, downloads, archives, update/release trust, CSP, or IPC permissions."
+        - label: "ci"
+          instructions: "Use for GitHub Actions, Dependabot, repository automation, hooks, scripts, or workflow configuration."
+        - label: "dependencies"
+          instructions: "Use for dependency, lockfile, toolchain, npm, cargo, or GitHub Actions version changes."
+        - label: "release"
+          instructions: "Use for versioning, tagging, packaging, checksums, installers, release notes, or release workflow changes."
+    path_filters:
+        - "!src/dist/**"
+        - "!src/node_modules/**"
+        - "!src-tauri/target/**"
+        - "!src-tauri/gen/**"
+        - "!.cache/**"
+        - "!.github/ISSUE_TEMPLATE/**"
+        - "!**/.DS_Store"
+    path_instructions:
+        - path: "src-tauri/src/**/*.rs"
+          instructions: "Review as a Windows-first Tauri backend. Prioritize IPC boundary validation, path traversal, archive extraction safety, process spawning, cancellation, secure storage, logging, and error mapping. Check that frontend-callable commands never expose raw secrets and keep user data scoped to app directories."
+        - path: "src/**/*.ts"
+          instructions: "Review as vanilla TypeScript frontend code. Prioritize state consistency, async cancellation, event listener cleanup, DOM injection risks, user-visible regressions, and test coverage for changed flows. Avoid style-only comments unless they hide a real defect."
+        - path: ".github/workflows/*.yml"
+          instructions: "Review GitHub Actions for least-privilege permissions, pinned or versioned actions, correct branch/tag triggers, cache safety, and whether failures are intentional or accidentally continue-on-error."
+        - path: "src-tauri/resources/**/*.json"
+          instructions: "Review resource changes for schema consistency, localization key parity, default settings safety, and compatibility with existing config readers."
+    auto_review:
+        enabled: true
+        drafts: true
+        auto_incremental_review: true
+        auto_pause_after_reviewed_commits: 0
+        base_branches:
+            - "nightly"
+            - "main"
+    tools:
+        eslint:
+            enabled: true
+        clippy:
+            enabled: true
+        actionlint:
+            enabled: true
+        gitleaks:
+            enabled: true
+        trufflehog:
+            enabled: true
+        semgrep:
+            enabled: true
+
+chat:
+    auto_reply: true
+
+knowledge_base:
+    code_guidelines:
+        enabled: true
+        filePatterns:
+            - "README.md"
+            - "CONTRIBUTING.md"
+            - "SECURITY.md"
+            - "AGENTS.md"
+            - "docs/localization/en/DEVELOPMENT_WORKFLOW.md"
+            - "docs/localization/en/TRUST_MODEL.md"
+            - "docs/localization/en/ARCHITECTURE.md"

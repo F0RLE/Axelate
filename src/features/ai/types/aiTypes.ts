@@ -173,11 +173,11 @@ export interface IAIModelStats {
 }
 
 /**
- * Tiered pricing configuration for token-based resource distribution.
+ * General input/output pricing shown in the model selector.
  */
 export interface IAIModelPricing {
-    input_per_1m?: number | null;
-    output_per_1m?: number | null;
+    input?: number | null;
+    output?: number | null;
     currency?: string | null;
     notes?: string | null;
 }
@@ -209,7 +209,6 @@ export interface IAIModelData {
     releaseDate?: string | null;
     contextWindow?: number | null;
     maxOutputTokens?: number | null;
-    deprecated?: boolean | null;
 
     pricing?: IAIModelPricing | null;
     capabilities?: IAIModelCapabilities | null;

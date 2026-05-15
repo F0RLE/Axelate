@@ -8,6 +8,7 @@ describe('ConsoleUI lifecycle', () => {
     let ui: ConsoleUI | null = null;
     let testEventBus: EventBus;
     let showToastMock: ReturnType<typeof vi.fn>;
+    let copyTextMock: ReturnType<typeof vi.fn>;
     const normalizer = new ConsoleLogNormalizer();
 
     function normalizeLogs(logs: ILogEntry[]): ILogEntry[] {
@@ -59,6 +60,7 @@ describe('ConsoleUI lifecycle', () => {
             fallback,
         ) => `${key}:${fallback}`;
         showToastMock = vi.fn();
+        copyTextMock = vi.fn().mockResolvedValue(undefined);
         vi.clearAllMocks();
     });
 
@@ -93,7 +95,7 @@ describe('ConsoleUI lifecycle', () => {
                 )(message, type, duration);
             },
             copyText: async (text: string) => {
-                await navigator.clipboard.writeText(text);
+                await (copyTextMock as unknown as (value: string) => Promise<void>)(text);
             },
         };
     }
@@ -103,6 +105,7 @@ describe('ConsoleUI lifecycle', () => {
             init: ReturnType<typeof vi.fn>;
             destroy: ReturnType<typeof vi.fn>;
             clearLogs: ReturnType<typeof vi.fn>;
+            clearAllLogs: ReturnType<typeof vi.fn>;
             getLogs: ReturnType<typeof vi.fn>;
             getLogsForView: ReturnType<typeof vi.fn>;
             getAvailableViews: ReturnType<typeof vi.fn>;
@@ -117,6 +120,7 @@ describe('ConsoleUI lifecycle', () => {
             init: vi.fn().mockResolvedValue(undefined),
             destroy: vi.fn(),
             clearLogs: vi.fn().mockResolvedValue(true),
+            clearAllLogs: vi.fn().mockResolvedValue(true),
             getLogs: vi.fn().mockReturnValue([]),
             getLogsForView: vi.fn().mockReturnValue([]),
             getAvailableViews: vi.fn().mockResolvedValue([{ id: 'general', label: 'General' }]),
@@ -190,7 +194,7 @@ describe('ConsoleUI lifecycle', () => {
         expect(dropzone.textContent).toContain('drop_here');
     });
 
-    it('should clear, copy and render logs through browser clipboard fallback', async () => {
+    it('should clear, copy and render logs through the injected clipboard writer', async () => {
         const service = createServiceMock({
             getLogs: vi.fn().mockReturnValue(
                 normalizeLogs([
@@ -214,18 +218,13 @@ describe('ConsoleUI lifecycle', () => {
         });
 
         ui = new ConsoleUI(service, createDeps());
-        const clipboardWrite = vi.fn().mockResolvedValue(undefined);
-        Object.defineProperty(globalThis.navigator, 'clipboard', {
-            configurable: true,
-            value: { writeText: clipboardWrite },
-        });
 
         ui.init();
         await ui.clearLogs();
         expect(service.clearLogs).toHaveBeenCalledWith('general');
 
         await ui.copyLogs();
-        expect(clipboardWrite).toHaveBeenCalledWith('hello\nboom');
+        expect(copyTextMock).toHaveBeenCalledWith('hello\nboom');
 
         (service.getLogsForView as ReturnType<typeof vi.fn>).mockReturnValue([]);
         await ui.copyLogs();
@@ -259,6 +258,30 @@ describe('ConsoleUI lifecycle', () => {
         vi.useRealTimers();
     });
 
+    it('should require a second right click before clearing all logs', async () => {
+        vi.useFakeTimers();
+        const service = createServiceMock();
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+
+        const clearButton = document.getElementById('clear-logs-btn') as HTMLButtonElement;
+        clearButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+
+        expect(clearButton.classList.contains('confirming')).toBe(true);
+        expect(service.clearAllLogs).not.toHaveBeenCalled();
+        expect(service.clearLogs).not.toHaveBeenCalled();
+
+        clearButton.dispatchEvent(new MouseEvent('contextmenu', { bubbles: true }));
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(clearButton.classList.contains('confirming')).toBe(false);
+        expect(service.clearAllLogs).toHaveBeenCalledTimes(1);
+        expect(service.clearLogs).not.toHaveBeenCalled();
+
+        vi.useRealTimers();
+    });
+
     it('should reset clear action confirmation after timeout', () => {
         vi.useFakeTimers();
         const service = createServiceMock();
@@ -274,6 +297,24 @@ describe('ConsoleUI lifecycle', () => {
         expect(service.clearLogs).not.toHaveBeenCalled();
 
         vi.useRealTimers();
+    });
+
+    it('should forward wheel scrolling from the console controls to the logs area', () => {
+        const service = createServiceMock();
+        const container = document.getElementById('console-container') as HTMLDivElement;
+        Object.defineProperty(container, 'scrollHeight', { configurable: true, value: 720 });
+        Object.defineProperty(container, 'clientHeight', { configurable: true, value: 200 });
+        container.scrollTop = 0;
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+
+        const panel = document.querySelector('.console-controls-panel') as HTMLElement;
+        panel.dispatchEvent(
+            new WheelEvent('wheel', { bubbles: true, cancelable: true, deltaY: 96 }),
+        );
+
+        expect(container.scrollTop).toBe(96);
     });
 
     it('should open logs folder from the console actions', async () => {
@@ -492,12 +533,6 @@ describe('ConsoleUI lifecycle', () => {
     });
 
     it('should copy only logs from the active view', async () => {
-        const clipboardWrite = vi.fn().mockResolvedValue(undefined);
-        Object.defineProperty(globalThis.navigator, 'clipboard', {
-            configurable: true,
-            value: { writeText: clipboardWrite },
-        });
-
         const service = createServiceMock({
             getLogsForView: vi.fn((view: string) =>
                 normalizeLogs(
@@ -534,7 +569,7 @@ describe('ConsoleUI lifecycle', () => {
         moduleTab.click();
         await ui.copyLogs();
 
-        const copiedText = clipboardWrite.mock.calls[0]?.[0] as string;
+        const copiedText = copyTextMock.mock.calls[0]?.[0] as string;
         expect(copiedText).toContain('engine line');
         expect(copiedText).not.toContain('general line');
     });
@@ -670,7 +705,7 @@ describe('ConsoleUI lifecycle', () => {
         expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
     });
 
-    it('should allow multi-select level filters with ctrl click', async () => {
+    it('should allow multi-select level filters with ctrl or shift click', async () => {
         const service = createServiceMock({
             getLogsForView: vi.fn().mockReturnValue(
                 normalizeLogs([
@@ -728,6 +763,13 @@ describe('ConsoleUI lifecycle', () => {
         );
         expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
         expect(document.getElementById('logs-general')?.textContent).not.toContain('Page modules');
+
+        const debugButton = document.querySelector(
+            '.console-filter-chip[data-level="DEBUG"]',
+        ) as HTMLButtonElement;
+        debugButton.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
+
+        expect(document.getElementById('logs-general')?.textContent).toContain('Page modules');
     });
 
     it('should hide launcher source labels like frontend from rendered logs', async () => {

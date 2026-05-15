@@ -13,6 +13,18 @@
     --modal-shell-padding-block-start: 24px;
     --modal-shell-padding-block-end: 24px;
     --modal-shell-radius: 24px;
+    outline: none !important;
+    box-shadow: none;
+}
+
+.modal-backdrop:focus,
+.modal-backdrop:focus-visible,
+#app-selection-modal:focus,
+#app-selection-modal:focus-visible,
+#module-settings-modal:focus,
+#module-settings-modal:focus-visible {
+    outline: none !important;
+    box-shadow: none !important;
 }
 
 /* Keep app selection on the shared modal geometry used by module settings. */

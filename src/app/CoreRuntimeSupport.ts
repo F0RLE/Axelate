@@ -1,4 +1,4 @@
-import type { ChatController } from '@/features/chat/chat';
+import type { ChatController } from '@/features/chat/ChatController';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
@@ -71,7 +71,6 @@ const INITIAL_TEMPLATE_TARGETS = [
     ['pages/home', 'page-home'],
     ['pages/chat', 'page-chat'],
     ['pages/modules', 'page-modules'],
-    ['pages/marketplace', 'page-marketplace'],
     ['pages/downloads', 'page-downloads'],
     ['pages/console', 'page-console'],
     ['pages/settings', 'page-settings'],
@@ -154,7 +153,7 @@ export async function showInitialPage(args: ShowInitialPageArgs): Promise<void> 
 export async function initializeImmediateUi(args: InitializeImmediateUiArgs): Promise<void> {
     await args.sidebarUI.init();
     args.navigationUI.init();
-    await args.navigationUI.showPage(args.navigation.getCurrentPage() ?? 'home', null, true, true);
+    args.navigationUI.syncActiveNavigationButton(args.navigation.getCurrentPage() ?? 'home');
     void args.moduleService.init();
     void args.downloadUI.init();
 }

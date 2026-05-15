@@ -282,29 +282,12 @@ export class ChatFileHandler {
         return { error: `\n[Skipped: ${file.name} - Not supported in Web Mode]` };
     }
 
-    // Removed private ZIP methods (_processZipFile, _extractZipEntries, _validateZipEntry, etc.)
-
     public async getTotalTokenEstimate(baseText: string): Promise<number> {
         let total = await this._estimateTokens(baseText);
         for (const file of this._files) {
             total += await this.getFileTokenEstimate(file);
         }
         return total;
-    }
-
-    // calculateCombinedContext also needs update or removal of preview logic
-    public calculateCombinedContext(
-        baseText: string,
-    ): Promise<{ combinedText: string; attachments: IChatAttachment[] }> {
-        // Without processing, we can't show "Smart Unpacked".
-        // Just show list.
-        const attachments: IChatAttachment[] = this._files.map((f) => ({
-            name: f.name,
-            type: f.type,
-            size: f.size,
-            data_base64: '',
-        }));
-        return Promise.resolve({ combinedText: `${baseText}\n[Files attached]`, attachments });
     }
 
     public async getFileTokenEstimate(file: File): Promise<number> {

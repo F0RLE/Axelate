@@ -3,13 +3,13 @@ import DOMPurify from 'dompurify';
 import type { ChatFileHandler } from '../services/ChatFileHandler';
 import type { IChatAttachment } from '../types/chatTypes';
 import { getFileIcon } from '../utils/chatUtils';
-import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+import type { ChatTranslateFunction } from './ChatUiTypes';
 
 type ChatAttachmentRendererDeps = {
     fileHandler: Pick<ChatFileHandler, 'getFileTokenEstimate'>;
     isDestroyed: () => boolean;
     getRenderVersion: () => number;
-    translate: TTranslateFunction;
+    translate: ChatTranslateFunction;
 };
 
 export class ChatAttachmentRenderer {
@@ -41,7 +41,9 @@ export class ChatAttachmentRenderer {
         if (hiddenCount > 0) {
             const moreCard = document.createElement('div');
             moreCard.className = 'chat-media-card more-card';
-            moreCard.innerHTML = `<span>+${String(hiddenCount)}</span>`;
+            const label = document.createElement('span');
+            label.textContent = `+${String(hiddenCount)}`;
+            moreCard.appendChild(label);
             attachContainer.appendChild(moreCard);
         }
 
@@ -77,7 +79,9 @@ export class ChatAttachmentRenderer {
         if (hiddenCount > 0) {
             const moreCard = document.createElement('div');
             moreCard.className = 'chat-media-card more-card';
-            moreCard.innerHTML = `<span>+${String(hiddenCount)}</span>`;
+            const label = document.createElement('span');
+            label.textContent = `+${String(hiddenCount)}`;
+            moreCard.appendChild(label);
             container.appendChild(moreCard);
         }
     }
@@ -115,10 +119,10 @@ export class ChatAttachmentRenderer {
                     card.appendChild(badge);
                 }
             } else {
-                card.innerHTML = this.createFilePillHtml(file.name, fileTokens, name);
+                card.appendChild(this.createFilePill(file.name, fileTokens, name));
             }
         } else {
-            card.innerHTML = this.createFilePillHtml(file.name, fileTokens, name);
+            card.appendChild(this.createFilePill(file.name, fileTokens, name));
         }
 
         container.appendChild(card);
@@ -174,7 +178,7 @@ export class ChatAttachmentRenderer {
                 card.appendChild(badge);
             }
         } else {
-            card.innerHTML = this.createFilePillHtml(file.name, fileTokens, name);
+            card.appendChild(this.createFilePill(file.name, fileTokens, name));
         }
 
         const btn = document.createElement('button');
@@ -231,7 +235,12 @@ export class ChatAttachmentRenderer {
         return `${name.substring(0, 20)}..`;
     }
 
-    private createFilePillHtml(originalName: string, tokens: number, displayName: string): string {
+    private createFilePill(
+        originalName: string,
+        tokens: number,
+        displayName: string,
+    ): DocumentFragment {
+        const fragment = document.createDocumentFragment();
         const iconSvg = (() => {
             try {
                 return getFileIcon(originalName);
@@ -240,19 +249,27 @@ export class ChatAttachmentRenderer {
             }
         })();
 
-        const tokensLabel = this._deps.translate('ui.launcher.web.tokens', 'tokens');
-        const safeTokensLabel = DOMPurify.sanitize(tokensLabel);
-        const tokensHtml =
-            tokens > 0
-                ? `<div class="media-tokens">${String(tokens)} ${safeTokensLabel}</div>`
-                : '';
+        const icon = document.createElement('div');
+        icon.className = 'media-icon';
+        icon.innerHTML = DOMPurify.sanitize(iconSvg);
 
-        return `
-            <div class="media-icon">${DOMPurify.sanitize(iconSvg)}</div>
-            <div class="media-info">
-                <div class="media-name">${DOMPurify.sanitize(displayName)}</div>
-                ${tokensHtml}
-            </div>
-        `;
+        const info = document.createElement('div');
+        info.className = 'media-info';
+
+        const name = document.createElement('div');
+        name.className = 'media-name';
+        name.textContent = displayName;
+        info.appendChild(name);
+
+        const tokensLabel = this._deps.translate('ui.launcher.web.tokens', 'tokens');
+        if (tokens > 0) {
+            const tokenCount = document.createElement('div');
+            tokenCount.className = 'media-tokens';
+            tokenCount.textContent = `${String(tokens)} ${tokensLabel}`;
+            info.appendChild(tokenCount);
+        }
+
+        fragment.append(icon, info);
+        return fragment;
     }
 }

@@ -1,10 +1,8 @@
 import type { IChatMessage, IChunkHandler, IImageGenerationPreview } from '../types/aiTypes';
 import type { AIBridgeContext } from './AIBridgeContext';
 import type { AIBridgeEvents } from './AIBridgeEvents';
-import type { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
 import type { IChatTransport } from './AIChatTransport';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import { resolveCustomProviderBackendId } from '@/shared/utils/customProviderSupport';
 
 type AIBridgeRuntimeLogger = Pick<LoggerService, 'info' | 'warn' | 'error' | 'debug'>;
@@ -16,12 +14,6 @@ type InitializeStreamingArgs = {
     getActiveProviderId: () => string | null;
     broadcastChunk: IChunkHandler;
     broadcastThought: IChunkHandler;
-};
-
-type StopCrossSlotEnginesArgs = {
-    context: AIBridgeContext | null;
-    providerId: string;
-    providerPolicy: AIBridgeProviderPolicy;
 };
 
 type ImageGenerationLogProgress = {
@@ -82,10 +74,12 @@ export const buildImageGenerationProgressChunk = (line: string): string | null =
     return `${fields.join(' ')}\n`;
 };
 
-const LOCAL_IMAGE_ENGINE_IDS = new Set(['sdcpp', 'stable-diffusion']);
-
-export const isActiveEngineLog = (activeProviderId: string | null, engineId: string): boolean => {
-    if (LOCAL_IMAGE_ENGINE_IDS.has(engineId)) {
+export const isActiveEngineLog = (
+    activeProviderId: string | null,
+    engineId: string,
+    selectedImageProviderId: string | null = null,
+): boolean => {
+    if (selectedImageProviderId !== null && selectedImageProviderId === engineId) {
         return true;
     }
 
@@ -98,7 +92,7 @@ export const isActiveEngineLog = (activeProviderId: string | null, engineId: str
         return true;
     }
 
-    return LOCAL_IMAGE_ENGINE_IDS.has(activeBackendId) && LOCAL_IMAGE_ENGINE_IDS.has(engineId);
+    return false;
 };
 
 export class AIBridgeRuntime {
@@ -106,71 +100,61 @@ export class AIBridgeRuntime {
 
     public async initializeStreaming(args: InitializeStreamingArgs): Promise<(() => void)[]> {
         if (!args.context.tauriProvider.isTauri()) {
-            this._tracer.info('[AIBridge] Web mode active (Mocks)');
+            this._tracer.info('[AIBridge] Tauri IPC unavailable; streaming disabled');
             return [];
         }
 
-        const unlistenLog = await args.context.tauriProvider.listen<{
-            engine_id: string;
-            line: string;
-        }>('ai:engine:log', (payload) => {
-            const line = payload.line;
-            if (!isActiveEngineLog(args.getActiveProviderId(), payload.engine_id)) {
-                return;
-            }
-
-            const progressChunk = buildImageGenerationProgressChunk(line);
-            if (progressChunk !== null) {
-                args.events.broadcastReplaceChunk(progressChunk);
-            }
-        });
-
-        const unlistenChunk = args.transport.onStream((payload: string) => {
-            args.broadcastChunk(payload);
-        });
-
-        const unlistenThought = args.transport.onThought((payload: string) => {
-            args.broadcastThought(payload);
-        });
-
-        this._tracer.info('[AIBridge] Streaming active (IPC via Transport)');
-        return [unlistenLog, unlistenChunk, unlistenThought];
-    }
-
-    public async stopCrossSlotEngines(args: StopCrossSlotEnginesArgs): Promise<void> {
-        if (args.context?.tauriProvider.isTauri() !== true) {
-            return;
-        }
-
-        if (args.providerPolicy.isCloudProvider(args.providerId)) {
-            return;
-        }
-
-        const isImageProvider = args.providerPolicy.isImageProvider(args.providerId);
-        const isManagedLocalImageEngine = args.providerPolicy.isManagedLocalImageEngine(
-            args.providerId,
-        );
-
+        const cleanup: Array<() => void> = [];
         try {
-            if (isImageProvider) {
-                await args.context.tauriProvider.invoke('stop_engine_slot', {
-                    capability: 'text',
-                });
-                if (!isManagedLocalImageEngine) {
-                    await args.context.tauriProvider.invoke('stop_engine_slot', {
-                        capability: 'image',
-                    });
+            const unlistenLog = await args.context.tauriProvider.listen<{
+                engine_id: string;
+                line: string;
+            }>('ai:engine:log', (payload) => {
+                const line = payload.line;
+                const selectedImageProviderId =
+                    args.context.stateStore.getSelectedModule('ai_image')?.id ?? null;
+                if (
+                    !isActiveEngineLog(
+                        args.getActiveProviderId(),
+                        payload.engine_id,
+                        selectedImageProviderId,
+                    )
+                ) {
+                    return;
                 }
-                return;
-            }
 
-            await args.context.tauriProvider.invoke('stop_engine_slot', {
-                capability: 'image',
+                const progressChunk = buildImageGenerationProgressChunk(line);
+                if (progressChunk !== null) {
+                    args.events.broadcastReplaceChunk(progressChunk);
+                }
             });
-        } catch (error) {
-            this._tracer.warn(
-                `[AIBridge] Failed to stop cross-slot engine for VRAM savings: ${String(error)}`,
+            cleanup.push(unlistenLog);
+
+            cleanup.push(
+                args.transport.onStream((payload: string) => {
+                    args.broadcastChunk(payload);
+                }),
             );
+
+            cleanup.push(
+                args.transport.onThought((payload: string) => {
+                    args.broadcastThought(payload);
+                }),
+            );
+
+            this._tracer.debug('[AIBridge] Streaming active (IPC via Transport)');
+            return cleanup;
+        } catch (error) {
+            for (const dispose of cleanup.splice(0).reverse()) {
+                try {
+                    dispose();
+                } catch (cleanupError) {
+                    this._tracer.warn(
+                        `[AIBridge] Failed to cleanup partial stream subscription: ${String(cleanupError)}`,
+                    );
+                }
+            }
+            throw error;
         }
     }
 
@@ -184,6 +168,17 @@ export class AIBridgeRuntime {
         });
     }
 
+    public async stopEngineSlot(
+        context: AIBridgeContext | null,
+        capability: 'text' | 'image' | 'vision',
+    ): Promise<void> {
+        if (context?.tauriProvider.isTauri() !== true) {
+            return;
+        }
+
+        await context.tauriProvider.invoke('stop_engine_slot', { capability });
+    }
+
     public async getHistory(
         context: AIBridgeContext | null,
         sessionId: string,
@@ -192,12 +187,9 @@ export class AIBridgeRuntime {
             return [];
         }
 
-        return await (context.tauriProvider as unknown as TauriProvider).invoke(
-            'get_chat_history',
-            {
-                sessionId,
-            },
-        );
+        return await context.tauriProvider.invoke('get_chat_history', {
+            sessionId,
+        });
     }
 
     public async clearHistory(context: AIBridgeContext | null, sessionId: string): Promise<void> {
@@ -205,7 +197,7 @@ export class AIBridgeRuntime {
             return;
         }
 
-        await (context.tauriProvider as unknown as TauriProvider).invoke('clear_chat_history', {
+        await context.tauriProvider.invoke('clear_chat_history', {
             sessionId,
         });
     }
@@ -243,11 +235,8 @@ export class AIBridgeRuntime {
             return null;
         }
 
-        return await (context.tauriProvider as unknown as TauriProvider).invoke(
-            'rewind_last_turn',
-            {
-                sessionId,
-            },
-        );
+        return await context.tauriProvider.invoke('rewind_last_turn', {
+            sessionId,
+        });
     }
 }

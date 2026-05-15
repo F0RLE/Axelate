@@ -6,7 +6,7 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 describe('ErrorHandler', () => {
     let errorHandler: ErrorHandler;
     let testEventBus: EventBus;
-    let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+    let tracer: Pick<LoggerService, 'debug' | 'warn' | 'error'>;
 
     const resetHandler = () => {
         errorHandler.destroy();
@@ -18,7 +18,7 @@ describe('ErrorHandler', () => {
     beforeEach(() => {
         testEventBus = new EventBus();
         tracer = {
-            info: vi.fn(),
+            debug: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),
         };
@@ -115,7 +115,6 @@ describe('ErrorHandler', () => {
         });
 
         it('should capture error and return undefined on failure', async () => {
-            // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression
             const result = await errorHandler.wrapAsync(async () => {
                 await Promise.resolve(); // Ensure async
                 throw new Error('Async error');
@@ -166,7 +165,6 @@ describe('ErrorHandler', () => {
 
     describe('wrapAsync edge cases', () => {
         it('should handle non-Error throw with no context (L189)', async () => {
-            // eslint-disable-next-line @typescript-eslint/no-confusing-void-expression
             const result = await errorHandler.wrapAsync(async () => {
                 await Promise.resolve();
                 throw 42; // eslint-disable-line no-throw-literal, @typescript-eslint/only-throw-error

@@ -172,7 +172,6 @@ export class I18nService {
 
     private _notifyLanguageChange(lang: string, previousLang: string): void {
         globalThis.dispatchEvent(new CustomEvent('language-changed', { detail: { lang } }));
-        globalThis.dispatchEvent(new CustomEvent('lang:changed', { detail: lang }));
         this._eventBus.emit('i18n:language:change', { lang, previousLang });
         this._eventBus.emit('i18n:translations:loaded', { lang });
     }

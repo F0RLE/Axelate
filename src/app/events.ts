@@ -4,7 +4,7 @@
  */
 
 import type { AppUI } from '@/shared/shell/AppUI';
-import type { ChatController } from '@/features/chat/chat';
+import type { ChatController } from '@/features/chat/ChatController';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
@@ -46,6 +46,7 @@ function createDefaultEventHandlerRuntime(): EventHandlerRuntime {
 export class EventHandler {
     private readonly _core: ICoreEvents;
     private _unsubscribers: (() => void)[] = [];
+    private _initialized = false;
 
     constructor(
         core: ICoreEvents,
@@ -58,6 +59,11 @@ export class EventHandler {
      * Initializes all global event listeners.
      */
     public init(): void {
+        if (this._initialized) {
+            return;
+        }
+        this._initialized = true;
+
         this._initGlobalDelegation();
         this._initWindowControls();
 
@@ -97,6 +103,10 @@ export class EventHandler {
         if (pageId === undefined) return false;
 
         e.preventDefault();
+        if (document.body.classList.contains('download-selection-open')) {
+            return true;
+        }
+
         this._core.tracer.debug(`[EventHandler] Navigating to: ${pageId}`);
         await this._core.navigationUI.showPage(pageId, navBtn);
         return true;
@@ -154,8 +164,22 @@ export class EventHandler {
             return;
         }
 
+        const attachMenuAction = target.closest('[data-chat-attach-action]');
+        const attachMenu = attachMenuAction?.closest('.chat-attach-menu');
+        if (attachMenu instanceof HTMLElement && attachMenuAction instanceof HTMLElement) {
+            const action = attachMenuAction.dataset['chatAttachAction'];
+            if (action === 'file') {
+                await this._core.chatController.pickChatFilesFromMenu();
+                return;
+            }
+            if (action === 'image') {
+                await this._core.chatController.sendImageGenerationFromMenu();
+                return;
+            }
+        }
+
         if (target.closest('#chat-attach-btn') !== null) {
-            await this._core.chatController.pickChatFiles();
+            this._core.chatController.toggleAttachMenu();
             return;
         }
 
@@ -173,10 +197,15 @@ export class EventHandler {
      * Cleans up all event listeners.
      */
     public destroy(): void {
+        if (!this._initialized) {
+            return;
+        }
+
         this._unsubscribers.forEach((fn) => {
             fn();
         });
         this._unsubscribers = [];
+        this._initialized = false;
         this._core.tracer.debug('[EventHandler] Destroyed and listeners removed.');
     }
 

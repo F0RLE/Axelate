@@ -132,21 +132,25 @@ body[data-platform='macos'] .module-card:hover {
 }
 
 #page-modules.active .models-container {
-    animation: pageContentRise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: modulesPageEnter 0.24s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
 /* State when model selection or settings is open */
 .models-container.content-hidden {
     opacity: 0;
+    transform: none;
     pointer-events: none;
+    transition: none;
 }
 
-@keyframes modelsPageFadeIn {
+@keyframes modulesPageEnter {
     from {
         opacity: 0;
+        transform: translateY(8px);
     }
     to {
         opacity: 1;
+        transform: translateY(0);
     }
 }
 
@@ -648,7 +652,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .app-delete-badge:hover .badge-text {
     opacity: 1;
-    max-width: 100px;
+    max-width: 10rem;
+    padding-left: 6px;
     padding-right: 10px;
 }
 
@@ -805,7 +810,8 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .module-action-badge:hover .badge-text {
     opacity: 1;
-    max-width: 100px;
+    max-width: 10rem;
+    padding-left: 6px;
     padding-right: 10px;
 }
 
@@ -825,7 +831,7 @@ input[type='password']::-webkit-credentials-auto-fill-button {
 
 .module-action-badge.right:hover .badge-text {
     padding-left: 10px;
-    padding-right: 0;
+    padding-right: 6px;
 }
 
 /* Settings variant */

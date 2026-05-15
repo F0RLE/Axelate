@@ -261,7 +261,7 @@ mod tests {
     };
 
     #[test]
-    fn normalize_window_settings_raises_legacy_small_sizes() {
+    fn normalize_window_settings_raises_too_small_sizes() {
         let normalized = normalize_window_settings(WindowSettings {
             width: 1000,
             height: 600,

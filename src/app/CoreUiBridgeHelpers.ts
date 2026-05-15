@@ -67,8 +67,15 @@ export function createExternalUrlOpener(
 export function createTokenEstimator(
     deps: TokenEstimatorDeps,
 ): (text: string, model?: string) => Promise<number> {
+    let backendCountInFlight = false;
+
     return async (text, model = 'gpt-4') => {
         if (deps.tauriProvider.isTauri()) {
+            if (backendCountInFlight) {
+                return estimateTokenCount(text);
+            }
+
+            backendCountInFlight = true;
             try {
                 return await withTimeout(
                     deps.tauriProvider.invoke<number>('count_tokens', {
@@ -79,6 +86,8 @@ export function createTokenEstimator(
                 );
             } catch (error) {
                 deps.tracer.warn(`[TokenCount] Backend failed, using heuristic: ${String(error)}`);
+            } finally {
+                backendCountInFlight = false;
             }
         }
 
@@ -87,7 +96,7 @@ export function createTokenEstimator(
 }
 
 async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T> {
-    let timeoutId!: ReturnType<typeof setTimeout>;
+    let timeoutId: ReturnType<typeof setTimeout> | undefined;
     const timeout = new Promise<never>((_, reject) => {
         timeoutId = globalThis.setTimeout(() => {
             reject(new Error(`Timed out after ${String(timeoutMs)}ms`));
@@ -97,6 +106,8 @@ async function withTimeout<T>(promise: Promise<T>, timeoutMs: number): Promise<T
     try {
         return await Promise.race([promise, timeout]);
     } finally {
-        globalThis.clearTimeout(timeoutId);
+        if (timeoutId !== undefined) {
+            globalThis.clearTimeout(timeoutId);
+        }
     }
 }

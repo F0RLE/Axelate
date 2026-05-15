@@ -51,6 +51,7 @@ pub async fn get_module_settings(
     settings_service: tauri::State<'_, settings::SettingsService>,
     module_id: String,
 ) -> Result<HashMap<String, Value>, AppError> {
+    crate::domain::modules::downloader::validate_module_id(&module_id)?;
     settings_service.get_module_settings(&module_id).await
 }
 
@@ -63,6 +64,7 @@ pub async fn save_module_settings(
     module_id: String,
     settings: HashMap<String, Value>,
 ) -> Result<(), AppError> {
+    crate::domain::modules::downloader::validate_module_id(&module_id)?;
     settings_service
         .save_module_settings(&module_id, &settings)
         .await
@@ -73,4 +75,18 @@ pub async fn save_module_settings(
 /// Detects and returns the current system language code
 pub fn get_system_language() -> Result<String, AppError> {
     Ok(settings::get_language_sync())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_system_language;
+
+    #[test]
+    fn get_system_language_returns_supported_code() {
+        let result = get_system_language();
+        assert!(result.is_ok());
+        let lang = result.ok().unwrap_or_default();
+
+        assert!(matches!(lang.as_str(), "en" | "ru" | "zh"));
+    }
 }

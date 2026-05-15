@@ -50,18 +50,11 @@ export function refreshChatTranslations(
     refreshMessageActions(translate);
 
     document.querySelectorAll<HTMLElement>('.chat-save-image-btn').forEach((btn) => {
-        btn.title = translate('ui.chat.save_image', 'Save Image');
+        syncTooltipButton(btn, translate('ui.chat.save_image', 'Save Image'));
     });
 
     document.querySelectorAll<HTMLElement>('.chat-open-image-folder-btn').forEach((btn) => {
-        btn.title = translate('ui.chat.open_image_folder', 'Open image folder');
-    });
-
-    document.querySelectorAll<HTMLElement>('.chat-generated-control.is-cancel').forEach((btn) => {
-        const label = translate('ui.chat.image_cancel', 'Cancel');
-        btn.textContent = label;
-        btn.title = label;
-        btn.setAttribute('aria-label', label);
+        syncTooltipButton(btn, translate('ui.chat.open_image_folder', 'Open image folder'));
     });
 
     const viewerClose = document.querySelector<HTMLElement>('.chat-image-viewer-close');
@@ -72,6 +65,19 @@ export function refreshChatTranslations(
         );
         viewerClose.title = translate('ui.chat.close_image_preview', 'Close image preview');
     }
+
+    syncButtonLabel(
+        document.querySelector<HTMLElement>('.chat-image-viewer-prev'),
+        translate,
+        'ui.chat.previous_image',
+        'Previous image',
+    );
+    syncButtonLabel(
+        document.querySelector<HTMLElement>('.chat-image-viewer-next'),
+        translate,
+        'ui.chat.next_image',
+        'Next image',
+    );
 
     document.querySelectorAll<HTMLElement>('.media-remove').forEach((btn) => {
         btn.title = translate('ui.launcher.web.remove_attachment', 'Remove attachment');
@@ -99,4 +105,10 @@ function syncButtonLabel(
 
     button.title = title;
     button.setAttribute('aria-label', ariaLabel);
+}
+
+function syncTooltipButton(button: HTMLElement, label: string): void {
+    button.title = label;
+    button.dataset['tooltip'] = label;
+    button.setAttribute('aria-label', label);
 }

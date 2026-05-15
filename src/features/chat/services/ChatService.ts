@@ -4,6 +4,9 @@ import type { IAIBridge } from '@/features/ai/types/IAIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 
 type ChatServiceLogger = Pick<LoggerService, 'error'>;
+export type ChatSendOptions = {
+    originalPrompt?: string;
+};
 
 function parseGeneratedImages(
     images: string[] | undefined,
@@ -50,6 +53,7 @@ export class ChatService {
         text: string,
         history: IChatMessage[],
         attachments: IChatAttachment[],
+        options: ChatSendOptions = {},
     ): Promise<IChatResponse> {
         // Validation
         if ((text === '' || text.trim() === '') && attachments.length === 0) {
@@ -69,7 +73,13 @@ export class ChatService {
 
         try {
             // Send through AIBridge
-            const response = await this._aiBridge.sendMessage(text, 'chat', attachments, history);
+            const response = await this._aiBridge.sendMessage(
+                text,
+                'chat',
+                attachments,
+                history,
+                options,
+            );
 
             if (!response.ok) {
                 const result: IChatResponse = {
@@ -82,17 +92,17 @@ export class ChatService {
                 return result;
             }
 
+            const reply: NonNullable<IChatResponse['reply']> = {
+                text: response.text ?? '',
+                type: 'markdown',
+            };
             const result: IChatResponse = {
                 ok: true,
-                message: response.text ?? '',
+                reply,
             };
             const generatedImages = parseGeneratedImages(response.images);
             if (generatedImages !== undefined) {
-                result.reply = {
-                    text: response.text ?? '',
-                    type: 'markdown',
-                    images: generatedImages,
-                };
+                reply.images = generatedImages;
             }
             if (response.thought_signature !== undefined) {
                 result.thought_signature = response.thought_signature;

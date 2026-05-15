@@ -16,24 +16,20 @@ export interface ICoreBridge {
     readonly tauriProvider: TauriProvider;
 }
 
-type GlobalBridgeRuntime = {};
-
 /**
  * GlobalBridge keeps runtime transport concerns out of Core boot logic.
  */
 export class GlobalBridge {
     private readonly _core: ICoreBridge;
 
-    constructor(core: ICoreBridge, _runtime?: GlobalBridgeRuntime) {
+    constructor(core: ICoreBridge) {
         this._core = core;
     }
 
     /**
-     * Initialize runtime interceptors.
+     * Lifecycle hook kept with other core services.
      */
-    public init(): void {
-        /* no-op: legacy fetch interceptor removed */
-    }
+    public init(): void {}
 
     public destroy(): void {
         /* no-op */

@@ -4,11 +4,11 @@
 # ==============================================================================
 [package]
 name          = "axelate"
-version       = "0.1.5"
+version       = "0.2.0"
 description   = "Axelate: Windows-first AI Workstation."
 authors       = ["F0RLE"]
 edition       = "2024"
-rust-version  = "1.94.1"
+rust-version  = "1.95.0"
 license       = "Apache-2.0"
 repository    = "https://github.com/F0RLE/Axelate"
 homepage      = "https://github.com/F0RLE/Axelate"
@@ -44,9 +44,9 @@ tauri-plugin-global-shortcut   = "~2.3"
 tauri-plugin-clipboard-manager = "~2.3"
 
 # --- Frontend Bridge (Types & Serialization) ---
-specta           = { version = "2.0.0-rc.24", features = ["derive", "serde_json"] }
-tauri-specta     = { version = "2.0.0-rc.24", features = ["typescript", "derive"] }
-specta-typescript = "0.0.11"
+specta           = { version = "2.0.0-rc.25", features = ["derive", "serde_json"] }
+tauri-specta     = { version = "2.0.0-rc.25", features = ["typescript", "derive"] }
+specta-typescript = "0.0.12"
 serde            = { version = "1.0.228",     features = ["derive"] }
 serde_json       = "1.0.149"
 toml             = "1.1"
@@ -58,7 +58,7 @@ futures-util = "0.3.32"
 scraper      = "0.27.0"
 
 # --- System, Hardware & Low Level ---
-sysinfo      = "0.38.4"
+sysinfo      = "0.39.1"
 nvml-wrapper = "0.12.1" # NVIDIA Management Library
 wmi          = "0.18.4" # Windows Management Instrumentation
 machine-uid  = "0.6.0"  # Hardware ID generation
@@ -100,6 +100,7 @@ async-trait = "0.1.89"
 flate2 = "1.1.9"
 tar = "0.4.45"
 sevenz-rust2 = "0.21.0"
+notify = "8.2.0"
 
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [

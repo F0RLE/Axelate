@@ -4,9 +4,11 @@ import { WindowNativeBridgeHelper } from './WindowNativeBridgeHelper';
 
 describe('WindowNativeBridgeHelper', () => {
     const invoke = vi.fn().mockResolvedValue(undefined);
-    const bridge = { invoke } as unknown as IBridge;
+    const isTauri = vi.fn().mockReturnValue(true);
+    const bridge = { invoke, isTauri } as unknown as IBridge;
     const runtime = {
-        getWindowApi: vi.fn(),
+        getCurrentWindow: vi.fn(),
+        createLogicalSize: vi.fn((width: number, height: number) => ({ width, height })),
     };
     const helper = new WindowNativeBridgeHelper(
         bridge,
@@ -15,6 +17,7 @@ describe('WindowNativeBridgeHelper', () => {
 
     beforeEach(() => {
         vi.clearAllMocks();
+        isTauri.mockReturnValue(true);
     });
 
     it('should set size, read maximize state and persist window state', async () => {
@@ -23,21 +26,16 @@ describe('WindowNativeBridgeHelper', () => {
         const isMaximized = vi.fn().mockResolvedValue(false);
         const innerSize = vi.fn().mockResolvedValue({ width: 1280, height: 720 });
         const outerPosition = vi.fn().mockResolvedValue({ x: 10, y: 20 });
-        const LogicalSize = vi.fn();
-
-        runtime.getWindowApi.mockReturnValue({
-            getCurrentWindow: () => ({
-                setSize,
-                center,
-                isMaximized,
-                innerSize,
-                outerPosition,
-            }),
-            LogicalSize,
+        runtime.getCurrentWindow.mockReturnValue({
+            setSize,
+            center,
+            isMaximized,
+            innerSize,
+            outerPosition,
         });
 
         await helper.setSizeAndCenter(800, 600);
-        expect(setSize).toHaveBeenCalled();
+        expect(setSize).toHaveBeenCalledWith({ width: 800, height: 600 });
         expect(center).toHaveBeenCalled();
 
         expect(await helper.isMaximized()).toBe(false);
@@ -49,7 +47,7 @@ describe('WindowNativeBridgeHelper', () => {
     });
 
     it('should gracefully no-op when runtime window api is unavailable', async () => {
-        runtime.getWindowApi.mockReturnValue(null);
+        isTauri.mockReturnValue(false);
 
         await expect(helper.setSizeAndCenter(800, 600)).resolves.toBeUndefined();
         await expect(helper.isMaximized()).resolves.toBe(false);

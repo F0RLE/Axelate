@@ -1,7 +1,9 @@
-type ChatImagePayload = {
-    mime: string;
-    data_base64: string;
-};
+import {
+    buildSafeImageDataUrl,
+    isSafeImageDataUrl,
+    normalizeImagePayload,
+    type ChatImagePayload,
+} from './ChatImagePayload';
 
 type ChatTranslate = (
     key: string,
@@ -23,6 +25,7 @@ type CreateChatImageGenerationMessageDeps = {
     isDestroyed: () => boolean;
     tracer: { error: (message: string, error?: unknown) => void };
     scrollToBottom: (sticky?: boolean) => void;
+    isNearBottom: () => boolean;
     appendRow: (row: HTMLElement) => void;
     createMessageBubble: (opts: Record<string, unknown>) => HTMLElement;
     appendMessageActions: (
@@ -31,9 +34,6 @@ type CreateChatImageGenerationMessageDeps = {
         image: ChatImagePayload | null,
     ) => { actionBar: HTMLElement; copyBtn: HTMLElement; editBtn: HTMLElement | null } | null;
     scheduleBubbleImageActions: (bubble: HTMLElement, actionBar: HTMLElement) => void;
-    opts: {
-        onCancel: () => void | Promise<void>;
-    };
 };
 
 type ImageGenerationProgress = {
@@ -42,6 +42,17 @@ type ImageGenerationProgress = {
     total: number | null;
     speed: string | null;
     elapsed: string | null;
+};
+
+const normalizeGeneratedCaption = (text: string, translate: ChatTranslate): string => {
+    const trimmed = text.trim();
+    const readyLabels = new Set([
+        translate('ui.chat.image_ready', 'Generated image').trim(),
+        'Generated image',
+        'Image ready',
+        'Изображение готово',
+    ]);
+    return readyLabels.has(trimmed) ? '' : trimmed;
 };
 
 const parseImageGenerationProgress = (text: string): ImageGenerationProgress => {
@@ -81,21 +92,36 @@ export function createChatImageGenerationMessage(
     deps: CreateChatImageGenerationMessageDeps,
 ): ImageGenerationMessageHandle {
     const row = document.createElement('div');
-    row.className = 'chat-row bot';
+    row.className = 'chat-row bot chat-row--generated-image';
 
-    const bubble = deps.createMessageBubble({ mediaFirst: true });
+    const bubble = deps.createMessageBubble({});
     bubble.classList.add('chat-image-generation');
 
     const media = document.createElement('div');
     media.className = 'chat-generated-media hidden';
 
     const image = document.createElement('img');
-    image.className = 'chat-img chat-generated-image';
+    image.className = 'chat-generated-image';
     image.alt = 'Generated preview';
     image.width = 512;
     image.height = 512;
     image.decoding = 'async';
     media.appendChild(image);
+
+    let keepPinnedAfterImageLoad = false;
+
+    const syncMediaSizeToImage = (): void => {
+        const naturalWidth = image.naturalWidth;
+        const naturalHeight = image.naturalHeight;
+        if (naturalWidth <= 0 || naturalHeight <= 0) return;
+
+        media.style.aspectRatio = `${String(naturalWidth)} / ${String(naturalHeight)}`;
+        if (keepPinnedAfterImageLoad) {
+            deps.scrollToBottom();
+            keepPinnedAfterImageLoad = false;
+        }
+    };
+    image.addEventListener('load', syncMediaSizeToImage);
 
     const status = document.createElement('div');
     status.className = 'chat-generated-status';
@@ -119,36 +145,8 @@ export function createChatImageGenerationMessage(
     const caption = document.createElement('div');
     caption.className = 'chat-generated-caption markdown-body hidden';
 
-    const controls = document.createElement('div');
-    controls.className = 'chat-generated-controls';
-
-    const cancelBtn = document.createElement('button');
-    cancelBtn.type = 'button';
-    cancelBtn.className = 'chat-generated-control is-cancel';
-    cancelBtn.textContent = deps.translate('ui.chat.image_cancel', 'Cancel');
-    cancelBtn.title = deps.translate('ui.chat.image_cancel', 'Cancel');
-    cancelBtn.setAttribute('aria-label', deps.translate('ui.chat.image_cancel', 'Cancel'));
-
-    const invokeControl = (button: HTMLButtonElement, action: () => void | Promise<void>): void => {
-        button.disabled = true;
-        Promise.resolve(action())
-            .catch((error: unknown) => {
-                deps.tracer.error('[ChatUI] Image generation control failed', error);
-            })
-            .finally(() => {
-                if (!deps.isDestroyed() && button.isConnected) {
-                    button.disabled = false;
-                }
-            });
-    };
-
-    cancelBtn.addEventListener('click', () => {
-        handle.cancel();
-        invokeControl(cancelBtn, deps.opts.onCancel);
-    });
-    controls.append(cancelBtn);
-    bubble.append(media, statusRow, progress, caption, controls);
-    row.appendChild(bubble);
+    bubble.append(statusRow, progress, caption);
+    row.append(media, bubble);
     deps.appendRow(row);
     deps.scrollToBottom();
 
@@ -159,6 +157,12 @@ export function createChatImageGenerationMessage(
     } | null = null;
     let finalImage: ChatImagePayload | null = null;
     let isCancelled = false;
+
+    const detachMediaFromBubble = (): void => {
+        if (media.parentElement === bubble) {
+            row.insertBefore(media, bubble);
+        }
+    };
 
     const setProgressFromStatus = (text: string): void => {
         const { elapsed, percent, speed, step, total } = parseImageGenerationProgress(text);
@@ -182,15 +186,18 @@ export function createChatImageGenerationMessage(
 
     const showPreview = (dataUrl: string): void => {
         if (dataUrl.trim() === '') return;
+        if (!isSafeImageDataUrl(dataUrl)) return;
         if (image.src === dataUrl) return;
+        const shouldKeepPinned = deps.isNearBottom();
+        keepPinnedAfterImageLoad = shouldKeepPinned;
+        detachMediaFromBubble();
+        if (media.style.aspectRatio === '') {
+            media.style.aspectRatio = '1 / 1';
+        }
         image.src = dataUrl;
+        syncMediaSizeToImage();
         media.classList.remove('hidden');
-        bubble.classList.add('chat-bubble--media');
-        deps.scrollToBottom(true);
-    };
-
-    const hideControls = (): void => {
-        controls.classList.add('hidden');
+        deps.scrollToBottom(!shouldKeepPinned);
     };
 
     const hideProgress = (): void => {
@@ -205,9 +212,10 @@ export function createChatImageGenerationMessage(
             return;
         }
         actions ??= deps.appendMessageActions(content, 'assistant', finalImage);
-        if (actions !== null && !bubble.contains(actions.actionBar)) {
-            bubble.appendChild(actions.actionBar);
-            deps.scheduleBubbleImageActions(bubble, actions.actionBar);
+        if (actions !== null && !row.contains(actions.actionBar)) {
+            const target = bubble.classList.contains('has-no-caption') ? media : bubble;
+            target.appendChild(actions.actionBar);
+            deps.scheduleBubbleImageActions(target, actions.actionBar);
         }
     };
 
@@ -223,9 +231,13 @@ export function createChatImageGenerationMessage(
         },
         finalize: (result: { text: string; images: ChatImagePayload[] }) => {
             if (isCancelled) return;
-            finalImage = result.images[0] ?? null;
-            if (finalImage !== null) {
-                showPreview(`data:${finalImage.mime};base64,${finalImage.data_base64}`);
+            const shouldKeepPinned = deps.isNearBottom();
+            finalImage =
+                result.images[0] === undefined ? null : normalizeImagePayload(result.images[0]);
+            const finalImageDataUrl =
+                finalImage === null ? null : buildSafeImageDataUrl(finalImage);
+            if (finalImageDataUrl !== null) {
+                showPreview(finalImageDataUrl);
             }
 
             status.textContent = deps.translate('ui.chat.image_ready', 'Generated image');
@@ -233,36 +245,40 @@ export function createChatImageGenerationMessage(
             progressSummary.textContent = '100%';
             progress.classList.add('is-complete');
 
-            caption.textContent = result.text;
-            caption.classList.toggle('hidden', result.text.trim() === '');
+            const captionText = normalizeGeneratedCaption(result.text, deps.translate);
+            caption.textContent = captionText;
+            const hasCaption = captionText !== '';
+            caption.classList.toggle('hidden', !hasCaption);
+            bubble.classList.toggle('has-caption', hasCaption);
+            bubble.classList.toggle('has-no-caption', !hasCaption);
 
+            row.classList.add('is-complete');
             bubble.classList.add('is-complete');
-            hideControls();
             ensureImageActions(result.text);
-            deps.scrollToBottom();
+            deps.scrollToBottom(!shouldKeepPinned);
         },
         fail: (message: string) => {
             if (isCancelled) {
                 return;
             }
+            const shouldKeepPinned = deps.isNearBottom();
             bubble.classList.add('chat-error');
             status.textContent = message;
             hideProgress();
             caption.classList.add('hidden');
-            hideControls();
-            deps.scrollToBottom();
+            deps.scrollToBottom(!shouldKeepPinned);
         },
         cancel: (
             message = deps.translate('ui.chat.image_cancelled', 'Image generation cancelled'),
         ) => {
+            const shouldKeepPinned = deps.isNearBottom();
             isCancelled = true;
             bubble.classList.remove('chat-error');
             bubble.classList.add('is-cancelled');
             status.textContent = message;
             hideProgress();
             caption.classList.add('hidden');
-            hideControls();
-            deps.scrollToBottom();
+            deps.scrollToBottom(!shouldKeepPinned);
         },
         discard: () => {
             row.remove();

@@ -36,11 +36,18 @@ pub struct DownloaderService {
     requests: Arc<Mutex<HashMap<String, DownloadRequest>>>,
 }
 
+/// Backend-owned request metadata retained so interrupted downloads can resume without frontend
+/// resending stale package details.
 #[derive(Clone, Debug)]
 pub struct DownloadRequest {
+    /// Source repository or package URL.
     pub repo_url: String,
+    /// Optional expected content hash for verification.
     pub expected_hash: Option<String>,
+    /// Optional download type hint, for example a release bundle.
     pub dl_type: Option<String>,
+    /// Optional explicit GitHub release and compute-target selection.
+    pub release_selection: Option<super::github_releases::ReleaseDownloadSelection>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -240,6 +247,7 @@ mod tests {
                 repo_url: "https://example.com/file.zip".to_string(),
                 expected_hash: Some("hash".to_string()),
                 dl_type: Some("release".to_string()),
+                release_selection: None,
             },
         );
 

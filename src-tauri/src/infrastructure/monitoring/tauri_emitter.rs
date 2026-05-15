@@ -19,6 +19,8 @@ impl TauriMonitoringEmitter {
 
 impl SystemStatsEmitter for TauriMonitoringEmitter {
     fn emit_stats(&self, stats: &SystemStats) {
-        let _ = self.app.emit("system_stats", stats.clone());
+        if let Err(error) = self.app.emit("system_stats", stats.clone()) {
+            tracing::warn!("Failed to emit system stats: {error}");
+        }
     }
 }

@@ -7,5 +7,5 @@ export type * from './types/chatTypes';
 export * from './ui/ChatUI';
 export * from './services/ChatService';
 // Services
-export { ChatController } from './chat';
+export { ChatController } from './ChatController';
 export { ChatFileHandler } from './services/ChatFileHandler';

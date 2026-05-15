@@ -19,8 +19,8 @@
       "contextWindow": 272000,
       "maxOutputTokens": 8192,
       "pricing": {
-        "input_per_1m": 8,
-        "output_per_1m": 15,
+        "input": 8,
+        "output": 15,
         "currency": "USD",
         "notes": "OpenRouter pricing"
       },
@@ -48,8 +48,8 @@
       "contextWindow": 400000,
       "maxOutputTokens": 8192,
       "pricing": {
-        "input_per_1m": 10,
-        "output_per_1m": 10,
+        "input": 10,
+        "output": 10,
         "currency": "USD",
         "notes": "OpenRouter pricing"
       },
@@ -77,8 +77,8 @@
       "contextWindow": 400000,
       "maxOutputTokens": 8192,
       "pricing": {
-        "input_per_1m": 2.5,
-        "output_per_1m": 2,
+        "input": 2.5,
+        "output": 2,
         "currency": "USD",
         "notes": "OpenRouter pricing"
       },

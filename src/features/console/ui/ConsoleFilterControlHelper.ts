@@ -3,6 +3,7 @@ type ConsoleFilterControlHelperDeps<Level extends string> = {
     allLevels: readonly Level[];
     registerCleanup: (cleanup: () => void) => void;
     onClearLogs: () => void;
+    onClearAllLogs: () => void;
     onCopyLogs: () => void;
     onOpenLogsFolder: () => void;
     onFiltersChanged: () => void;
@@ -54,11 +55,27 @@ export class ConsoleFilterControlHelper<Level extends string> {
                 this._deps.onFiltersChanged();
             }
         };
+        const handleContextMenu = (event: Event) => {
+            const target = event.target;
+            if (!(target instanceof HTMLElement)) {
+                return;
+            }
+
+            const clearButton = target.closest('#clear-logs-btn');
+            if (!(clearButton instanceof HTMLButtonElement)) {
+                return;
+            }
+
+            event.preventDefault();
+            this._handleClearAllButton(clearButton);
+        };
 
         controls.addEventListener('click', handleClick);
+        controls.addEventListener('contextmenu', handleContextMenu);
         this.syncButtons();
         this._deps.registerCleanup(() => {
             controls.removeEventListener('click', handleClick);
+            controls.removeEventListener('contextmenu', handleContextMenu);
             this._resetClearConfirmation();
         });
     }
@@ -124,7 +141,10 @@ export class ConsoleFilterControlHelper<Level extends string> {
     }
 
     private _hasMultiSelectModifier(event: Event): boolean {
-        return event instanceof MouseEvent && (event.ctrlKey === true || event.metaKey === true);
+        return (
+            event instanceof MouseEvent &&
+            (event.ctrlKey === true || event.metaKey === true || event.shiftKey === true)
+        );
     }
 
     private _handleClearButton(button: HTMLButtonElement): void {
@@ -134,10 +154,28 @@ export class ConsoleFilterControlHelper<Level extends string> {
             return;
         }
 
+        delete button.dataset['confirmingAll'];
         button.dataset['confirming'] = 'true';
         button.classList.add('confirming');
         button.setAttribute('aria-label', 'Confirm clear console logs');
         button.title = 'Click again to clear logs';
+        this._clearConfirmationTimeout = setTimeout(() => {
+            this._resetClearConfirmation();
+        }, 2200);
+    }
+
+    private _handleClearAllButton(button: HTMLButtonElement): void {
+        if (button.dataset['confirmingAll'] === 'true') {
+            this._resetClearConfirmation();
+            this._deps.onClearAllLogs();
+            return;
+        }
+
+        this._resetClearConfirmation();
+        button.dataset['confirmingAll'] = 'true';
+        button.classList.add('confirming');
+        button.setAttribute('aria-label', 'Confirm clear all console logs');
+        button.title = 'Right-click again to clear all logs';
         this._clearConfirmationTimeout = setTimeout(() => {
             this._resetClearConfirmation();
         }, 2200);
@@ -155,6 +193,7 @@ export class ConsoleFilterControlHelper<Level extends string> {
         }
 
         delete button.dataset['confirming'];
+        delete button.dataset['confirmingAll'];
         button.classList.remove('confirming');
         button.setAttribute('aria-label', 'Clear Console');
         button.title = 'Clear Console';

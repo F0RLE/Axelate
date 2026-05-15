@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModalManager } from './ModalManager';
 import { ModuleCardRenderer } from './ModuleCardRenderer';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
+import type { IntegrationImportAction } from './ModalManagerSupport';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { IApp } from '../../types/coreTypes';
@@ -84,7 +85,10 @@ describe('ModalManager lifecycle', () => {
         vi.useRealTimers();
     });
 
-    function createManager(onFilterChange?: (capability: 'text' | 'image') => string | null) {
+    function createManager(
+        onFilterChange?: (capability: 'text' | 'image') => string | null,
+        onIntegrationImport?: (action: IntegrationImportAction) => void,
+    ) {
         return new ModalManager(
             new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
             interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
@@ -94,6 +98,9 @@ describe('ModalManager lifecycle', () => {
             (_key, fallback) => fallback,
             tracer,
             navigation,
+            undefined,
+            undefined,
+            onIntegrationImport,
         );
     }
 
@@ -104,11 +111,63 @@ describe('ModalManager lifecycle', () => {
         modalManager.closeAppSelection();
         modalManager.openAppSelection('services', []);
 
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
+
         const closeSpy = vi.spyOn(modalManager, 'closeAppSelection');
         const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
         modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
 
         expect(closeSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should render integration import actions for empty services lists', () => {
+        const importSpy = vi.fn();
+        modalManager = createManager(undefined, importSpy);
+
+        modalManager.openAppSelection('services', []);
+
+        const importCard = document.querySelector<HTMLElement>('.integration-import-card');
+        expect(importCard).not.toBeNull();
+        if (importCard === null) throw new Error('integration import card missing');
+        expect(document.querySelector('.app-modal-empty-state')).toBeNull();
+
+        const actionButtons = document.querySelectorAll<HTMLButtonElement>(
+            '.integration-import-action-btn',
+        );
+        expect(actionButtons).toHaveLength(2);
+        const [openButton, linkButton] = Array.from(actionButtons);
+        if (openButton === undefined || linkButton === undefined) {
+            throw new Error('integration import buttons missing');
+        }
+
+        openButton.click();
+        linkButton.click();
+        const helpBadge = document.querySelector<HTMLButtonElement>('.integration-help-badge');
+        expect(helpBadge).not.toBeNull();
+        if (helpBadge === null) throw new Error('integration help badge missing');
+        expect(helpBadge.querySelector('.badge-icon')?.textContent).toBe('?');
+        helpBadge.click();
+        importCard.click();
+
+        expect(importSpy).toHaveBeenNthCalledWith(1, 'local');
+        expect(importSpy).toHaveBeenNthCalledWith(2, 'url');
+        expect(importSpy).toHaveBeenNthCalledWith(3, 'guide');
+        expect(importSpy).toHaveBeenNthCalledWith(4, 'archive');
+    });
+
+    it('should rerender services selection when refresh receives an empty app list', () => {
+        modalManager = createManager();
+
+        modalManager.openAppSelection('services', [
+            { id: 'parser', name: 'Parser', installed: true } as IApp,
+        ]);
+        expect(document.querySelector('[data-app-id="parser"]')).not.toBeNull();
+
+        modalManager.refreshCurrentSelection([], null);
+
+        expect(document.querySelector('[data-app-id="parser"]')).toBeNull();
+        expect(document.querySelector('.integration-import-card')).not.toBeNull();
+        expect(document.querySelector('.app-modal-empty-state')).toBeNull();
     });
 
     it('should switch filters without leaving transient list styles', () => {
@@ -192,11 +251,15 @@ describe('ModalManager lifecycle', () => {
             'svc-b',
         );
 
-        expect(document.querySelectorAll('#app-modal-list .app-card')).toHaveLength(1);
         expect(
-            (document.querySelector('#app-modal-list .app-card') as HTMLElement | null)?.dataset[
-                'appId'
-            ],
+            document.querySelectorAll('#app-modal-list .app-card:not(.integration-import-card)'),
+        ).toHaveLength(1);
+        expect(
+            (
+                document.querySelector(
+                    '#app-modal-list .app-card:not(.integration-import-card)',
+                ) as HTMLElement | null
+            )?.dataset['appId'],
         ).toBe('svc-b');
         expect(document.querySelector('#app-modal-list .modal-btn')?.textContent).toBe('Remove');
     });
@@ -280,7 +343,58 @@ describe('ModalManager lifecycle', () => {
         expect(navigation.pushBackAction).toHaveBeenCalledTimes(1);
     });
 
-    it('keeps keyboard focus inside the app selection modal', () => {
+    it('should suspend and resume app selection without exposing the dashboard', () => {
+        vi.stubGlobal(
+            'requestAnimationFrame',
+            vi.fn((callback: FrameRequestCallback) => {
+                callback(0);
+                return 0;
+            }),
+        );
+        modalManager = createManager();
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement;
+        const container = document.querySelector('.models-container') as HTMLElement;
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: true } as IApp],
+            'svc-a',
+        );
+
+        expect(modalManager.suspendAppSelection()).toBe(true);
+        expect(modal.open).toBe(true);
+        expect(modal.classList.contains('hidden')).toBe(false);
+        expect(modal.style.visibility).toBe('hidden');
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
+        expect(container.classList.contains('content-hidden')).toBe(true);
+
+        modalManager.resumeAppSelection();
+
+        expect(modal.style.visibility).toBe('');
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
+        expect(container.classList.contains('content-hidden')).toBe(true);
+        expect(navigation.removeBackAction).not.toHaveBeenCalledWith('app-selection-modal');
+    });
+
+    it('should clear page-hidden state after closing app selection', () => {
+        modalManager = createManager();
+
+        modalManager.openAppSelection(
+            'services',
+            [{ id: 'svc-a', name: 'Service A', installed: true } as IApp],
+            'svc-a',
+        );
+        expect(document.body.classList.contains('app-selection-open')).toBe(true);
+
+        modalManager.closeAppSelection();
+
+        expect(document.body.classList.contains('app-selection-open')).toBe(false);
+        expect(
+            document.querySelector('.models-container')?.classList.contains('content-hidden'),
+        ).toBe(false);
+    });
+
+    it('disables tab focus movement inside the app selection modal', () => {
         modalManager = createManager();
         const outsideButton = document.createElement('button');
         outsideButton.textContent = 'Outside';
@@ -298,16 +412,17 @@ describe('ModalManager lifecycle', () => {
             '#app-modal-list .module-selection-card-actions button',
         ) as HTMLButtonElement;
 
-        expect(document.activeElement).toBe(modalAction);
+        expect(document.activeElement).toBe(document.body);
 
         modalAction.focus();
-        modal.dispatchEvent(
-            new KeyboardEvent('keydown', {
-                key: 'Tab',
-                bubbles: true,
-            }),
-        );
-        expect(document.activeElement).toBe(closeButton);
+        const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            bubbles: true,
+            cancelable: true,
+        });
+        modal.dispatchEvent(tabEvent);
+        expect(tabEvent.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(document.body);
 
         outsideButton.focus();
         const focusInEvent = new FocusEvent('focusin', {
@@ -318,7 +433,8 @@ describe('ModalManager lifecycle', () => {
             value: outsideButton,
         });
         document.dispatchEvent(focusInEvent);
-        expect(document.activeElement).toBe(modalAction);
+        expect(document.activeElement).toBe(document.body);
+        expect(closeButton).toBeInstanceOf(HTMLButtonElement);
     });
 
     it('should preserve current selection when replaying modal back action', () => {
@@ -487,6 +603,30 @@ describe('ModalManager lifecycle', () => {
         ).toBe(true);
     });
 
+    it('should route modal progress updates for app ids that need selector escaping', () => {
+        modalManager = createManager();
+        const list = document.getElementById('app-modal-list') as HTMLElement;
+        const appId = 'svc"quoted\\id';
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        card.dataset['appId'] = appId;
+        const button = document.createElement('button');
+        button.className = 'download-btn';
+        button.innerHTML =
+            '<span class="download-label">Download</span><span class="download-pct"></span>';
+        card.appendChild(button);
+        list.appendChild(card);
+
+        globalThis.dispatchEvent(
+            new CustomEvent('download-progress-update', {
+                detail: { module_id: appId, status: 'downloading', progress: 0.42 },
+            }),
+        );
+
+        expect(button.classList.contains('downloading')).toBe(true);
+        expect(button.querySelector('.download-pct')?.textContent).toBe('42%');
+    });
+
     it('should cancel and start downloads through injected callbacks', async () => {
         const onDownloadRequest = vi.fn().mockResolvedValue(undefined);
         const onCancelDownloadRequest = vi.fn().mockResolvedValue(undefined);
@@ -527,6 +667,7 @@ describe('ModalManager lifecycle', () => {
         );
         expect(document.querySelector('.download-label')?.textContent).toBe('Download');
 
+        modalManager.openAppSelection('services', []);
         list.innerHTML = `<div class="app-card" data-app-id="svc"><button class="download-btn"></button></div>`;
         handleDownload.call(modalManager, {
             id: 'svc',
@@ -543,6 +684,48 @@ describe('ModalManager lifecycle', () => {
                 expectedHash: 'abc',
                 dlType: 'github',
             }),
+            'services',
+            expect.any(HTMLButtonElement),
+        );
+    });
+
+    it('should start modal downloads for app ids that need selector escaping', () => {
+        const onDownloadRequest = vi.fn().mockResolvedValue(undefined);
+        modalManager = new ModalManager(
+            new ModuleCardRenderer({ translate: (_key, fallback) => fallback, tracer }),
+            interactionSpy as unknown as (e: MouseEvent, app: IApp, category: string) => void,
+            () => null,
+            onDownloadRequest,
+            vi.fn().mockResolvedValue(undefined),
+            (_key, fallback) => fallback,
+            tracer,
+            navigation,
+        );
+
+        modalManager.openAppSelection('services', []);
+        const list = document.getElementById('app-modal-list') as HTMLElement;
+        const appId = 'svc"quoted\\id';
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        card.dataset['appId'] = appId;
+        const button = document.createElement('button');
+        button.className = 'download-btn';
+        card.appendChild(button);
+        list.appendChild(card);
+
+        const handleDownload = (modalManager as unknown as { _handleDownload: (app: IApp) => void })
+            ._handleDownload;
+        handleDownload.call(modalManager, {
+            id: appId,
+            name: 'Service',
+            installed: false,
+            repoUrl: 'https://example.com/service.zip',
+        } as IApp);
+
+        expect(onDownloadRequest).toHaveBeenCalledWith(
+            expect.objectContaining({ id: appId }),
+            'services',
+            button,
         );
     });
 

@@ -36,7 +36,7 @@ export function constructChatRequest(
         providerId: string;
         model: string;
         apiKey: string | null;
-        sessionId: string;
+        sessionId?: string;
         thinkingLevel?: RequestThinkingLevel;
         maxTokens?: number | undefined;
         webSearchEnabled?: boolean;
@@ -59,10 +59,14 @@ export function constructChatRequest(
                 thought_signature: message.thought_signature,
             },
         ],
-        session_id: sessionId,
         api_key: apiKey,
         attachments,
     };
+
+    const normalizedSessionId = sessionId?.trim();
+    if (normalizedSessionId !== undefined && normalizedSessionId !== '') {
+        request.session_id = normalizedSessionId;
+    }
 
     if (thinkingLevel !== undefined) {
         request.thinking_level = thinkingLevel;

@@ -175,6 +175,10 @@ export class ModuleSettingsCustomUiController {
         };
 
         const handleMessage = (event: MessageEvent) => {
+            if (event.source !== frame.contentWindow) {
+                return;
+            }
+
             if (!this._isHostPayload(event.data)) {
                 return;
             }

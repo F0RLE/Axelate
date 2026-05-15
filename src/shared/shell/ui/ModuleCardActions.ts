@@ -105,7 +105,7 @@ export function buildModuleCardActionButton(
         actionBtn.className = 'modal-btn modal-btn-primary';
         const i18nKey = 'ui.launcher.modules.modal.btn_select';
         actionBtn.dataset['i18n'] = i18nKey;
-        actionBtn.textContent = translate(i18nKey, 'Select');
+        actionBtn.textContent = translate(i18nKey, 'Launch');
     }
 
     actionBtn.onclick = (event) => {

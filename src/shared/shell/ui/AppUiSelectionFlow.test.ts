@@ -32,7 +32,7 @@ describe('AppUiSelectionFlow', () => {
         });
     });
 
-    it('selects integration module, persists it and launches it', () => {
+    it('selects integration module, persists it, and launches it', () => {
         const app = { id: 'svc', name: 'Service', type: 'local', icon: 'S', desc: 'Desc' } as IApp;
         getSelectedApp.mockReturnValue(undefined);
 
@@ -41,10 +41,10 @@ describe('AppUiSelectionFlow', () => {
         expect(updateModuleCard).toHaveBeenCalledWith('services', app);
         expect(updateModalSelection).toHaveBeenCalledWith('svc');
         expect(setSelectedModule).toHaveBeenCalled();
-        expect(launchSelectedApp).toHaveBeenCalled();
+        expect(launchSelectedApp).toHaveBeenCalledWith('services', app, 1, launchApp);
     });
 
-    it('selects AI module without launching it immediately', () => {
+    it('selects AI module and launches it through lifecycle guard', () => {
         const app = { id: 'text-model', name: 'Text Model', type: 'api', icon: 'T' } as IApp;
         getSelectedApp.mockReturnValue(undefined);
 
@@ -53,14 +53,13 @@ describe('AppUiSelectionFlow', () => {
         expect(updateModuleCard).toHaveBeenCalledWith('ai_text', app);
         expect(updateModalSelection).toHaveBeenCalledWith('text-model');
         expect(setSelectedModule).toHaveBeenCalled();
-        expect(launchSelectedApp).not.toHaveBeenCalled();
-        expect(launchApp).not.toHaveBeenCalled();
+        expect(launchSelectedApp).toHaveBeenCalledWith('ai_text', app, 1, launchApp);
     });
 
-    it('does not launch AI when switching the visible shared AI slot', () => {
-        const app = { id: 'image-model', name: 'Image Model', type: 'local' } as IApp;
+    it('does not launch an existing selection when switching visible state', () => {
+        const app = { id: 'svc', name: 'Service', type: 'local' } as IApp;
 
-        flow.activateExistingSelection('ai_image', app);
+        flow.activateExistingSelection('services', app);
 
         expect(launchApp).not.toHaveBeenCalled();
     });
@@ -74,6 +73,6 @@ describe('AppUiSelectionFlow', () => {
         expect(clearModuleCard).toHaveBeenCalledWith('services');
         expect(updateModalSelection).toHaveBeenCalledWith(null);
         expect(removeSelectedModule).toHaveBeenCalledWith('services');
-        expect(stopSelectedApp).toHaveBeenCalledWith(app);
+        expect(stopSelectedApp).toHaveBeenCalledWith(app, 'services');
     });
 });

@@ -2,8 +2,7 @@ type EngineFieldType = 'number' | 'text' | 'select' | 'password' | 'textarea';
 type EngineInputElement = HTMLInputElement | HTMLSelectElement | HTMLTextAreaElement;
 type EngineFieldValue = string | number | string[] | null | undefined;
 type ExtraArgsTranslate = (key: string, fallback: string) => string;
-type PerformanceTranslate = (key: string, fallback: string) => string;
-export type EngineModelFileKind = 'model' | 'vae' | 'llm';
+export type EngineModelFileKind = 'model';
 export type EngineModelFileFilter = { name: string; extensions: string[] };
 
 type EngineFieldInitialOptions = {
@@ -11,7 +10,7 @@ type EngineFieldInitialOptions = {
     isEngineConfig: boolean;
     defaultValue?: number | string;
     config: Record<string, EngineFieldValue> | null;
-    settings: Record<string, string | number | undefined>;
+    settings: Record<string, string | number | null | undefined>;
 };
 
 type EngineFieldParseOptions = {
@@ -42,7 +41,7 @@ export type EngineExtraArgsControl = {
     root: HTMLDivElement;
     syncTokens: () => void;
     getGroups: () => string[];
-    setGroups: (groups: string[]) => void;
+    setGroups: (groups: string[], options?: { emit?: boolean }) => void;
 };
 
 export type EngineExtraArgDoc = {
@@ -56,9 +55,95 @@ export type EngineExtraArgDocs = {
     items: EngineExtraArgDoc[];
 };
 
+type EngineExtraArgDocSource = {
+    flag: string;
+    fallback: string;
+};
+
+const SDCPP_EXTRA_ARG_DOCS: EngineExtraArgDocSource[] = [
+    { flag: '--threads 8', fallback: 'Set worker thread count.' },
+    { flag: '--vae path', fallback: 'Set VAE model path.' },
+    { flag: '--taesd path', fallback: 'Set TAESD model path.' },
+    { flag: '--control-net path', fallback: 'Set ControlNet model path.' },
+    { flag: '--embd-dir path', fallback: 'Load textual inversion embeddings.' },
+    { flag: '--stacked-id-embd-dir path', fallback: 'Load stacked ID embeddings.' },
+    { flag: '--input-id-images-dir path', fallback: 'Load input ID images.' },
+    { flag: '--lora-model-dir path', fallback: 'Directory containing LoRA models.' },
+    { flag: '--vae-decode-only', fallback: 'Decode a latent image with VAE only.' },
+    { flag: '--vae-encode-only', fallback: 'Encode an image into latent space.' },
+    { flag: '--control-image path', fallback: 'Image used by ControlNet.' },
+    { flag: '--output-video path', fallback: 'Set output video path.' },
+    { flag: '--init-img path', fallback: 'Use an initial image for img2img.' },
+    { flag: '--mask path', fallback: 'Use a mask image for inpainting.' },
+    { flag: '--ref-image path', fallback: 'Use a reference image.' },
+    { flag: '--clip_l path', fallback: 'Set CLIP-L model path.' },
+    { flag: '--clip_g path', fallback: 'Set CLIP-G model path.' },
+    { flag: '--clip_vision path', fallback: 'Set CLIP-Vision model path.' },
+    { flag: '--t5xxl path', fallback: 'Set T5-XXL model path.' },
+    { flag: '--llm path', fallback: 'Set LLM model path.' },
+    { flag: '--diffusion-fa', fallback: 'Enable flash attention for diffusion.' },
+    { flag: '--fa', fallback: 'Enable flash attention globally.' },
+    { flag: '--no-fallback', fallback: 'Disable fallback execution paths.' },
+    { flag: '--mmap', fallback: 'Memory-map model weights from disk.' },
+    { flag: '--no-mmap', fallback: 'Disable memory mapping.' },
+    { flag: '--offload-to-cpu', fallback: 'Offload model work to CPU.' },
+    { flag: '--clip-on-cpu', fallback: 'Run CLIP on CPU.' },
+    { flag: '--vae-on-cpu', fallback: 'Run VAE on CPU.' },
+    { flag: '--vae-tiling', fallback: 'Use tiled VAE decoding to reduce VRAM usage.' },
+    { flag: '--free-params-immediately', fallback: 'Free model params after load.' },
+    { flag: '--keep-clip-on-cpu', fallback: 'Keep CLIP weights on CPU.' },
+    { flag: '--keep-control-net-cpu', fallback: 'Keep ControlNet weights on CPU.' },
+    { flag: '--keep-vae-on-cpu', fallback: 'Keep VAE weights on CPU.' },
+    { flag: '--control-net-cpu', fallback: 'Run ControlNet on CPU when ControlNet is used.' },
+    { flag: '--canny', fallback: 'Apply Canny preprocessing for ControlNet.' },
+    { flag: '--color', fallback: 'Apply color preprocessing or colored output.' },
+    { flag: '--cpu-params', fallback: 'Keep parameters in regular CPU memory.' },
+    { flag: '--normalize-input', fallback: 'Normalize input image values.' },
+    { flag: '--upscale-model path', fallback: 'Set ESRGAN upscale model path.' },
+    { flag: '--upscale-repeats 2', fallback: 'Repeat upscaling passes.' },
+    { flag: '--type q8_0', fallback: 'Set weight precision/type.' },
+    { flag: '--rng cuda', fallback: 'Prefer CUDA RNG on NVIDIA systems.' },
+    { flag: '--prediction v', fallback: 'Set prediction mode.' },
+    { flag: '--guidance 3.5', fallback: 'Set guidance scale.' },
+    { flag: '--eta 0', fallback: 'Set DDIM eta.' },
+    { flag: '--pm-style-strength 20', fallback: 'Set PhotoMaker style strength.' },
+    { flag: '--control-strength 0.9', fallback: 'Set ControlNet strength.' },
+    { flag: '--video-frames 16', fallback: 'Set generated video frame count.' },
+    { flag: '--fps 24', fallback: 'Set generated video FPS.' },
+    { flag: '--motion-bucket-id 127', fallback: 'Set SVD motion bucket.' },
+    { flag: '--augmentation-level 0', fallback: 'Set SVD augmentation level.' },
+    { flag: '--sample-start 0', fallback: 'Set sample start value.' },
+    { flag: '--sample-end 1', fallback: 'Set sample end value.' },
+    { flag: '--slg-scale 0', fallback: 'Set skip-layer guidance scale.' },
+    { flag: '--skip-layers 7,8,9', fallback: 'Set skip-layer guidance layers.' },
+    { flag: '--skip-layer-start 0.01', fallback: 'Set skip-layer start ratio.' },
+    { flag: '--skip-layer-end 0.2', fallback: 'Set skip-layer end ratio.' },
+    { flag: '--vae-tile-size 32x32', fallback: 'Set VAE tile size.' },
+    { flag: '--vae-tile-overlap 0.5', fallback: 'Set VAE tile overlap.' },
+    { flag: '--vae-relative-tile-size 0.5x0.5', fallback: 'Set relative VAE tile size.' },
+    { flag: '--verbose', fallback: 'Enable verbose logging.' },
+    { flag: '--quiet', fallback: 'Reduce logging output.' },
+    { flag: '--chroma-disable-ds', fallback: 'Disable Chroma downsampling.' },
+    { flag: '--chroma-enable-t5-mask', fallback: 'Enable Chroma T5 mask.' },
+    { flag: '--chroma-t5-mask-pad 1', fallback: 'Set Chroma T5 mask padding.' },
+    { flag: '--flow-shift 3', fallback: 'Set flow shift value.' },
+    { flag: '--timestep-shift 250', fallback: 'Set shifted timestep value.' },
+    { flag: '--diffusion-cpu-params', fallback: 'Keep diffusion params on CPU.' },
+    { flag: '--vae-cpu-params', fallback: 'Keep VAE params on CPU.' },
+    { flag: '--clip-cpu-params', fallback: 'Keep CLIP params on CPU.' },
+    { flag: '--control-net-cpu-params', fallback: 'Keep ControlNet params on CPU.' },
+    { flag: '--rng std_default', fallback: 'Use standard RNG.' },
+    { flag: '--sampler-rng cuda', fallback: 'Use CUDA RNG specifically for the sampler.' },
+    { flag: '--load-id-weights path', fallback: 'Load ID weights file.' },
+    { flag: '--photo-maker path', fallback: 'Set PhotoMaker model path.' },
+    { flag: '--photo-maker-vae path', fallback: 'Set PhotoMaker VAE path.' },
+    { flag: '--style-strength 20', fallback: 'Set PhotoMaker style strength.' },
+    { flag: '--taesd-decode', fallback: 'Use TAESD decoder.' },
+    { flag: '--taesd-encode', fallback: 'Use TAESD encoder.' },
+];
+
 export type EngineRecommendedExtraArgsContext = {
     config?: {
-        compute_mode?: 'gpu' | 'cpu';
         extra_args?: string[];
     } | null;
     currentGroups?: string[];
@@ -171,64 +256,6 @@ export function syncEnginePromptTextareaHeights(
     requestAnimationFrameFn(sync);
 }
 
-export function renderEnginePerformanceModeField(
-    container: HTMLElement,
-    appId: string,
-    settings: Record<string, string | boolean | undefined>,
-    translate: PerformanceTranslate,
-    debouncedSave: (key: string, value: string | number | boolean | null) => void,
-): void {
-    const row = document.createElement('div');
-    row.className = 'local-engine-field-row';
-
-    const labelRow = document.createElement('div');
-    labelRow.className = 'local-engine-label-row';
-
-    const label = document.createElement('label');
-    label.textContent = translate('ui.settings.engine.performance_mode', 'Performance Mode');
-    label.className = 'local-engine-field-label';
-    labelRow.appendChild(label);
-
-    const inputWrapper = document.createElement('div');
-    inputWrapper.className = 'local-engine-performance-toggle';
-
-    const statusLabel = document.createElement('span');
-    statusLabel.className = 'local-engine-performance-toggle-status local-engine-perf-status';
-
-    const switchLabel = document.createElement('label');
-    switchLabel.className = 'switch';
-    switchLabel.style.pointerEvents = 'none';
-
-    const checkbox = document.createElement('input');
-    checkbox.type = 'checkbox';
-
-    const slider = document.createElement('span');
-    slider.className = 'slider';
-
-    switchLabel.append(checkbox, slider);
-    inputWrapper.append(statusLabel, switchLabel);
-
-    let enabled = String(settings[`${appId}_performance_mode`] ?? 'false').toLowerCase() === 'true';
-
-    const sync = () => {
-        statusLabel.textContent = enabled
-            ? translate('ui.common.enabled', 'Enabled')
-            : translate('ui.common.disabled', 'Disabled');
-        inputWrapper.classList.toggle('is-enabled', enabled);
-        checkbox.checked = enabled;
-    };
-    sync();
-
-    inputWrapper.addEventListener('click', () => {
-        enabled = !enabled;
-        sync();
-        debouncedSave(`${appId}_performance_mode`, enabled);
-    });
-
-    row.append(labelRow, inputWrapper);
-    container.appendChild(row);
-}
-
 export function getEngineModelFileName(modelPath: string, notSelectedLabel: string): string {
     if (modelPath.trim() === '') {
         return notSelectedLabel;
@@ -239,17 +266,9 @@ export function getEngineModelFileName(modelPath: string, notSelectedLabel: stri
 }
 
 export function getEngineModelFileFilters(
-    fileKind: EngineModelFileKind,
+    _fileKind: EngineModelFileKind,
     isImage: boolean,
 ): EngineModelFileFilter[] {
-    if (fileKind === 'vae') {
-        return [{ name: 'SafeTensors', extensions: ['safetensors'] }];
-    }
-
-    if (fileKind === 'llm') {
-        return [{ name: 'GGUF Models', extensions: ['gguf'] }];
-    }
-
     if (isImage) {
         return [
             { name: 'SD Models', extensions: ['gguf', 'safetensors'] },
@@ -265,18 +284,25 @@ export function createEngineExtraArgsField(translate: ExtraArgsTranslate): Engin
     const root = document.createElement('div');
     root.className = 'local-engine-tags-editor';
 
-    const hiddenInput = document.createElement('input');
-    hiddenInput.type = 'hidden';
-    hiddenInput.className = 'local-engine-tags-value';
+    const input = document.createElement('input');
+    input.type = 'hidden';
+    input.className = 'local-engine-extra-args-input local-engine-extra-args-value';
 
     const chips = document.createElement('div');
-    chips.className = 'local-engine-tags-chips';
+    chips.className = 'local-engine-extra-args-chips';
+
+    const draftInput = document.createElement('input');
+    draftInput.type = 'text';
+    draftInput.className = 'local-engine-extra-args-draft';
+    draftInput.placeholder = translate(
+        'ui.settings.engine.extra_args.placeholder',
+        'Add startup flags',
+    );
+
+    let groups: string[] = [];
 
     const parseGroups = (raw: string): string[] => {
-        const tokens = raw
-            .split(/\s+/)
-            .map((token) => token.trim())
-            .filter((token) => token !== '');
+        const tokens = tokenizeEngineExtraArgs(raw);
         const groups: string[] = [];
 
         for (let index = 0; index < tokens.length; index += 1) {
@@ -304,104 +330,132 @@ export function createEngineExtraArgsField(translate: ExtraArgsTranslate): Engin
 
     const flattenGroups = (groups: string[]): string =>
         groups
-            .flatMap((group) =>
-                group
-                    .split(/\s+/)
-                    .map((token) => token.trim())
-                    .filter((token) => token !== ''),
-            )
+            .flatMap((group) => tokenizeEngineExtraArgs(group))
+            .map(formatEngineExtraArgToken)
             .join(' ');
 
-    const getGroups = (): string[] => parseGroups(hiddenInput.value);
+    const commitHiddenValue = () => {
+        input.value = flattenGroups(groups);
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
 
-    const syncTokens = () => {
-        const groups = getGroups();
+    const renderChips = () => {
         chips.replaceChildren(
             ...groups.map((group, index) => {
-                const chip = document.createElement('button');
-                chip.type = 'button';
-                chip.className = 'local-engine-tag-chip';
-                chip.title = translate('ui.settings.engine.extra_args.remove', 'Remove');
-                chip.dataset['groupIndex'] = String(index);
+                const chip = document.createElement('span');
+                chip.className = 'local-engine-extra-arg-chip';
 
-                const label = document.createElement('span');
-                label.className = 'local-engine-tag-chip-label';
-                label.textContent = group;
+                const edit = document.createElement('button');
+                edit.type = 'button';
+                edit.className = 'local-engine-extra-arg-edit';
+                edit.textContent = group;
+                edit.title = group;
+                edit.addEventListener('click', () => {
+                    groups.splice(index, 1);
+                    draftInput.value = group;
+                    renderChips();
+                    commitHiddenValue();
+                    draftInput.focus();
+                });
 
-                const remove = document.createElement('span');
-                remove.className = 'local-engine-tag-chip-remove';
-                remove.textContent = 'x';
+                const remove = document.createElement('button');
+                remove.type = 'button';
+                remove.className = 'local-engine-extra-arg-remove';
+                remove.textContent = '×';
+                remove.setAttribute(
+                    'aria-label',
+                    translate('ui.settings.engine.extra_args.remove', 'Remove'),
+                );
+                remove.addEventListener('click', () => {
+                    groups.splice(index, 1);
+                    renderChips();
+                    commitHiddenValue();
+                });
 
-                chip.append(label, remove);
+                chip.append(edit, remove);
                 return chip;
             }),
         );
     };
 
-    const setGroups = (groups: string[]) => {
-        hiddenInput.value = flattenGroups(groups);
-        syncTokens();
-        hiddenInput.dispatchEvent(new Event('input', { bubbles: true }));
-        hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+    const commitDraft = () => {
+        const nextGroups = parseGroups(draftInput.value);
+        if (nextGroups.length === 0) {
+            return;
+        }
+
+        const seen = new Set(groups);
+        nextGroups.forEach((group) => {
+            if (!seen.has(group)) {
+                seen.add(group);
+                groups.push(group);
+            }
+        });
+        draftInput.value = '';
+        renderChips();
+        commitHiddenValue();
     };
 
-    root.append(chips, hiddenInput);
-    chips.addEventListener('click', (event) => {
-        const target = event.target;
-        if (!(target instanceof HTMLElement)) {
+    const getGroups = (): string[] => [...groups, ...parseGroups(draftInput.value)];
+
+    const syncTokens = () => {
+        groups = parseGroups(input.value);
+        draftInput.value = '';
+        renderChips();
+        input.value = flattenGroups(groups);
+    };
+
+    const setGroups = (newGroups: string[], options: { emit?: boolean } = {}) => {
+        input.value = flattenGroups(newGroups);
+        syncTokens();
+        if (options.emit === false) {
             return;
         }
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        input.dispatchEvent(new Event('change', { bubbles: true }));
+    };
 
-        const chip = target.closest<HTMLButtonElement>('.local-engine-tag-chip');
-        if (!(chip instanceof HTMLButtonElement)) {
-            return;
+    draftInput.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ',') {
+            event.preventDefault();
+            commitDraft();
         }
-
-        const groupIndex = Number(chip.dataset['groupIndex']);
-        if (Number.isNaN(groupIndex)) {
-            return;
+        if (event.key === 'Backspace' && draftInput.value === '' && groups.length > 0) {
+            draftInput.value = groups.pop() ?? '';
+            renderChips();
+            commitHiddenValue();
         }
+    });
+    draftInput.addEventListener('blur', commitDraft);
 
-        const updated = getGroups().filter((_, index) => index !== groupIndex);
-        setGroups(updated);
+    root.addEventListener('click', (event) => {
+        if (event.target === root || event.target === chips) {
+            draftInput.focus();
+        }
     });
 
-    return { input: hiddenInput, root, syncTokens, getGroups, setGroups };
+    root.append(input, chips, draftInput);
+
+    return { input, root, syncTokens, getGroups, setGroups };
 }
 
-export function getEngineExtraArgDocs(appId: string): EngineExtraArgDocs {
-    if (appId === 'sdcpp' || appId === 'stable-diffusion') {
+export function getEngineExtraArgDocs(
+    appId: string,
+    translate: ExtraArgsTranslate = (_key, fallback) => fallback,
+): EngineExtraArgDocs {
+    if (appId === 'sdcpp') {
         return {
-            title: 'Manual sd.cpp flags',
-            subtitle:
-                'These go into Extra Arguments as startup flags. Qwen Image companion files are auto-detected beside the selected model.',
-            items: [
-                { flag: '--fa', description: 'Enable flash attention globally.' },
-                {
-                    flag: '--vae-tiling',
-                    description: 'Use tiled VAE decoding to reduce VRAM usage.',
-                },
-                {
-                    flag: '--diffusion-fa',
-                    description: 'Enable flash attention for the diffusion model only.',
-                },
-                { flag: '--mmap', description: 'Memory-map model weights from disk.' },
-                {
-                    flag: '--offload-to-cpu',
-                    description: 'Keep more weights in RAM to reduce VRAM pressure.',
-                },
-                { flag: '--clip-on-cpu', description: 'Run CLIP on CPU for low-VRAM setups.' },
-                { flag: '--vae-on-cpu', description: 'Run VAE on CPU for low-VRAM setups.' },
-                {
-                    flag: '--control-net-cpu',
-                    description: 'Run ControlNet on CPU when ControlNet is used.',
-                },
-                { flag: '--rng cuda', description: 'Prefer CUDA RNG on NVIDIA systems.' },
-                {
-                    flag: '--sampler-rng cuda',
-                    description: 'Use CUDA RNG specifically for the sampler.',
-                },
-            ],
+            title: translate('ui.settings.engine.sdcpp_flags.title', 'Manual sd.cpp flags'),
+            subtitle: translate(
+                'ui.settings.engine.sdcpp_flags.subtitle',
+                'Startup flags appended to sd-server.',
+            ),
+            items: buildEngineExtraArgDocs(
+                'ui.settings.engine.sdcpp_flag',
+                SDCPP_EXTRA_ARG_DOCS,
+                translate,
+            ),
         };
     }
 
@@ -419,28 +473,36 @@ export function getEngineExtraArgDocs(appId: string): EngineExtraArgDocs {
     };
 }
 
+function buildEngineExtraArgDocs(
+    prefix: string,
+    docs: EngineExtraArgDocSource[],
+    translate: ExtraArgsTranslate,
+): EngineExtraArgDoc[] {
+    return [...docs]
+        .sort((left, right) => left.flag.localeCompare(right.flag, 'en', { sensitivity: 'base' }))
+        .map((doc) => ({
+            flag: doc.flag,
+            description: translate(`${prefix}.${getEngineExtraArgKey(doc.flag)}`, doc.fallback),
+        }));
+}
+
+function getEngineExtraArgKey(flag: string): string {
+    return flag
+        .toLowerCase()
+        .replace(/^--/, '')
+        .replace(/[^a-z0-9]+/g, '_')
+        .replace(/^_+|_+$/g, '');
+}
+
 export function getEngineRecommendedExtraArgs(
     appId: string,
     context: EngineRecommendedExtraArgsContext = {},
 ): string[] {
-    if (appId !== 'sdcpp' && appId !== 'stable-diffusion') {
+    if (appId !== 'sdcpp') {
         return ['--flash-attn'];
     }
 
-    const existing = new Set([
-        ...(context.config?.extra_args ?? []),
-        ...(context.currentGroups ?? []),
-    ]);
-    const cpuPreferenceFlags = ['--offload-to-cpu', '--clip-on-cpu', '--vae-on-cpu'];
-    const prefersCpuOrLowVram =
-        context.config?.compute_mode === 'cpu' ||
-        cpuPreferenceFlags.some((flag) => existing.has(flag));
-
-    if (prefersCpuOrLowVram) {
-        return ['--mmap', '--vae-tiling', '--offload-to-cpu', '--clip-on-cpu', '--vae-on-cpu'];
-    }
-
-    const recommended = ['--diffusion-fa', '--fa', '--mmap'];
+    const recommended = ['--diffusion-fa', '--mmap'];
     if (isHighResolutionImageGeneration(appId, context.settings)) {
         recommended.push('--vae-tiling');
     }
@@ -497,12 +559,65 @@ export function formatEngineFieldSaveValue(
 ): string | number | string[] | null {
     if (key === 'extra_args') {
         if (typeof value === 'string') {
-            return value.trim() ? value.trim().split(/\s+/) : [];
+            return tokenizeEngineExtraArgs(value);
         }
         return [];
     }
 
     return value;
+}
+
+export function tokenizeEngineExtraArgs(raw: string): string[] {
+    const tokens: string[] = [];
+    let current = '';
+    let quote: '"' | "'" | null = null;
+
+    for (let index = 0; index < raw.length; index += 1) {
+        const char = raw[index] ?? '';
+        if (quote !== null && char === '\\') {
+            const nextChar = raw[index + 1];
+            if (nextChar === quote || nextChar === '\\') {
+                current += nextChar;
+                index += 1;
+            } else {
+                current += char;
+            }
+            continue;
+        }
+
+        if ((char === '"' || char === "'") && (quote === null || quote === char)) {
+            quote = quote === null ? char : null;
+            continue;
+        }
+
+        if (quote === null && /\s/.test(char)) {
+            if (current !== '') {
+                tokens.push(current);
+                current = '';
+            }
+            continue;
+        }
+
+        current += char;
+    }
+
+    if (current !== '') {
+        tokens.push(current);
+    }
+
+    return tokens;
+}
+
+function formatEngineExtraArgToken(token: string): string {
+    if (token === '') {
+        return '""';
+    }
+
+    if (!/\s|["']/.test(token)) {
+        return token;
+    }
+
+    return `"${token.replace(/\\/g, '\\\\').replace(/"/g, '\\"')}"`;
 }
 
 function setInitialEngineConfigValue(
@@ -532,10 +647,11 @@ function setInitialEngineSettingsValue(
     input: EngineInputElement,
     key: string,
     defaultValue: number | string | undefined,
-    settings: Record<string, string | number | undefined>,
+    settings: Record<string, string | number | null | undefined>,
 ): void {
     const value = settings[key];
-    if (value !== undefined) {
+    // Some persisted settings stored the literal "null"; keep empty defaults empty.
+    if (value !== undefined && value !== null && !(value === 'null' && defaultValue === '')) {
         input.value = String(value);
         return;
     }

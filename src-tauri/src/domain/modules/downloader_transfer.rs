@@ -23,11 +23,7 @@ pub(super) async fn resolve_download_url(
     client: &reqwest::Client,
     download_url: &str,
 ) -> Result<String, AppError> {
-    if download_url.contains("github.com")
-        && !Path::new(download_url)
-            .extension()
-            .is_some_and(|ext| ext.eq_ignore_ascii_case("zip"))
-    {
+    if is_github_repository_reference(download_url) {
         let base_url = download_url.trim_end_matches(".git").trim_end_matches('/');
         let main_url = format!("{base_url}/archive/refs/heads/main.zip");
         let master_url = format!("{base_url}/archive/refs/heads/master.zip");
@@ -46,29 +42,54 @@ pub(super) async fn resolve_download_url(
             return Ok(main_url);
         }
 
-        if response.status() == reqwest::StatusCode::NOT_FOUND {
-            tracing::info!("main branch not found, trying master: {master_url}");
-            let response_master =
-                client
-                    .get(&master_url)
-                    .send()
-                    .await
-                    .map_err(|error| AppError::External {
-                        request_id: None,
-                        message: format!("Failed to connect: {error}"),
-                    })?;
+        let main_status = response.status();
+        tracing::info!("main branch probe returned {main_status}, trying master: {master_url}");
+        let response_master =
+            client
+                .get(&master_url)
+                .send()
+                .await
+                .map_err(|error| AppError::External {
+                    request_id: None,
+                    message: format!("Failed to connect: {error}"),
+                })?;
 
-            if response_master.status().is_success() {
-                return Ok(master_url);
-            }
+        if response_master.status().is_success() {
+            return Ok(master_url);
         }
 
-        return Err(AppError::NotFound(format!(
-            "Module source not found. Tried both 'main' and 'master' branches at {base_url}"
-        )));
+        let master_status = response_master.status();
+        return Err(AppError::External {
+            request_id: None,
+            message: format!(
+                "Module source probes failed at {base_url}: main.zip returned {main_status}, master.zip returned {master_status}"
+            ),
+        });
     }
 
     Ok(download_url.to_string())
+}
+
+fn is_github_repository_reference(download_url: &str) -> bool {
+    let Ok(url) = reqwest::Url::parse(download_url.trim()) else {
+        return false;
+    };
+    if !matches!(url.host_str(), Some("github.com" | "www.github.com")) {
+        return false;
+    }
+
+    let Some(segments) = url.path_segments() else {
+        return false;
+    };
+    let segments = segments
+        .filter(|segment| !segment.is_empty())
+        .collect::<Vec<_>>();
+    let [owner, repo] = segments.as_slice() else {
+        return false;
+    };
+
+    let repo = repo.trim_end_matches(".git");
+    !owner.is_empty() && !repo.is_empty()
 }
 
 pub(super) async fn clone_repository_into(
@@ -130,38 +151,43 @@ pub(super) async fn clone_repository_into(
     });
 
     let git_dir = extraction_path.join(".git");
-    if git_dir.exists() {
-        let _ = tokio::fs::remove_dir_all(git_dir).await;
+    match tokio::fs::remove_dir_all(&git_dir).await {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            return Err(AppError::Io(format!(
+                "Failed to remove git metadata directory '{}': {error}",
+                git_dir.display()
+            )));
+        }
     }
 
     Ok(())
 }
 
 pub(super) fn build_client(module_id: &str) -> Result<reqwest::Client, AppError> {
-    let mut client_builder = reqwest::Client::builder()
-        .user_agent("Axelate/1.0.0 (Tauri; Windows)")
-        .timeout(std::time::Duration::from_secs(600));
+    tracing::debug!(module_id = module_id, "Building module download client");
+    construct_client_builder()
+        .build()
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!("Client error: {error}"),
+        })
+}
 
-    if let Some(license) = crate::domain::license::storage::load_license()
-        && !license.key.is_empty()
-    {
-        tracing::info!("Injecting license key for module download: {module_id}");
-        let mut headers = reqwest::header::HeaderMap::new();
-        if let Ok(auth_val) =
-            reqwest::header::HeaderValue::from_str(&format!("Bearer {}", license.key))
-        {
-            headers.insert(reqwest::header::AUTHORIZATION, auth_val);
-        }
-        if let Ok(lic_val) = reqwest::header::HeaderValue::from_str(&license.key) {
-            headers.insert("X-Axelate-License", lic_val);
-        }
-        client_builder = client_builder.default_headers(headers);
-    }
+fn construct_client_builder() -> reqwest::ClientBuilder {
+    reqwest::Client::builder()
+        .user_agent(format!("Axelate/1.0.0 (Tauri; {})", std::env::consts::OS))
+        .timeout(std::time::Duration::from_mins(10))
+}
 
-    client_builder.build().map_err(|error| AppError::External {
-        request_id: None,
-        message: format!("Client error: {error}"),
-    })
+pub(super) fn build_public_client() -> Result<reqwest::Client, AppError> {
+    construct_client_builder()
+        .build()
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!("Client error: {error}"),
+        })
 }
 
 pub(super) struct DownloadTask<'a> {
@@ -185,14 +211,42 @@ pub(super) async fn download_file(
     };
     fs::create_dir_all(&*TEMP_DIR).map_err(|error| AppError::Io(error.to_string()))?;
 
-    let resume_metadata = load_partial_metadata(task.dest_path)
-        .await
-        .filter(|metadata| metadata.url == task.url);
-    let existing_bytes = tokio::fs::metadata(task.dest_path)
+    let loaded_resume_metadata = match load_partial_metadata(task.dest_path).await {
+        Ok(metadata) => metadata,
+        Err(AppError::Serialization(error)) => {
+            tracing::warn!(
+                module_id = task.module_id,
+                path = %task.dest_path.display(),
+                "Ignoring corrupt partial download metadata: {error}"
+            );
+            remove_partial_metadata(task.dest_path).await?;
+            None
+        }
+        Err(error) => return Err(error),
+    };
+    let resume_metadata = loaded_resume_metadata.filter(|metadata| metadata.url == task.url);
+    let mut existing_bytes = tokio::fs::metadata(task.dest_path)
         .await
         .ok()
         .filter(std::fs::Metadata::is_file)
         .map_or(0, |metadata| metadata.len());
+    if existing_bytes > 0 && resume_metadata.is_none() {
+        tracing::warn!(
+            module_id = task.module_id,
+            path = %task.dest_path.display(),
+            "Discarding partial download without matching resume metadata"
+        );
+        remove_partial_metadata(task.dest_path).await?;
+        if let Err(error) = tokio::fs::remove_file(task.dest_path).await
+            && error.kind() != std::io::ErrorKind::NotFound
+        {
+            return Err(AppError::Io(format!(
+                "Failed to remove stale partial download '{}': {error}",
+                task.dest_path.display()
+            )));
+        }
+        existing_bytes = 0;
+    }
 
     let mut request = task.client.get(task.url);
     if existing_bytes > 0 {
@@ -220,7 +274,7 @@ pub(super) async fn download_file(
             });
         }
 
-        remove_partial_metadata(task.dest_path).await;
+        remove_partial_metadata(task.dest_path).await?;
         response = task
             .client
             .get(task.url)
@@ -343,10 +397,41 @@ pub(super) async fn download_file(
     file.flush()
         .await
         .map_err(|error| AppError::Io(error.to_string()))?;
+    file.sync_all()
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
 
     Ok(DownloadResult {
         asset_downloaded: bytes_downloaded,
         snapshot,
         interruption: None,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::is_github_repository_reference;
+
+    #[test]
+    fn github_repository_reference_accepts_repo_roots_only() {
+        assert!(is_github_repository_reference(
+            "https://github.com/F0RLE/Axelate-telegram-parser"
+        ));
+        assert!(is_github_repository_reference(
+            "https://github.com/F0RLE/Axelate-telegram-parser.git"
+        ));
+    }
+
+    #[test]
+    fn github_repository_reference_rejects_direct_assets_and_archive_urls() {
+        for url in [
+            "https://github.com/F0RLE/Axelate-telegram-parser/archive/refs/heads/main.zip",
+            "https://github.com/F0RLE/Axelate-telegram-parser/releases/download/v1/parser.7z",
+            "https://github.com/F0RLE/Axelate-telegram-parser/releases/download/v1/parser.tar.gz",
+            "https://github.com/F0RLE/Axelate-telegram-parser/raw/main/parser.zip",
+            "https://example.com/F0RLE/Axelate-telegram-parser",
+        ] {
+            assert!(!is_github_repository_reference(url), "{url}");
+        }
+    }
 }

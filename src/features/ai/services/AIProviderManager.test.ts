@@ -34,7 +34,6 @@ function createMockCore(
             getCatalog: vi.fn().mockReturnValue({ ai: [] }),
         },
         aiSettings: {
-            setAiSessionId: vi.fn(),
             setSelectedAIModel: vi.fn(),
             getSelectedAIModel: vi.fn().mockReturnValue(undefined),
             getThinkingLevel: vi.fn().mockReturnValue('auto'),
@@ -71,7 +70,6 @@ describe('AIProviderManager', () => {
                 'ai_session_id',
                 expect.any(String),
             );
-            expect(mockCore.aiSettings.setAiSessionId).toHaveBeenCalledWith(expect.any(String));
             expect(manager.sessionId).not.toBe('default');
         });
 
@@ -83,6 +81,50 @@ describe('AIProviderManager', () => {
 
             expect(mockCore.tauriProvider.saveSecureKey).not.toHaveBeenCalled();
             expect(manager.sessionId).toBe('existing-session-abc');
+        });
+
+        it('should generate session ID when secure storage is empty', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(null));
+            manager.setCore(mockCore);
+
+            await manager.init();
+
+            expect(mockCore.tauriProvider.saveSecureKey).toHaveBeenCalledWith(
+                'ai_session_id',
+                manager.sessionId,
+            );
+            expect(manager.sessionId).not.toBe('default');
+        });
+
+        it('should generate session ID when secure read fails', async () => {
+            const mockCore = createMockCore(() => Promise.reject(new Error('secure read failed')));
+            manager.setCore(mockCore);
+
+            await manager.init();
+
+            expect(mockCore.tauriProvider.getSecureKey).toHaveBeenCalledTimes(1);
+            expect(mockCore.tauriProvider.saveSecureKey).toHaveBeenCalledWith(
+                'ai_session_id',
+                manager.sessionId,
+            );
+            expect(manager.sessionId).not.toBe('default');
+            expect(tracer.error).toHaveBeenCalledWith(
+                '[AIProviderManager] Failed to read ai_session_id:',
+                expect.any(Error),
+            );
+        });
+
+        it('should continue with generated session ID when secure persistence fails', async () => {
+            const mockCore = createMockCore(() => Promise.resolve(null));
+            vi.mocked(mockCore.tauriProvider.saveSecureKey ?? vi.fn()).mockRejectedValueOnce(
+                new Error('secure unavailable'),
+            );
+            manager.setCore(mockCore);
+
+            await expect(manager.init()).resolves.toBeUndefined();
+
+            expect(manager.sessionId).not.toBe('default');
+            expect(tracer.error).toHaveBeenCalled();
         });
 
         it('should work without core set (generates UUID session)', async () => {
@@ -102,6 +144,25 @@ describe('AIProviderManager', () => {
 
             const result = await manager.startProvider('gemini');
             expect(result).toBe(true);
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledTimes(2);
+        });
+
+        it('should deactivate a cloud provider when its key was removed before restart', async () => {
+            let hasKey = true;
+            const mockCore = createMockCore(
+                () => Promise.resolve(hasKey ? 'sk-key' : null),
+                () => Promise.resolve(hasKey),
+            );
+            manager.setCore(mockCore);
+            await manager.startProvider('gemini');
+
+            hasKey = false;
+            const result = await manager.startProvider('gemini');
+
+            expect(result).toBe(false);
+            expect(manager.activeProviderId).toBeNull();
+            expect(manager.apiKey).toBeNull();
+            expect(manager.isActive()).toBe(false);
         });
 
         it('should stop previous provider when switching', async () => {
@@ -216,6 +277,7 @@ describe('AIProviderManager', () => {
             await manager.refreshActiveApiKey();
 
             expect(manager.apiKey).toBeNull();
+            expect(manager.activeProviderId).toBeNull();
             expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenLastCalledWith(
                 'openrouter_api_key',
             );
@@ -248,7 +310,16 @@ describe('AIProviderManager', () => {
             expect(manager.maxOutputTokens).toBeUndefined();
         });
 
-        it('getProviderDisplayName should return known names', () => {
+        it('getProviderDisplayName should prefer catalog names', () => {
+            const mockCore = createMockCore();
+            vi.mocked(mockCore.catalog.getCatalog).mockReturnValue({
+                ai: [
+                    { id: 'gpt', name: 'OpenAI GPT' },
+                    { id: 'gemini', name: 'Google Gemini' },
+                ],
+            });
+            manager.setCore(mockCore);
+
             expect(manager.getProviderDisplayName('gpt')).toBe('OpenAI GPT');
             expect(manager.getProviderDisplayName('gemini')).toBe('Google Gemini');
             expect(manager.getProviderDisplayName(CUSTOM_TEXT_PROVIDER_ID)).toBe('Custom');
@@ -294,7 +365,7 @@ describe('AIProviderManager', () => {
             expect(manager.model).toBe('default');
         });
 
-        it('should ignore empty persisted models and fall back to a non-empty default', async () => {
+        it('should ignore empty persisted local models and fall back to a non-empty default', async () => {
             const mockCore = createMockCore(() => Promise.resolve(''));
             vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('');
             manager.setCore(mockCore);
@@ -303,6 +374,18 @@ describe('AIProviderManager', () => {
 
             expect(result).toBe(true);
             expect(manager.model).toBe('default');
+        });
+
+        it('should not invent a cloud model when catalog and persisted settings are empty', async () => {
+            const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('');
+            manager.setCore(mockCore);
+
+            const result = await manager.startProvider('gemini');
+
+            expect(result).toBe(true);
+            expect(manager.model).toBe('');
+            expect(mockCore.aiSettings.setSelectedAIModel).toHaveBeenCalledWith('gemini', '');
         });
 
         it('should reflect model changes from settings without restarting the provider', async () => {

@@ -8,6 +8,7 @@ import { ModalFilterTransitionController } from './ModalFilterTransitionControll
 import {
     cancelModalDownload,
     createModalDownloadProgressHandler,
+    type IntegrationImportAction,
     populateModalAppList,
     transitionSelectionButton,
     updateModalSidebarWidth,
@@ -18,7 +19,12 @@ import {
 } from './ModuleCardDownloadProgress';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { ModalFocusTrapHelper } from './ModalFocusTrapHelper';
-import { resolveModalSidebarCategory } from '../../utils/moduleCategoryPolicy';
+import {
+    getAiSlotForCapability,
+    isAiCategory,
+    resolveModalSidebarCategory,
+} from '../../utils/moduleCategoryPolicy';
+import { escapeCssSelectorValue } from '../../utils/cssSelectors';
 
 /**
  * @class ModalManager
@@ -69,10 +75,15 @@ export class ModalManager {
     private readonly _onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void;
     // Called when user switches filter tab — returns the selected app ID for that capability
     private readonly _onFilterChange: (capability: 'text' | 'image') => string | null;
-    private readonly _onDownloadRequest: (app: IApp) => Promise<unknown>;
+    private readonly _onDownloadRequest: (
+        app: IApp,
+        category: string,
+        btn: HTMLElement | null,
+    ) => Promise<unknown>;
     private readonly _onCancelDownloadRequest: (app: IApp) => Promise<void>;
     private readonly _onPauseDownloadRequest: (app: IApp) => Promise<void>;
     private readonly _onResumeDownloadRequest: (app: IApp) => Promise<void>;
+    private readonly _onIntegrationImport: (action: IntegrationImportAction) => void;
     private readonly _translate: (key: string, fallback: string) => string;
     private readonly _tracer: LoggerService;
 
@@ -80,13 +91,18 @@ export class ModalManager {
         cardRenderer: ModuleCardRenderer,
         onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void,
         onFilterChange: (capability: 'text' | 'image') => string | null,
-        onDownloadRequest: (app: IApp) => Promise<unknown>,
+        onDownloadRequest: (
+            app: IApp,
+            category: string,
+            btn: HTMLElement | null,
+        ) => Promise<unknown>,
         onCancelDownloadRequest: (app: IApp) => Promise<void>,
         translate: (key: string, fallback: string) => string,
         tracer: LoggerService,
         private readonly _navigation: NavigationService,
         onPauseDownloadRequest?: (app: IApp) => Promise<void>,
         onResumeDownloadRequest?: (app: IApp) => Promise<void>,
+        onIntegrationImport?: (action: IntegrationImportAction) => void,
     ) {
         this._cardRenderer = cardRenderer;
         this._onAppInteraction = onAppInteraction;
@@ -95,6 +111,7 @@ export class ModalManager {
         this._onCancelDownloadRequest = onCancelDownloadRequest;
         this._onPauseDownloadRequest = onPauseDownloadRequest ?? (() => Promise.resolve());
         this._onResumeDownloadRequest = onResumeDownloadRequest ?? (() => Promise.resolve());
+        this._onIntegrationImport = onIntegrationImport ?? (() => {});
         this._translate = translate;
         this._tracer = tracer;
 
@@ -128,6 +145,10 @@ export class ModalManager {
         this._currentCategory = category;
         this._currentApps = apps;
         this._currentSelectedAppId = selectedAppId ?? null;
+
+        document.body.classList.add('app-selection-open');
+        const container = document.querySelector('.models-container');
+        if (container !== null) container.classList.add('content-hidden');
 
         // Derive filter from compound category — do NOT blindly reset to 'text'
         // so that reopening after removing an image-slot app stays on the image tab.
@@ -166,10 +187,6 @@ export class ModalManager {
             }, 0);
         });
 
-        // Add smooth hiding for main content
-        const container = document.querySelector('.models-container');
-        if (container !== null) container.classList.add('content-hidden');
-
         // Register back action for mouse/keyboard global navigation
         this._navigation.pushBackAction(
             'app-selection-modal',
@@ -204,8 +221,43 @@ export class ModalManager {
         }
 
         // Restore main content visibility
+        document.body.classList.remove('app-selection-open');
         const container = document.querySelector('.models-container');
         if (container !== null) container.classList.remove('content-hidden');
+    }
+
+    public suspendAppSelection(): boolean {
+        if (!this.isAppSelectionOpen()) {
+            return false;
+        }
+
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
+        if (modal === null) {
+            return false;
+        }
+
+        this._filterTransitionController.cancelPending();
+        this._detachOverlayCloseHandler();
+        modal.classList.add('app-selection-suspended');
+        modal.style.visibility = 'hidden';
+        return true;
+    }
+
+    public resumeAppSelection(): void {
+        const modal = document.getElementById('app-selection-modal') as HTMLDialogElement | null;
+        if (modal === null || !modal.open || modal.classList.contains('hidden')) {
+            return;
+        }
+
+        modal.classList.remove('app-selection-suspended');
+        modal.style.removeProperty('visibility');
+        this._overlayClickModal = modal;
+        this._focusTrap.attach(modal);
+        requestAnimationFrame(() => {
+            if (this._overlayClickModal === modal && this.isAppSelectionOpen()) {
+                this._focusTrap.focusFirstElement(modal);
+            }
+        });
     }
 
     public isAppSelectionOpen(): boolean {
@@ -221,7 +273,7 @@ export class ModalManager {
             this._currentSelectedAppId = selectedAppId;
         }
 
-        if (this._currentCategory === null || this._currentApps.length === 0) {
+        if (this._currentCategory === null) {
             return;
         }
 
@@ -235,7 +287,11 @@ export class ModalManager {
     }
 
     public isViewingCategory(category: string): boolean {
-        return this.isAppSelectionOpen() && this._currentCategory === category;
+        return (
+            this.isAppSelectionOpen() &&
+            resolveModalSidebarCategory(this._currentCategory ?? '') ===
+                resolveModalSidebarCategory(category)
+        );
     }
 
     // --- Helpers ---
@@ -315,6 +371,9 @@ export class ModalManager {
             cardRenderer: this._cardRenderer,
             onAppInteraction: this._onAppInteraction,
             onDownload: (app, action) => this._handleDownload(app, action),
+            onIntegrationImport: (action) => {
+                this._onIntegrationImport(action);
+            },
             translate: this._translate,
         });
     }
@@ -329,7 +388,8 @@ export class ModalManager {
         }
 
         const list = document.getElementById('app-modal-list');
-        const card = list?.querySelector<HTMLElement>(`.app-card[data-app-id="${app.id}"]`);
+        const escapedAppId = escapeCssSelectorValue(app.id);
+        const card = list?.querySelector<HTMLElement>(`.app-card[data-app-id="${escapedAppId}"]`);
         const btn = card?.querySelector<HTMLButtonElement>('.download-btn');
 
         if (btn?.classList.contains('downloading') === true) {
@@ -338,7 +398,10 @@ export class ModalManager {
         }
 
         this._tracer.info(`[ModalManager] Starting download: ${app.id}`);
-        void this._onDownloadRequest(app);
+        const interactionCategory = isAiCategory(this._currentCategory ?? '')
+            ? getAiSlotForCapability(this._currentFilter)
+            : (this._currentCategory ?? '');
+        void this._onDownloadRequest(app, interactionCategory, btn ?? null);
     }
 
     private _handleActiveDownloadAction(

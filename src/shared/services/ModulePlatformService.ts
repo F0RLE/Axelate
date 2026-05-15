@@ -1,8 +1,16 @@
-import type { IApp, IModuleDownloadState } from '../types/coreTypes';
+import type {
+    IApp,
+    IModuleDownloadState,
+    ReleaseDownloadOptions,
+    ReleaseDownloadSelection,
+} from '../types/coreTypes';
 import type { DownloadModuleOutcome, ModuleService } from './ModuleService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import { invokeSafe } from '@/shared/api/invoke';
+import { commands } from '@/shared/types/bindings';
 import { isApiApp } from '@/shared/utils/moduleTypeUtils';
+import { isAiCategory } from '@/shared/utils/moduleCategoryPolicy';
 
 type ModulePlatformLogger = Pick<LoggerService, 'info'>;
 export type ModuleRuntimeStatus = 'running' | 'stopped' | string;
@@ -27,7 +35,10 @@ export class ModulePlatformService {
      * Downloads a module.
      * @param app The module to download.
      */
-    public async download(app: IApp): Promise<DownloadModuleOutcome> {
+    public async download(
+        app: IApp,
+        releaseSelection?: ReleaseDownloadSelection | null,
+    ): Promise<DownloadModuleOutcome> {
         this._tracer.info(`[ModulePlatformService] Downloading: ${app.id}`);
 
         if (app.repoUrl === undefined || app.repoUrl === '') {
@@ -35,15 +46,54 @@ export class ModulePlatformService {
         }
 
         const url: string = app.repoUrl;
-        return await this._moduleService.downloadModule(app.id, url, app.expectedHash, app.dlType);
+        return await this._moduleService.downloadModule(
+            app.id,
+            url,
+            app.expectedHash,
+            app.dlType,
+            releaseSelection,
+        );
+    }
+
+    public async getReleaseDownloadOptions(app: IApp): Promise<ReleaseDownloadOptions | null> {
+        if (app.repoUrl === undefined || app.repoUrl === '' || app.dlType !== 'release') {
+            return null;
+        }
+
+        return await this._moduleService.getReleaseDownloadOptions(app.id, app.repoUrl);
+    }
+
+    public async importIntegrationFolder(path: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration folder: ${path}`);
+        return await this._moduleService.importIntegrationFolder(path);
+    }
+
+    public async importIntegrationArchive(path: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration archive: ${path}`);
+        return await this._moduleService.importIntegrationArchive(path);
+    }
+
+    public async importIntegrationPath(path: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration path: ${path}`);
+        return await this._moduleService.importIntegrationPath(path);
+    }
+
+    public async importIntegrationUrl(sourceUrl: string): Promise<string> {
+        this._tracer.info(`[ModulePlatformService] Importing integration URL: ${sourceUrl}`);
+        return await this._moduleService.importIntegrationUrl(sourceUrl);
     }
 
     /**
      * Deletes a module.
      * @param app The module to delete.
      */
-    public async delete(app: IApp): Promise<void> {
+    public async delete(app: IApp, category?: string): Promise<void> {
         this._tracer.info(`[ModulePlatformService] Deleting: ${app.id}`);
+        if (category !== undefined && isAiCategory(category)) {
+            await this._deleteAiEngine(app);
+            return;
+        }
+
         const success = await this._moduleService.deleteModule(app.id);
         if (!success) {
             throw new Error('ui.launcher.web.delete_model_error');
@@ -54,7 +104,7 @@ export class ModulePlatformService {
      * Stops a running module or provider.
      * @param app The module to stop.
      */
-    public async stop(app: IApp): Promise<boolean> {
+    public async stop(app: IApp, category?: string): Promise<boolean> {
         const isApi = this._isApiModule(app);
         const { activeProviderId, isRunning } = this._aiBridge.getState();
 
@@ -74,6 +124,11 @@ export class ModulePlatformService {
             this._tracer.info(
                 `[ModulePlatformService] Skip local stop for externally managed module: ${app.id}`,
             );
+            return true;
+        }
+
+        if (category !== undefined && isAiCategory(category)) {
+            await this._stopAiEngineSlot(category);
             return true;
         }
 
@@ -151,5 +206,25 @@ export class ModulePlatformService {
 
     private _isApiModule(app: IApp): boolean {
         return isApiApp(app);
+    }
+
+    private async _stopAiEngineSlot(category: string): Promise<void> {
+        const capability = category === 'ai_image' ? 'image' : 'text';
+        this._tracer.info(`[ModulePlatformService] Force stopping AI engine slot: ${capability}`);
+        await this._aiBridge.stopEngineSlot(capability);
+    }
+
+    private async _deleteAiEngine(app: IApp): Promise<void> {
+        if (app.managedExternally === true) {
+            this._tracer.info(
+                `[ModulePlatformService] Skip delete for externally managed AI engine: ${app.id}`,
+            );
+            return;
+        }
+
+        const result = await invokeSafe(commands.deleteEngine(app.id));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
     }
 }

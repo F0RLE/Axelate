@@ -31,18 +31,16 @@ export interface IUIState {
     ai_thinking_level: Record<string, ThinkingLevel>;
     ai_web_search_enabled: Record<string, boolean>;
     local_max_output_tokens: Record<string, number>;
-    ai_session_id: string | null;
+    integration_import_last_directory: string | null;
     preferred_language?: string | null;
     pending_chat_reveal: boolean;
 }
-
-type UiStateStorage = Pick<Storage, 'getItem' | 'setItem'>;
 
 const DEFAULT_UI_STATE: IUIState = {
     sidebar_collapsed: false,
     sidebar_manual_override: false,
     sidebar_width: 280,
-    hidden_nav_items: ['marketplace'],
+    hidden_nav_items: [],
     hidden_monitors: [],
     card_widths: {},
     download_limit_enabled: false,
@@ -55,7 +53,7 @@ const DEFAULT_UI_STATE: IUIState = {
     ai_thinking_level: {},
     ai_web_search_enabled: {},
     local_max_output_tokens: {},
-    ai_session_id: null,
+    integration_import_last_directory: null,
     preferred_language: null,
     pending_chat_reveal: false,
 };
@@ -66,14 +64,13 @@ const MAX_UI_ZOOM = 2.6;
 export class UiStateStore {
     private _state: IUIState = { ...DEFAULT_UI_STATE };
     private _isDirty = false;
+    private _revision = 0;
     private _autoSaveTimer: ReturnType<typeof setTimeout> | null = null;
-    private readonly _STORAGE_KEY = 'axelate_ui_state';
     private _isDestroyed = false;
 
     constructor(
         private readonly _bridge: IBridge,
         private readonly _tracer: UiStateStoreLogger,
-        private readonly _storage: UiStateStorage | null = globalThis.localStorage,
     ) {}
 
     public async loadState(): Promise<IUIState> {
@@ -82,12 +79,6 @@ export class UiStateStore {
                 const loaded = await this._bridge.invoke<IUIState>('get_ui_state');
                 this.setState(loaded);
                 this._tracer.info('[UiStateStore] Loaded from backend');
-            } else {
-                const stored = this._storage?.getItem(this._STORAGE_KEY) ?? null;
-                if (stored !== null) {
-                    this.setState(JSON.parse(stored) as Partial<IUIState>);
-                    this._tracer.info('[UiStateStore] Loaded from browser storage');
-                }
             }
         } catch (e) {
             this._tracer.warn(`[UiStateStore] Failed to load, using defaults: ${String(e)}`);
@@ -104,9 +95,10 @@ export class UiStateStore {
     }
 
     public updateState(updates: Partial<IUIState>, markDirty = true): void {
-        this._state = { ...this._state, ...updates };
+        this._state = this._normalizeState({ ...this._state, ...updates });
         if (markDirty) {
             this._isDirty = true;
+            this._revision += 1;
             this._debouncedSave();
         }
     }
@@ -117,10 +109,11 @@ export class UiStateStore {
         value: unknown,
         markDirty = true,
     ): void {
-        const target = this._state[key] as Record<string, unknown>;
+        const target = this._getRecordTarget(key);
         target[nestedKey] = value;
         if (markDirty) {
             this._isDirty = true;
+            this._revision += 1;
             this._debouncedSave();
         }
     }
@@ -130,10 +123,11 @@ export class UiStateStore {
         nestedKey: string,
         markDirty = true,
     ): void {
-        const target = this._state[key] as Record<string, unknown>;
+        const target = this._getRecordTarget(key);
         delete target[nestedKey];
         if (markDirty) {
             this._isDirty = true;
+            this._revision += 1;
             this._debouncedSave();
         }
     }
@@ -156,6 +150,15 @@ export class UiStateStore {
         this.removeNestedState('selected_modules', category);
     }
 
+    public getIntegrationImportLastDirectory(): string | null {
+        return this._state.integration_import_last_directory;
+    }
+
+    public setIntegrationImportLastDirectory(path: string | null): void {
+        const normalized = typeof path === 'string' ? path.trim() : '';
+        this.updateState({ integration_import_last_directory: normalized || null });
+    }
+
     private _debouncedSave(): void {
         if (this._autoSaveTimer !== null) {
             globalThis.clearTimeout(this._autoSaveTimer);
@@ -167,29 +170,34 @@ export class UiStateStore {
 
     public async saveAsync(): Promise<void> {
         if (!this._isDirty) return;
+        const revision = this._revision;
+        const state = this._snapshotState();
         try {
             if (this._bridge.isTauri()) {
-                await this._bridge.invoke('save_ui_state', { state: this._state });
-            } else {
-                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                await this._bridge.invoke('save_ui_state', { state });
             }
-            this._isDirty = false;
+            if (this._revision === revision) {
+                this._isDirty = false;
+            }
         } catch (e) {
             this._tracer.error(`[UiStateStore] Failed to save state: ${String(e)}`);
         }
     }
 
-    public saveImmediate(): void {
+    public async saveImmediate(): Promise<void> {
         if (!this._isDirty) return;
+        const revision = this._revision;
+        const state = this._snapshotState();
         try {
             if (this._bridge.isTauri()) {
-                void this._bridge.invoke('save_ui_state', { state: this._state });
-            } else {
-                this._storage?.setItem(this._STORAGE_KEY, JSON.stringify(this._state));
+                await this._bridge.invoke('save_ui_state', { state });
+                if (this._revision === revision) {
+                    this._isDirty = false;
+                }
             }
-            this._isDirty = false;
         } catch (e) {
             this._tracer.error(`[UiStateStore] Save immediate failed: ${String(e)}`);
+            throw e;
         }
     }
 
@@ -204,16 +212,141 @@ export class UiStateStore {
     }
 
     private _normalizeState(state: IUIState): IUIState {
+        const resolutionZoom = this._normalizeNumberRecord(
+            state.resolution_zoom,
+            DEFAULT_UI_STATE.resolution_zoom,
+        );
+
         return {
             ...state,
-            zoom_level: this._clampZoom(state.zoom_level),
-            resolution_zoom: Object.fromEntries(
-                Object.entries(state.resolution_zoom).map(([key, zoom]) => [
-                    key,
-                    this._clampZoom(zoom),
-                ]),
+            hidden_nav_items: this._normalizeStringArray(
+                state.hidden_nav_items,
+                DEFAULT_UI_STATE.hidden_nav_items,
             ),
+            hidden_monitors: this._normalizeStringArray(
+                state.hidden_monitors,
+                DEFAULT_UI_STATE.hidden_monitors,
+            ),
+            card_widths: this._normalizeStringRecord(state.card_widths),
+            selected_modules: this._normalizeObjectRecord(state.selected_modules),
+            selected_ai_models: this._normalizeStringRecord(state.selected_ai_models),
+            resolution_zoom: Object.fromEntries(
+                Object.entries(resolutionZoom).map(([key, zoom]) => [key, this._clampZoom(zoom)]),
+            ),
+            ai_thinking_level: this._normalizeThinkingLevelRecord(state.ai_thinking_level),
+            ai_web_search_enabled: this._normalizeBooleanRecord(state.ai_web_search_enabled),
+            local_max_output_tokens: this._normalizeNumberRecord(
+                state.local_max_output_tokens,
+                DEFAULT_UI_STATE.local_max_output_tokens,
+            ),
+            integration_import_last_directory: this._normalizeNullableString(
+                state.integration_import_last_directory,
+            ),
+            zoom_level: this._clampZoom(state.zoom_level),
         };
+    }
+
+    private _normalizeStringArray(value: unknown, fallback: string[]): string[] {
+        if (!Array.isArray(value)) {
+            return [...fallback];
+        }
+
+        return value.filter((item): item is string => typeof item === 'string');
+    }
+
+    private _normalizeObjectRecord(value: unknown): Record<string, Partial<IApp>> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return value as Record<string, Partial<IApp>>;
+    }
+
+    private _normalizeStringRecord(value: unknown): Record<string, string> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, string] => {
+                    const [, item] = entry;
+                    return typeof item === 'string';
+                },
+            ),
+        );
+    }
+
+    private _normalizeNullableString(value: unknown): string | null {
+        if (typeof value !== 'string') {
+            return null;
+        }
+
+        const trimmed = value.trim();
+        return trimmed === '' ? null : trimmed;
+    }
+
+    private _normalizeBooleanRecord(value: unknown): Record<string, boolean> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, boolean] => {
+                    const [, item] = entry;
+                    return typeof item === 'boolean';
+                },
+            ),
+        );
+    }
+
+    private _normalizeThinkingLevelRecord(value: unknown): Record<string, ThinkingLevel> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, ThinkingLevel] => {
+                    const [, item] = entry;
+                    return item === 'off' || item === 'low' || item === 'medium' || item === 'high';
+                },
+            ),
+        );
+    }
+
+    private _normalizeNumberRecord(
+        value: unknown,
+        fallback: Record<string, number> = {},
+    ): Record<string, number> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return { ...fallback };
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>).filter(
+                (entry): entry is [string, number] => {
+                    const [, item] = entry;
+                    return typeof item === 'number' && Number.isFinite(item);
+                },
+            ),
+        );
+    }
+
+    private _snapshotState(): IUIState {
+        return structuredClone(this._state);
+    }
+
+    private _getRecordTarget<K extends keyof IUIState>(key: K): Record<string, unknown> {
+        const target = this._state[key];
+        if (target !== null && typeof target === 'object' && !Array.isArray(target)) {
+            return target as Record<string, unknown>;
+        }
+
+        const replacement: Record<string, unknown> = {};
+        (this._state as Record<keyof IUIState, unknown>)[key] = replacement;
+        return replacement;
     }
 
     private _clampZoom(zoom: number): number {

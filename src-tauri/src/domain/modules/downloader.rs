@@ -4,17 +4,23 @@ use super::downloader_progress::{
     AggregateDownloadContext, DownloadInterruption, ProgressEvent, ProgressSnapshot,
     compute_progress, emit_progress,
 };
-use super::downloader_service::{DownloadRequest, resolve_existing_module_path};
+use super::downloader_service::resolve_existing_module_path;
 use super::downloader_support::{package_install_dir, remove_partial_metadata};
 use super::downloader_transfer::{
-    DownloadTask, ReleaseDownloadAsset, build_client, clone_repository_into, download_file,
-    resolve_download_url,
+    DownloadTask, ReleaseDownloadAsset, build_client, build_public_client, clone_repository_into,
+    download_file, resolve_download_url,
 };
+use super::github_releases::ReleaseDownloadSelection;
+use super::lifecycle::{ManifestLoader, ModuleManifest};
 use crate::errors::AppError;
+use crate::utils::paths::{INTEGRATIONS_DIR, TEMP_DIR};
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
-pub use super::downloader_service::DownloaderService;
+const IMPORT_FILE_COUNT_LIMIT: usize = 20_000;
+const IMPORT_TOTAL_SIZE_LIMIT: u64 = 3 * 1024 * 1024 * 1024;
+
+pub use super::downloader_service::{DownloadRequest, DownloaderService};
 
 /// Validates module ID to prevent directory traversal and injection attacks
 pub fn validate_module_id(module_id: &str) -> Result<(), AppError> {
@@ -53,6 +59,16 @@ pub fn is_module_installed(module_id: &str) -> bool {
     resolve_existing_module_path(module_id).is_some()
 }
 
+/// Lists compatible release versions and CPU/GPU package choices for a module.
+pub async fn get_release_download_options(
+    module_id: &str,
+    repo_url: &str,
+) -> Result<super::github_releases::ReleaseDownloadOptions, AppError> {
+    validate_module_id(module_id)?;
+    let client = build_public_client()?;
+    super::github_releases::fetch_release_download_options(&client, repo_url, module_id).await
+}
+
 /// Deletes a module from disk
 pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
     validate_module_id(module_id)?;
@@ -67,10 +83,131 @@ pub async fn delete_module(module_id: &str) -> Result<(), AppError> {
             "Downloader",
             "info",
         );
+        crate::domain::integration_api::revoke_module_api_token(module_id);
         Ok(())
     } else {
         Err(AppError::NotFound("Module not found".to_string()))
     }
+}
+
+/// Imports an integration from an existing local folder.
+pub async fn import_integration_folder(path: &Path) -> Result<String, AppError> {
+    ensure_source_directory(path)?;
+    let manifest = ManifestLoader::load(path)?;
+    let module_id = validate_integration_manifest(&manifest)?;
+    let staging_path = ArchiveExtractor::prepare_staging(&module_id)?;
+    let source_path = path.to_path_buf();
+    let blocking_staging_path = staging_path.clone();
+
+    let result = tokio::task::spawn_blocking(move || {
+        copy_directory_contents_secure(&source_path, &blocking_staging_path)?;
+        finalize_imported_integration(&blocking_staging_path, Some("local-folder"))
+    })
+    .await
+    .map_err(|error| AppError::Internal {
+        request_id: None,
+        message: format!("Integration folder import worker failed: {error}"),
+    })?;
+
+    cleanup_staging_on_error(&result, &staging_path);
+    result
+}
+
+/// Imports an integration from a local path, auto-detecting folder or archive sources.
+pub async fn import_integration_path(app: AppHandle, path: PathBuf) -> Result<String, AppError> {
+    let metadata = std::fs::metadata(&path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to read integration source '{}': {error}",
+            path.display()
+        ))
+    })?;
+
+    if metadata.is_dir() {
+        return import_integration_folder(&path).await;
+    }
+
+    if metadata.is_file() {
+        return import_integration_archive(app, path).await;
+    }
+
+    Err(AppError::Validation(
+        "Selected integration source must be a folder or archive file".to_string(),
+    ))
+}
+
+/// Imports an integration from a local archive file.
+pub async fn import_integration_archive(app: AppHandle, path: PathBuf) -> Result<String, AppError> {
+    ensure_source_file(&path)?;
+    let import_id = build_import_id();
+    let staging_path = ArchiveExtractor::prepare_staging(&import_id)?;
+
+    let result = async {
+        ArchiveExtractor::extract_into(&app, &path, &import_id, &staging_path, None).await?;
+        finalize_imported_integration(&staging_path, Some("local-archive"))
+    }
+    .await;
+
+    cleanup_staging_on_error(&result, &staging_path);
+    result
+}
+
+/// Downloads and imports an integration from a repository or archive URL.
+pub async fn import_integration_url(
+    app: AppHandle,
+    downloader: &DownloaderService,
+    source_url: String,
+) -> Result<String, AppError> {
+    let source_url = validate_import_url(&source_url)?;
+    let import_id = build_import_id();
+    let staging_path = ArchiveExtractor::prepare_staging(&import_id)?;
+    let control = downloader.request_control(&import_id);
+    let mut archive_path = None;
+
+    let result = async {
+        let client = build_public_client()?;
+        let final_url = resolve_download_url(&client, &source_url).await?;
+        let resolved_archive_path = build_import_archive_path(&import_id, &final_url);
+        archive_path = Some(resolved_archive_path.clone());
+        let download_result = download_file(
+            DownloadTask {
+                app: &app,
+                downloader,
+                client: &client,
+                url: &final_url,
+                dest_path: &resolved_archive_path,
+                module_id: &import_id,
+                control: &control,
+            },
+            None,
+        )
+        .await?;
+
+        if let Some(interruption) = download_result.interruption {
+            return Err(AppError::External {
+                request_id: None,
+                message: interruption.as_error_message().to_string(),
+            });
+        }
+
+        ArchiveExtractor::extract_into(
+            &app,
+            &resolved_archive_path,
+            &import_id,
+            &staging_path,
+            Some(download_result.snapshot),
+        )
+        .await?;
+
+        finalize_imported_integration(&staging_path, Some(&source_url))
+    }
+    .await;
+
+    downloader.remove_control(&import_id);
+    cleanup_staging_on_error(&result, &staging_path);
+    if let Some(archive_path) = archive_path {
+        cleanup_import_archive(&archive_path).await;
+    }
+    result
 }
 
 /// Downloads and extracts a module from a remote repository
@@ -81,6 +218,7 @@ pub async fn download_module(
     repo_url: String,
     expected_hash: Option<String>,
     dl_type: Option<String>,
+    release_selection: Option<ReleaseDownloadSelection>,
 ) -> Result<String, AppError> {
     validate_module_id(&module_id)?;
     downloader.remember_request(
@@ -89,6 +227,7 @@ pub async fn download_module(
             repo_url: repo_url.clone(),
             expected_hash: expected_hash.clone(),
             dl_type: dl_type.clone(),
+            release_selection: release_selection.clone(),
         },
     );
 
@@ -110,7 +249,11 @@ pub async fn download_module(
             speed: 0,
         });
 
-        let client = build_client(&module_id)?;
+        let client = if dl_type.as_deref() == Some("release") && is_github_repo_url(&repo_url) {
+            build_public_client()?
+        } else {
+            build_client(&module_id)?
+        };
         let extraction_path = ArchiveExtractor::prepare_staging(&module_id)?;
         staging_path = Some(extraction_path.clone());
         let mut completed_downloaded_bytes: u64 = 0;
@@ -122,7 +265,10 @@ pub async fn download_module(
                 (None, Vec::new())
             } else if dl_type.as_deref() == Some("release") {
                 let bundle = crate::domain::modules::github_releases::fetch_release_bundle(
-                    &client, &repo_url, &module_id,
+                    &client,
+                    &repo_url,
+                    &module_id,
+                    release_selection.as_ref(),
                 )
                 .await?;
 
@@ -199,7 +345,7 @@ pub async fn download_module(
                     });
                 }
 
-                ensure_not_cancelled(&control)?;
+                ensure_not_interrupted(&control)?;
                 FileVerifier::verify(
                     &app,
                     &archive_path,
@@ -209,7 +355,7 @@ pub async fn download_module(
                 )
                 .await?;
 
-                ensure_not_cancelled(&control)?;
+                ensure_not_interrupted(&control)?;
                 ArchiveExtractor::extract_into(
                     &app,
                     &archive_path,
@@ -219,18 +365,23 @@ pub async fn download_module(
                 )
                 .await?;
 
-                ensure_not_cancelled(&control)?;
+                ensure_not_interrupted(&control)?;
             }
         }
 
         final_progress_snapshot = latest_progress_snapshot;
 
-        ensure_not_cancelled(&control)?;
+        ensure_not_interrupted(&control)?;
+        let release_compute_target = release_selection
+            .as_ref()
+            .map(|selection| selection.compute_target.as_metadata_value());
+
         ArchiveExtractor::finalize(
             &module_id,
             &extraction_path,
             expected_hash.as_ref(),
             release_tag.as_deref(),
+            release_compute_target,
         )?;
 
         Ok::<(), AppError>(())
@@ -250,9 +401,23 @@ pub async fn download_module(
     if cleanup_archives {
         for archive_path in &temp_archives {
             if archive_path.exists() {
-                let _ = tokio::fs::remove_file(archive_path).await;
+                if let Err(error) = tokio::fs::remove_file(archive_path).await
+                    && error.kind() != std::io::ErrorKind::NotFound
+                {
+                    tracing::warn!(
+                        module_id = module_id,
+                        path = %archive_path.display(),
+                        "Failed to remove temporary archive after interrupted download: {error}"
+                    );
+                }
             }
-            remove_partial_metadata(archive_path).await;
+            if let Err(error) = remove_partial_metadata(archive_path).await {
+                tracing::warn!(
+                    module_id = module_id,
+                    path = %archive_path.display(),
+                    "Failed to remove partial download metadata after interrupted download: {error}"
+                );
+            }
         }
     }
 
@@ -260,7 +425,13 @@ pub async fn download_module(
         && let Some(path) = &staging_path
         && path.exists()
     {
-        let _ = tokio::fs::remove_dir_all(path).await;
+        if let Err(error) = tokio::fs::remove_dir_all(path).await {
+            tracing::warn!(
+                module_id = module_id,
+                path = %path.display(),
+                "Failed to remove staging directory after failed install: {error}"
+            );
+        }
     }
 
     if let Err(e) = result {
@@ -304,7 +475,13 @@ pub async fn download_module(
     });
 
     for archive_path in &temp_archives {
-        remove_partial_metadata(archive_path).await;
+        if let Err(error) = remove_partial_metadata(archive_path).await {
+            tracing::warn!(
+                module_id = module_id,
+                path = %archive_path.display(),
+                "Failed to remove partial download metadata after successful install: {error}"
+            );
+        }
     }
 
     crate::infrastructure::logging::logger::add_log(
@@ -317,7 +494,308 @@ pub async fn download_module(
     Ok("completed".to_string())
 }
 
-fn ensure_not_cancelled(
+fn validate_integration_manifest(manifest: &ModuleManifest) -> Result<String, AppError> {
+    validate_module_id(&manifest.id)?;
+
+    if let Some(category) = manifest.category.as_deref() {
+        let normalized = category.trim().to_ascii_lowercase();
+        if !matches!(
+            normalized.as_str(),
+            "service" | "services" | "integration" | "integrations"
+        ) {
+            return Err(AppError::Validation(
+                "Custom integration manifest must use category = \"service\"".to_string(),
+            ));
+        }
+    }
+
+    Ok(manifest.id.clone())
+}
+
+fn finalize_imported_integration(
+    extraction_path: &Path,
+    source: Option<&str>,
+) -> Result<String, AppError> {
+    let manifest = ManifestLoader::load(extraction_path)?;
+    let module_id = validate_integration_manifest(&manifest)?;
+    let final_path = INTEGRATIONS_DIR.join(&module_id);
+
+    std::fs::create_dir_all(&*INTEGRATIONS_DIR).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to create integrations directory '{}': {error}",
+            INTEGRATIONS_DIR.display()
+        ))
+    })?;
+
+    let metadata = serde_json::json!({
+        "module_id": module_id,
+        "installed_at": chrono::Local::now().to_rfc3339(),
+        "archive_hash": null,
+        "status": "complete",
+        "version": manifest.version,
+        "source": source,
+    });
+    let metadata_path = extraction_path.join("metadata.json");
+    let metadata_file = std::fs::File::create(&metadata_path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to create install metadata {}: {error}",
+            metadata_path.display()
+        ))
+    })?;
+    serde_json::to_writer_pretty(metadata_file, &metadata).map_err(|error| {
+        AppError::Serialization(format!(
+            "Failed to write install metadata {}: {error}",
+            metadata_path.display()
+        ))
+    })?;
+
+    let backup_path = TEMP_DIR.join(format!(
+        "{}_integration_backup_{}",
+        module_id,
+        uuid::Uuid::new_v4().simple()
+    ));
+
+    if final_path.exists() {
+        std::fs::rename(&final_path, &backup_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to move old integration version to backup: {error}"
+            ))
+        })?;
+    }
+
+    if let Err(error) = std::fs::rename(extraction_path, &final_path) {
+        if backup_path.exists()
+            && let Err(restore_error) = std::fs::rename(&backup_path, &final_path)
+        {
+            tracing::error!(
+                module_id,
+                backup = %backup_path.display(),
+                target = %final_path.display(),
+                "Failed to restore previous integration after import failure: {restore_error}"
+            );
+        }
+
+        return Err(AppError::Io(format!(
+            "Atomic integration import failed during move: {error}"
+        )));
+    }
+
+    if backup_path.exists() {
+        std::fs::remove_dir_all(&backup_path).map_err(|error| {
+            AppError::Io(format!("Failed to remove old integration backup: {error}"))
+        })?;
+    }
+
+    crate::infrastructure::logging::logger::add_log(
+        &format!("Integration {module_id} imported successfully"),
+        "Downloader",
+        "info",
+    );
+
+    Ok(module_id)
+}
+
+fn copy_directory_contents_secure(source: &Path, destination: &Path) -> Result<(), AppError> {
+    let mut state = ImportCopyState::default();
+    copy_directory_contents_secure_inner(source, destination, &mut state)
+}
+
+#[derive(Default)]
+struct ImportCopyState {
+    file_count: usize,
+    total_size: u64,
+}
+
+fn copy_directory_contents_secure_inner(
+    source: &Path,
+    destination: &Path,
+    state: &mut ImportCopyState,
+) -> Result<(), AppError> {
+    for entry in std::fs::read_dir(source)? {
+        let entry = entry?;
+        let source_path = entry.path();
+        let metadata = std::fs::symlink_metadata(&source_path)?;
+        if metadata.file_type().is_symlink() {
+            return Err(AppError::Validation(format!(
+                "Symlinks are not supported in integration imports: {}",
+                source_path.display()
+            )));
+        }
+
+        let destination_path = destination.join(entry.file_name());
+        if metadata.is_dir() {
+            std::fs::create_dir_all(&destination_path)?;
+            copy_directory_contents_secure_inner(&source_path, &destination_path, state)?;
+            continue;
+        }
+
+        if !metadata.is_file() {
+            return Err(AppError::Validation(format!(
+                "Unsupported filesystem entry in integration import: {}",
+                source_path.display()
+            )));
+        }
+
+        state.file_count += 1;
+        if state.file_count > IMPORT_FILE_COUNT_LIMIT {
+            return Err(AppError::Validation(format!(
+                "Integration folder contains too many files. Limit is {IMPORT_FILE_COUNT_LIMIT}."
+            )));
+        }
+
+        state.total_size = state
+            .total_size
+            .checked_add(metadata.len())
+            .ok_or_else(|| AppError::Validation("Integration folder size overflow".to_string()))?;
+        if state.total_size > IMPORT_TOTAL_SIZE_LIMIT {
+            return Err(AppError::Validation(
+                "Integration folder is too large to import".to_string(),
+            ));
+        }
+
+        if let Some(parent) = destination_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        std::fs::copy(&source_path, &destination_path).map_err(|error| {
+            AppError::Io(format!(
+                "Failed to copy '{}' to '{}': {error}",
+                source_path.display(),
+                destination_path.display()
+            ))
+        })?;
+    }
+
+    Ok(())
+}
+
+fn ensure_source_directory(path: &Path) -> Result<(), AppError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to read integration folder '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if !metadata.is_dir() {
+        return Err(AppError::Validation(
+            "Selected integration source is not a folder".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn ensure_source_file(path: &Path) -> Result<(), AppError> {
+    let metadata = std::fs::metadata(path).map_err(|error| {
+        AppError::Io(format!(
+            "Failed to read integration archive '{}': {error}",
+            path.display()
+        ))
+    })?;
+    if !metadata.is_file() {
+        return Err(AppError::Validation(
+            "Selected integration source is not an archive file".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+fn validate_import_url(source_url: &str) -> Result<String, AppError> {
+    let source_url = source_url.trim();
+    if source_url.is_empty() {
+        return Err(AppError::Validation(
+            "Integration URL cannot be empty".to_string(),
+        ));
+    }
+
+    let url = reqwest::Url::parse(source_url)
+        .map_err(|error| AppError::Validation(format!("Integration URL is invalid: {error}")))?;
+    match url.scheme() {
+        "https" => {}
+        "http" if is_local_import_host(url.host_str()) => {}
+        "http" => {
+            return Err(AppError::Validation(
+                "Integration URL must use https:// unless it targets localhost development"
+                    .to_string(),
+            ));
+        }
+        _ => {
+            return Err(AppError::Validation(
+                "Integration URL must start with https://".to_string(),
+            ));
+        }
+    }
+
+    Ok(source_url.to_string())
+}
+
+fn is_local_import_host(host: Option<&str>) -> bool {
+    matches!(host, Some("localhost" | "127.0.0.1" | "::1"))
+}
+
+fn build_import_id() -> String {
+    format!("integration-import-{}", uuid::Uuid::new_v4().simple())
+}
+
+fn build_import_archive_path(import_id: &str, source_url: &str) -> PathBuf {
+    let normalized = source_url
+        .split(['?', '#'])
+        .next()
+        .unwrap_or(source_url)
+        .to_ascii_lowercase();
+    let extension = if normalized.ends_with(".tar.gz") {
+        "tar.gz"
+    } else {
+        match Path::new(&normalized)
+            .extension()
+            .and_then(|extension| extension.to_str())
+        {
+            Some(extension) if extension.eq_ignore_ascii_case("tgz") => "tgz",
+            Some(extension) if extension.eq_ignore_ascii_case("7z") => "7z",
+            _ => "zip",
+        }
+    };
+
+    TEMP_DIR.join(format!("{import_id}.{extension}"))
+}
+
+fn cleanup_staging_on_error(result: &Result<String, AppError>, staging_path: &Path) {
+    if result.is_ok() || !staging_path.exists() {
+        return;
+    }
+
+    if let Err(error) = std::fs::remove_dir_all(staging_path) {
+        tracing::warn!(
+            path = %staging_path.display(),
+            "Failed to clean integration import staging directory: {error}"
+        );
+    }
+}
+
+async fn cleanup_import_archive(archive_path: &Path) {
+    if let Err(error) = remove_partial_metadata(archive_path).await {
+        tracing::warn!(
+            path = %archive_path.display(),
+            "Failed to remove integration import partial metadata: {error}"
+        );
+    }
+    match tokio::fs::remove_file(archive_path).await {
+        Ok(()) => {}
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+        Err(error) => {
+            tracing::warn!(
+                path = %archive_path.display(),
+                "Failed to remove temporary integration archive: {error}"
+            );
+        }
+    }
+}
+
+fn is_github_repo_url(repo_url: &str) -> bool {
+    repo_url.trim().to_ascii_lowercase().contains("github.com/")
+}
+
+fn ensure_not_interrupted(
     control: &super::downloader_service::DownloadControl,
 ) -> Result<(), AppError> {
     if control.is_cancel_requested() {
@@ -326,6 +804,13 @@ fn ensure_not_cancelled(
             message: DownloadInterruption::Cancelled
                 .as_error_message()
                 .to_string(),
+        });
+    }
+
+    if control.is_pause_requested() {
+        return Err(AppError::External {
+            request_id: None,
+            message: DownloadInterruption::Paused.as_error_message().to_string(),
         });
     }
 
@@ -340,12 +825,52 @@ pub fn check_module_installed(module_id: &str) -> bool {
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
+    use super::ensure_not_interrupted;
+    use crate::domain::modules::downloader_service::DownloaderService;
     use crate::domain::modules::downloader_support::{
         PartialDownloadMetadata, TarEntryAction, classify_tar_entry_type, if_range_validator,
-        normalize_archive_relative_path, parse_content_range_total,
+        load_partial_metadata, normalize_archive_relative_path, parse_content_range_total,
+        store_partial_metadata,
     };
+    use crate::errors::AppError;
     use sevenz_rust2::{ArchiveReader, Password};
     use std::path::{Path, PathBuf};
+
+    #[test]
+    fn ensure_not_interrupted_reports_pause_requests() {
+        let service = DownloaderService::new();
+        let control = service.request_control("demo");
+        assert!(service.pause("demo"));
+
+        let error = ensure_not_interrupted(&control).expect_err("pause should interrupt");
+
+        assert!(error.to_string().contains("Download paused"));
+    }
+
+    #[test]
+    fn ensure_not_interrupted_reports_cancel_requests() {
+        let service = DownloaderService::new();
+        let control = service.request_control("demo");
+        assert!(service.cancel("demo"));
+
+        let error = ensure_not_interrupted(&control).expect_err("cancel should interrupt");
+
+        assert!(error.to_string().contains("Download cancelled"));
+    }
+
+    #[test]
+    fn validate_import_url_rejects_plain_http_except_localhost() {
+        assert!(
+            super::validate_import_url("https://github.com/F0RLE/demo/archive/main.zip").is_ok()
+        );
+        assert!(super::validate_import_url("http://localhost:4000/integration.zip").is_ok());
+        assert!(super::validate_import_url("http://127.0.0.1:4000/integration.zip").is_ok());
+
+        let error = super::validate_import_url("http://example.com/integration.zip")
+            .expect_err("plain remote http should be rejected");
+
+        assert!(matches!(error, AppError::Validation(_)));
+    }
 
     #[test]
     fn normalize_archive_relative_path_rejects_traversal() {
@@ -419,6 +944,48 @@ mod tests {
         };
 
         assert_eq!(if_range_validator(&metadata), Some("\"etag-value\""));
+    }
+
+    #[tokio::test]
+    async fn partial_metadata_load_reports_corrupt_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let archive_path = temp_dir.path().join("module.zip");
+        tokio::fs::write(
+            format!("{}.resume.json", archive_path.to_string_lossy()),
+            "{not-json",
+        )
+        .await
+        .expect("write corrupt metadata");
+
+        let error = load_partial_metadata(&archive_path)
+            .await
+            .expect_err("corrupt metadata must be reported");
+
+        assert!(error.to_string().contains("partial download metadata"));
+    }
+
+    #[tokio::test]
+    async fn partial_metadata_round_trips_valid_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let archive_path = temp_dir.path().join("module.zip");
+        let metadata = PartialDownloadMetadata {
+            url: "https://example.com/module.zip".to_string(),
+            etag: Some("\"etag-value\"".to_string()),
+            last_modified: None,
+            total_bytes: Some(42),
+        };
+
+        store_partial_metadata(&archive_path, &metadata)
+            .await
+            .expect("store metadata");
+        let loaded = load_partial_metadata(&archive_path)
+            .await
+            .expect("load metadata")
+            .expect("metadata exists");
+
+        assert_eq!(loaded.url, metadata.url);
+        assert_eq!(loaded.etag, metadata.etag);
+        assert_eq!(loaded.total_bytes, metadata.total_bytes);
     }
 
     #[test]

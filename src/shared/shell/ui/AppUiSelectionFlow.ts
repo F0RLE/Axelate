@@ -1,6 +1,4 @@
 import type { IApp } from '../../types/coreTypes';
-import { isAiCategory, shouldLaunchOnSelection } from '../../utils/moduleCategoryPolicy';
-
 type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 
 type AppUiSelectionFlowDeps = {
@@ -9,7 +7,7 @@ type AppUiSelectionFlowDeps = {
     updateModuleCard: (category: string, app: IApp) => void;
     updateModalSelection: (appId: string | null) => void;
     bumpLaunchSelectionVersion: (category: string) => number;
-    stopSelectedApp: (app: IApp) => Promise<boolean>;
+    stopSelectedApp: (app: IApp, category: string) => Promise<boolean>;
     launchSelectedApp: (
         category: string,
         app: IApp,
@@ -31,7 +29,7 @@ export class AppUiSelectionFlow {
             this._deps.clearModuleCard(category);
             this._deps.removeSelectedModule(category);
             this._deps.updateModalSelection(null);
-            void this._deps.stopSelectedApp(app);
+            void this._deps.stopSelectedApp(app, category);
             return;
         }
 
@@ -40,7 +38,7 @@ export class AppUiSelectionFlow {
         this._deps.updateModalSelection(app.id);
         this._persistSelectedModule(category, app);
 
-        if (shouldLaunchOnSelection(category) && typeof this._deps.launchApp === 'function') {
+        if (this._deps.launchApp !== undefined) {
             void this._deps.launchSelectedApp(
                 category,
                 app,
@@ -63,10 +61,7 @@ export class AppUiSelectionFlow {
     }
 
     public activateExistingSelection(category: string, app: IApp): void {
-        if (isAiCategory(category) || typeof this._deps.launchApp !== 'function') {
-            return;
-        }
-
-        void this._deps.launchApp(category, app);
+        void category;
+        void app;
     }
 }

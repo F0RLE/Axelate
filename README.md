@@ -48,8 +48,8 @@ It is not yet a finished marketplace, managed platform, or polished MCP-first op
 
 Install on Windows first:
 
-- Node.js 20+
-- npm 10+
+- Node.js 26.1.0+
+- npm 11+
 - Rust via `rustup` (`rust-toolchain.toml` pins the tested version)
 - WebView2 Runtime
 - Windows SDK
@@ -81,6 +81,8 @@ npm run verify
 - `nightly` is the active development branch.
 - `main` is the release-ready branch.
 - Strict CI runs on pushes and pull requests targeting `main` or `nightly`.
+- CodeQL, dependency review for dependency-file changes, scheduled security audits, Dependabot, and CodeRabbit are configured for repository review and security coverage.
+- Protected branches require the strict frontend and backend CI checks, but not a second human approval; this matches the current solo-maintainer workflow.
 - Dependabot targets `nightly`.
 - GitHub releases are created by pushing a version tag that starts with `v`.
 - Release tags must point to a commit that is already reachable from `main`.
@@ -92,26 +94,30 @@ git tag v0.1.5
 git push origin v0.1.5
 ```
 
-For the full release checklist, see [Releases](docs/en/RELEASES.md).
+For the full release checklist, see [Releases](docs/localization/en/RELEASES.md).
 
 ## Docs
 
 Start here:
 
-- [Getting Started](docs/en/GETTING_STARTED.md)
-- [Development Workflow](docs/en/DEVELOPMENT_WORKFLOW.md)
-- [Releases](docs/en/RELEASES.md)
-- [Current State](docs/en/CURRENT_STATE.md)
+- [User Guide](docs/localization/en/USER_GUIDE.md)
+- [Getting Started](docs/localization/en/GETTING_STARTED.md)
+- [Development Workflow](docs/localization/en/DEVELOPMENT_WORKFLOW.md)
+- [Architecture](docs/localization/en/ARCHITECTURE.md)
+- [Integration Development](docs/localization/en/INTEGRATION_DEVELOPMENT.md)
+- [Releases](docs/localization/en/RELEASES.md)
+- [Current State](docs/localization/en/CURRENT_STATE.md)
 - [Contributing](CONTRIBUTING.md)
 
 Current reference:
 
-- [Trust Model](docs/en/TRUST_MODEL.md)
+- [Trust Model](docs/localization/en/TRUST_MODEL.md)
+- Integration Development: [RU](docs/localization/ru/INTEGRATION_DEVELOPMENT.md) · [ZH](docs/localization/zh/INTEGRATION_DEVELOPMENT.md)
 
 Planning only:
 
-- [Vision](docs/en/VISION.md)
-- [Roadmap](docs/en/ROADMAP.md)
+- [Vision](docs/localization/en/VISION.md)
+- [Roadmap](docs/localization/en/ROADMAP.md)
 
 `Vision` and `Roadmap` are planning documents. They are not setup guides and should not be read as a promise that those features already ship today.
 

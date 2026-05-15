@@ -14,7 +14,6 @@ describe('ModuleSettingsEngineFieldCatalog', () => {
         });
 
         expect(catalog.buildTextEngineFields(t).map((field) => field.key)).toEqual([
-            'compute_mode',
             'context_size',
             'llamacpp_system_prompt',
         ]);
@@ -27,11 +26,44 @@ describe('ModuleSettingsEngineFieldCatalog', () => {
         expect(imageGroups.samplingFields.some((field) => field.key === 'sdcpp_sampler')).toBe(
             true,
         );
+        expect(
+            imageGroups.samplingFields.find((field) => field.key === 'sdcpp_sampler')?.options,
+        ).toEqual([
+            'euler',
+            'euler_a',
+            'heun',
+            'dpm2',
+            'dpm++2s_a',
+            'dpm++2m',
+            'dpm++2mv2',
+            'ipndm',
+            'ipndm_v',
+            'lcm',
+            'ddim_trailing',
+            'tcd',
+            'res_multistep',
+            'res_2s',
+            'er_sde',
+        ]);
+        expect(
+            imageGroups.samplingFields.find((field) => field.key === 'sdcpp_scheduler')?.options,
+        ).toEqual([
+            'discrete',
+            'karras',
+            'exponential',
+            'ays',
+            'gits',
+            'sgm_uniform',
+            'simple',
+            'smoothstep',
+            'kl_optimal',
+            'lcm',
+            'bong_tangent',
+        ]);
         expect(catalog.buildImageExtraArgsField(t)).toMatchObject({
             key: 'extra_args',
             showInfoButton: true,
             fullWidth: true,
         });
-        expect(catalog.buildImageCompanionFields(t, 'sdcpp')).toEqual([]);
     });
 });

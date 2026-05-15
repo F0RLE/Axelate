@@ -2,18 +2,15 @@ import type { SecureKeyMeta, TauriProvider } from '@/infrastructure/tauri/TauriP
 import type { IApp } from '@/shared/types/coreTypes';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { AppSettings } from '@/shared/types/bindings';
+import type { AppSettings, GpuInfo } from '@/shared/types/bindings';
+import { commands } from '@/shared/types/bindings';
+import { invokeSafe } from '@/shared/api/invoke';
+import { resolveProviderSecretService } from '@/shared/utils/providerSupport';
 export type ISettings = AppSettings;
 export type SettingsValue = string | number | boolean;
 type SettingsLogger = Pick<LoggerService, 'error'>;
 
-export interface IGpuInfo {
-    detected: boolean;
-    name?: string;
-    cuda?: boolean;
-    backend?: string;
-    memory?: number;
-}
+export type IGpuInfo = Partial<GpuInfo> & Pick<GpuInfo, 'detected'>;
 
 export interface ICustomModel {
     id: string;
@@ -85,8 +82,17 @@ export class SettingsService {
         service: string,
     ): Promise<boolean> {
         try {
-            await this._tauri.invoke('control_service', { action, service });
-            return true;
+            const result = await invokeSafe(
+                commands.controlModule({
+                    module_id: service,
+                    action,
+                }),
+            );
+            if (result.status === 'error') {
+                this._tracer.error('[SettingsService] Control service failed:', result.error);
+                return false;
+            }
+            return result.data.success === true;
         } catch (e) {
             this._tracer.error('[SettingsService] Control service failed:', e);
             return false;
@@ -125,7 +131,7 @@ export class SettingsService {
      * Fallback to localStorage is PROHIBITED for security reasons.
      */
     public async saveSecureKey(provider: string, key: string): Promise<void> {
-        const storageKey = `${provider}_api_key`;
+        const storageKey = this._resolveSecureKeyService(provider);
         try {
             await this._tauri.invoke('save_secure_key', {
                 service: storageKey,
@@ -138,10 +144,30 @@ export class SettingsService {
     }
 
     /**
+     * Remove a securely stored API key.
+     */
+    public async removeSecureKey(provider: string): Promise<void> {
+        const storageKey = this._resolveSecureKeyService(provider);
+        try {
+            if (typeof this._tauri.removeSecureKey === 'function') {
+                await this._tauri.removeSecureKey(storageKey);
+                return;
+            }
+
+            await this._tauri.invoke('remove_secure_key', {
+                service: storageKey,
+            });
+        } catch (e) {
+            this._tracer.error('[SettingsService] Failed to remove secure key:', e);
+            throw e;
+        }
+    }
+
+    /**
      * Checks whether a secure API key exists without exposing the secret value.
      */
     public async hasSecureKey(provider: string): Promise<boolean> {
-        const storageKey = `${provider}_api_key`;
+        const storageKey = this._resolveSecureKeyService(provider);
         try {
             return await this._tauri.invoke<boolean>('has_secure_key', {
                 service: storageKey,
@@ -156,7 +182,7 @@ export class SettingsService {
      * Returns non-sensitive metadata for a stored key.
      */
     public async getSecureKeyMeta(provider: string): Promise<SecureKeyMeta> {
-        const storageKey = `${provider}_api_key`;
+        const storageKey = this._resolveSecureKeyService(provider);
         try {
             return await this._tauri.getSecureKeyMeta(storageKey);
         } catch (e) {
@@ -169,7 +195,7 @@ export class SettingsService {
      * Returns the decrypted secure key for explicit user reveal flows.
      */
     public async getSecureKey(provider: string): Promise<string | null> {
-        const storageKey = `${provider}_api_key`;
+        const storageKey = this._resolveSecureKeyService(provider);
         try {
             return await this._tauri.getSecureKey(storageKey);
         } catch (e) {
@@ -246,5 +272,9 @@ export class SettingsService {
             this._tracer.error('[SettingsService] Failed to remove custom model:', e);
             throw e;
         }
+    }
+
+    private _resolveSecureKeyService(provider: string): string {
+        return resolveProviderSecretService(provider) ?? `${provider}_api_key`;
     }
 }

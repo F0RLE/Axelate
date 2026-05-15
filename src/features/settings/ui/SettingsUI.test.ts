@@ -76,6 +76,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         } as unknown as I18nUI;
         const tauri = {
             isTauri: vi.fn().mockReturnValue(false),
+            invoke: vi.fn(),
         } as unknown as TauriProvider;
         const navigation = {
             removeBackAction: vi.fn(),
@@ -127,7 +128,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         return privateUI;
     }
 
-    it('should render compute mode, context size, and system prompt for llamacpp local settings', async () => {
+    it('should render context size and system prompt for llamacpp local settings', async () => {
         const ui = createSettingsUI();
         const container = document.createElement('div');
         (
@@ -152,6 +153,19 @@ describe('ModuleSettingsUI lifecycle', () => {
         expect(labels).toContain('t:ui.settings.engine.compute_mode:Compute Device');
         expect(labels).toContain('t:ui.settings.engine.context_size:Context Window');
         expect(labels).toContain('t:ui.settings.engine.system_prompt:System Prompt');
+        const modelPathIndex = labels.indexOf(
+            't:ui.settings.engine.model_path:Model Path (*.gguf, *.safetensors)',
+        );
+        expect(modelPathIndex).toBe(0);
+        expect(modelPathIndex).toBeLessThan(
+            labels.indexOf('t:ui.settings.engine.compute_mode:Compute Device'),
+        );
+        expect(modelPathIndex).toBeLessThan(
+            labels.indexOf('t:ui.settings.engine.context_size:Context Window'),
+        );
+        expect(modelPathIndex).toBeLessThan(
+            labels.indexOf('t:ui.settings.engine.system_prompt:System Prompt'),
+        );
     });
 
     it('should stop active module lifecycle when module settings change', () => {
@@ -184,6 +198,56 @@ describe('ModuleSettingsUI lifecycle', () => {
         await ui._renderLocalEngineConfig(container, { id: 'sdcpp', capability: 'image' });
 
         expect(container.textContent).not.toContain('Auto download package');
+    });
+
+    it('should save current visible image settings into sdcpp model presets', async () => {
+        vi.useFakeTimers();
+        const ui = createSettingsUI();
+        const container = document.createElement('div');
+        (
+            ui as unknown as {
+                _tauri: { isTauri: ReturnType<typeof vi.fn>; invoke: ReturnType<typeof vi.fn> };
+            }
+        )._tauri.isTauri.mockReturnValue(true);
+        (
+            ui as unknown as {
+                _tauri: { invoke: ReturnType<typeof vi.fn> };
+            }
+        )._tauri.invoke.mockResolvedValue({
+            config: {
+                engine_id: 'sdcpp',
+                compute_mode: 'gpu',
+                model_path: 'C:/models/current.safetensors',
+                extra_args: [],
+            },
+        });
+
+        await ui._renderLocalEngineConfig(container, { id: 'sdcpp', capability: 'image' });
+        const widthInput = container.querySelector<HTMLInputElement>(
+            '.local-engine-field-row--sdcpp-width input',
+        );
+        expect(widthInput).not.toBeNull();
+        if (widthInput === null) {
+            throw new Error('width input missing');
+        }
+        widthInput.value = '768';
+
+        container.querySelector<HTMLButtonElement>('.ai-custom-model-save-btn')?.click();
+        await vi.runAllTimersAsync();
+
+        const service = (
+            settingsUI as unknown as {
+                _service: { saveSetting: ReturnType<typeof vi.fn> };
+            }
+        )._service;
+        const saveCall = service.saveSetting.mock.calls.find(
+            (call: unknown[]) => call[0] === 'sdcpp_model_profiles',
+        );
+        expect(saveCall).toBeDefined();
+        const profiles = JSON.parse(saveCall?.[1] as string) as Array<{
+            generationSettings: Record<string, number | string | null>;
+        }>;
+        expect(profiles[0]?.generationSettings['sdcpp_width']).toBe(768);
     });
 
     it('should show save errors and apply stored card widths', async () => {
