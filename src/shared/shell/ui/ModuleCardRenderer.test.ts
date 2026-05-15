@@ -83,7 +83,7 @@ describe('ModuleCardRenderer', () => {
 
         ModuleCardRenderer.setDownloadProgress(card, 73, 'extracting');
         expect((card.querySelector('.download-label') as HTMLElement).textContent).toContain(
-            'Extracting',
+            'ui.launcher.module.extracting:Extracting',
         );
         expect((card.querySelector('.download-pct') as HTMLElement).textContent).toBe('73%');
         expect(card.querySelector('.download-btn')?.classList.contains('indeterminate')).toBe(

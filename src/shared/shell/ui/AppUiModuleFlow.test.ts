@@ -119,7 +119,7 @@ describe('AppUiModuleFlow', () => {
         );
     });
 
-    it('refreshes modal selection after successful download', () => {
+    it('reloads catalog and refreshes modal selection after successful download', async () => {
         const app = { id: 'svc', name: 'Service', installed: false } as IApp;
         const card = document.createElement('div');
         card.className = 'app-card';
@@ -130,25 +130,45 @@ describe('AppUiModuleFlow', () => {
         getSelectedAppId.mockReturnValue('svc');
         modalManager.isViewingCategory.mockReturnValue(true);
 
-        flow.onModalDownloadSuccess(btn, app, 'services');
+        await flow.onModalDownloadSuccess(btn, app, 'services');
 
         expect(app.installed).toBe(true);
         expect(btn.classList.contains('downloading')).toBe(false);
         expect(markSlotCardAsInstalled).toHaveBeenCalledWith(card, app);
+        expect(reloadCatalog).toHaveBeenCalledOnce();
         expect(modalManager.refreshCurrentSelection).toHaveBeenCalledWith([app], 'svc');
     });
 
-    it('does not refresh modal selection after download success in another category', () => {
+    it('does not refresh modal selection after download success in another category', async () => {
         const app = { id: 'svc', name: 'Service', installed: false } as IApp;
         const btn = document.createElement('button');
         btn.className = 'download-btn downloading indeterminate';
         modalManager.isViewingCategory.mockReturnValue(false);
 
-        flow.onModalDownloadSuccess(btn, app, 'services');
+        await flow.onModalDownloadSuccess(btn, app, 'services');
 
         expect(app.installed).toBe(true);
         expect(btn.classList.contains('downloading')).toBe(false);
+        expect(reloadCatalog).toHaveBeenCalledOnce();
         expect(modalManager.refreshCurrentSelection).not.toHaveBeenCalled();
+    });
+
+    it('keeps successful download UI when catalog refresh fails', async () => {
+        const app = { id: 'svc', name: 'Service', installed: false } as IApp;
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading indeterminate';
+        card.appendChild(btn);
+        reloadCatalog.mockRejectedValueOnce(new Error('catalog unavailable'));
+        modalManager.isViewingCategory.mockReturnValue(true);
+
+        await flow.onModalDownloadSuccess(btn, app, 'services');
+
+        expect(app.installed).toBe(true);
+        expect(markSlotCardAsInstalled).toHaveBeenCalledWith(card, app);
+        expect(showToast).not.toHaveBeenCalled();
+        expect(modalManager.refreshCurrentSelection).toHaveBeenCalled();
     });
 
     it('resets download button and shows a toast after download errors', () => {

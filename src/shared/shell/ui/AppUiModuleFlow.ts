@@ -91,7 +91,7 @@ export class AppUiModuleFlow {
                 this.onModalDownloadInterrupted(activeButton, outcome);
                 return;
             }
-            this.onModalDownloadSuccess(activeButton, app, category);
+            await this.onModalDownloadSuccess(activeButton, app, category);
         } catch (err: unknown) {
             this.onModalDownloadError(activeButton, err);
         }
@@ -166,7 +166,11 @@ export class AppUiModuleFlow {
         }
     }
 
-    public onModalDownloadSuccess(btn: HTMLElement | null, app: IApp, category: string): void {
+    public async onModalDownloadSuccess(
+        btn: HTMLElement | null,
+        app: IApp,
+        category: string,
+    ): Promise<void> {
         app.installed = true;
         this.resetDownloadButton(btn);
 
@@ -175,6 +179,12 @@ export class AppUiModuleFlow {
             btn?.closest<HTMLElement>('.app-card');
         if (card instanceof HTMLElement) {
             this._deps.markSlotCardAsInstalled(card, app);
+        }
+
+        try {
+            await this._deps.reloadCatalog();
+        } catch (error) {
+            this._deps.tracer.warn('[AppUI] Catalog refresh after download failed:', error);
         }
 
         if (this._deps.modalManager.isViewingCategory(category)) {
