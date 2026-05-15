@@ -123,7 +123,7 @@ pub fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow
         "main",
         tauri::WebviewUrl::App("index.html".into()),
     )
-    .title("Axelate (Beta)")
+    .title("Axelate (Nightly)")
     .resizable(true)
     .fullscreen(false)
     .transparent(false)
