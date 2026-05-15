@@ -18,7 +18,6 @@ export type DownloadModuleOutcome = 'completed' | 'paused' | 'cancelled';
 
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
-    private readonly _deletedModules = new Set<string>();
     private readonly _lastLoggedDownloadPhase = new Map<string, string>();
     private _downloadProgressUnlisten: (() => void) | null = null;
     private _initialized = false;
@@ -73,7 +72,6 @@ export class ModuleService {
      */
     public async checkInstalled(moduleId: string): Promise<boolean> {
         if (!this._bridge.isTauri()) return false;
-        if (this._deletedModules.has(moduleId)) return false;
 
         try {
             // Updated to use new API layer
@@ -131,7 +129,6 @@ export class ModuleService {
         }
 
         try {
-            this._deletedModules.delete(moduleId);
             // Sanitize expectedHash: pass null if empty string or undefined to ensure rust gets None
             const hashToPass =
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
@@ -198,7 +195,6 @@ export class ModuleService {
         if (result.status === 'error') {
             throw new Error(result.error.message);
         }
-        this._deletedModules.delete(result.data);
         return result.data;
     }
 
@@ -211,7 +207,6 @@ export class ModuleService {
         if (result.status === 'error') {
             throw new Error(result.error.message);
         }
-        this._deletedModules.delete(result.data);
         return result.data;
     }
 
@@ -224,7 +219,6 @@ export class ModuleService {
         if (result.status === 'error') {
             throw new Error(result.error.message);
         }
-        this._deletedModules.delete(result.data);
         return result.data;
     }
 
@@ -237,7 +231,6 @@ export class ModuleService {
         if (result.status === 'error') {
             throw new Error(result.error.message);
         }
-        this._deletedModules.delete(result.data);
         return result.data;
     }
 
@@ -318,7 +311,6 @@ export class ModuleService {
                 return false;
             }
 
-            this._deletedModules.add(moduleId);
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {

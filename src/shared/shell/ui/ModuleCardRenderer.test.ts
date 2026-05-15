@@ -11,12 +11,10 @@ import { ModuleCardRenderer } from './ModuleCardRenderer';
 
 describe('ModuleCardRenderer', () => {
     let renderer: ModuleCardRenderer;
-    let checkInstalled: (moduleId: string) => Promise<boolean>;
     let openModuleSettingsSpy: ReturnType<typeof vi.fn>;
     let tracer: LoggerService;
 
     beforeEach(() => {
-        checkInstalled = vi.fn<(_: string) => Promise<boolean>>(() => Promise.resolve(false));
         openModuleSettingsSpy = vi.fn();
         tracer = {
             info: vi.fn(),
@@ -25,7 +23,6 @@ describe('ModuleCardRenderer', () => {
             debug: vi.fn(),
         } as unknown as LoggerService;
         renderer = new ModuleCardRenderer({
-            checkInstalled,
             translate: (key, fallback) => `${key}:${fallback}`,
             tracer,
             openModuleSettings: (app) => {
@@ -104,7 +101,6 @@ describe('ModuleCardRenderer', () => {
 
     it('restores active download state when a card is recreated', () => {
         renderer = new ModuleCardRenderer({
-            checkInstalled,
             translate: (key, fallback) => `${key}:${fallback}`,
             tracer,
             getDownloadState: (moduleId) =>
@@ -290,23 +286,6 @@ describe('ModuleCardRenderer', () => {
         );
 
         expect(openModuleSettingsSpy).not.toHaveBeenCalled();
-    });
-
-    it('does not run per-card install checks while rendering the modal', async () => {
-        const onClick = vi.fn();
-        (checkInstalled as ReturnType<typeof vi.fn>).mockResolvedValue(true);
-
-        renderer.createSelectionCard(
-            { id: 'late-install', name: 'Later', desc: 'Desc', installed: false } as never,
-            'services',
-            false,
-            onClick,
-        );
-
-        await Promise.resolve();
-        await Promise.resolve();
-
-        expect(checkInstalled).not.toHaveBeenCalled();
     });
 
     it('updates dashboard card content and marks cards as installed', () => {

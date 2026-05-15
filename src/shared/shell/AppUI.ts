@@ -81,8 +81,6 @@ export class AppUI {
         this._chrome = new AppUiChrome(this._translate, this._deps.tracer);
         this._toastManager = new ToastManager();
         this._cardRenderer = new ModuleCardRenderer({
-            checkInstalled: async (moduleId) =>
-                await this._platformService.checkInstalled(moduleId),
             translate: this._translate,
             tracer: this._deps.tracer,
             openModuleSettings: (app) => {

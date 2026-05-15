@@ -367,7 +367,7 @@ describe('ModuleService', () => {
             ).rejects.toThrow('Import available only in desktop app');
         });
 
-        it('should clear deleted-module cache after importing the same module id', async () => {
+        it('should ask backend after importing the same module id', async () => {
             mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: null });
             await moduleService.deleteModule('restored-module');
 
@@ -628,13 +628,14 @@ describe('ModuleService', () => {
             expect(result).toBe(false);
         });
 
-        it('should return false for deleted module', async () => {
-            // First delete the module
+        it('should ask backend after deleting a module so external restores are detected', async () => {
             mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok' });
             await moduleService.deleteModule('del-mod');
-            // checkInstalled should short-circuit
+
+            mocks.invokeSafe.mockResolvedValueOnce({ status: 'ok', data: true });
             const result = await moduleService.checkInstalled('del-mod');
-            expect(result).toBe(false);
+            expect(result).toBe(true);
+            expect(mocks.commands.checkModuleInstalled).toHaveBeenCalledWith('del-mod');
         });
     });
 

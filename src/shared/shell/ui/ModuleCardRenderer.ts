@@ -15,7 +15,6 @@ import {
 import { ModuleCardPresentationHelper } from './ModuleCardPresentationHelper';
 
 type ModuleCardRendererDeps = {
-    checkInstalled?: (moduleId: string) => Promise<boolean>;
     translate?: (key: string, fallback: string) => string;
     openModuleSettings?: (app: IApp) => void;
     getDownloadState?: (moduleId: string) => IModuleDownloadState | undefined;
