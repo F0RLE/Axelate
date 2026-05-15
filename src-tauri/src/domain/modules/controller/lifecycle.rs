@@ -218,14 +218,16 @@ impl<'a> LifecycleExecutor<'a> {
                     }
                     Err(error) => {
                         tracing::warn!(
-                            "Failed to poll child status for module {module_id}: {error}"
+                            error = %error,
+                            "Failed to poll child status for module {module_id}"
                         );
                         if let Some((_, mut child)) = controller_registry.remove(&module_id) {
                             crate::domain::integration_api::revoke_module_api_token(&module_id);
                             if let Err(kill_error) = child.kill().await {
                                 tracing::warn!(
                                     module_id = %module_id,
-                                    "Failed to kill module after status polling failed: {kill_error}"
+                                    error = %kill_error,
+                                    "Failed to kill module after status polling failed"
                                 );
                             }
                             Self::reap_child_after_kill_attempt(&module_id, &mut child).await;

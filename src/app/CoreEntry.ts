@@ -82,7 +82,7 @@ function bootCoreOnce(createCore: CoreFactory, tracer: EntryLogger): void {
         state.activeCoreInstance = coreInstance;
         state.coreInitializationInFlight = false;
 
-        coreInstance.init().catch(async (error: unknown) => {
+        void coreInstance.init().catch(async (error: unknown) => {
             if (state.activeCoreInstance === coreInstance) {
                 await destroyActiveCoreInstance(tracer, 'Destroy after boot failure failed');
             }

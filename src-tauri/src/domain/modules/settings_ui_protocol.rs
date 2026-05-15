@@ -411,6 +411,9 @@ async fn host_asset_response(
 }
 
 async fn load_dev_host_asset(file_name: &str, fallback: &'static [u8]) -> Vec<u8> {
+    #[cfg(not(debug_assertions))]
+    let _ = file_name;
+
     #[cfg(debug_assertions)]
     {
         let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

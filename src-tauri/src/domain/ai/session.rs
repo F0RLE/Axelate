@@ -125,15 +125,21 @@ impl ChatSessionManager {
                         Ok(Ok(())) => {
                             tracing::debug!("Chat history saved to disk.");
                         }
-                        Ok(Err(e)) => {
+                        Ok(Err(error)) => {
                             dirty.store(true, Ordering::Release);
                             save_notify.notify_one();
-                            tracing::error!("Failed to save chat history: {e}");
+                            tracing::error!(
+                                error = %error,
+                                "Failed to save chat history"
+                            );
                         }
-                        Err(e) => {
+                        Err(error) => {
                             dirty.store(true, Ordering::Release);
                             save_notify.notify_one();
-                            tracing::error!("Saver task join error: {e}");
+                            tracing::error!(
+                                error = %error,
+                                "Saver task join error"
+                            );
                         }
                     }
                 }

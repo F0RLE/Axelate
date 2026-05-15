@@ -56,6 +56,9 @@ fn load_locale_content(lang: &str) -> Cow<'static, str> {
 }
 
 fn load_dev_text_resource(relative_path: &str, fallback: &'static str) -> Cow<'static, str> {
+    #[cfg(not(debug_assertions))]
+    let _ = relative_path;
+
     #[cfg(debug_assertions)]
     {
         let path = Path::new(env!("CARGO_MANIFEST_DIR")).join(relative_path);

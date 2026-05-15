@@ -35,6 +35,7 @@ const HOST_CHANNEL = 'axelate:module-settings-host';
 const HOST_FRAME_LOAD_TIMEOUT_MS = 8_000;
 const WINDOWS_MODULE_SETTINGS_ORIGIN = 'http://module-settings.localhost';
 const DEFAULT_MODULE_SETTINGS_ORIGIN = 'module-settings://localhost';
+const SESSION_TOKEN_PATTERN = /^[A-Za-z0-9_-]{8,128}$/u;
 
 export class ModuleSettingsCustomUiController {
     private _activeSession: ActiveIframeSession | null = null;
@@ -174,8 +175,13 @@ export class ModuleSettingsCustomUiController {
             this._showFailure(status, error);
         };
 
+        const allowedOrigin = this._resolveModuleSettingsOrigin();
         const handleMessage = (event: MessageEvent) => {
             if (event.source !== frame.contentWindow) {
+                return;
+            }
+
+            if (event.origin !== allowedOrigin) {
                 return;
             }
 
@@ -228,24 +234,35 @@ export class ModuleSettingsCustomUiController {
     }
 
     private _buildHostUrl(app: IApp, sessionToken: string): string {
+        const safeSessionToken = this._validateSessionToken(sessionToken);
         const settings = this._deps.service.getSettings() as SettingsSnapshot;
-        const searchParams = new URLSearchParams({
-            moduleId: app.id,
-            name: app.name ?? app.id,
-            category: app.category ?? '',
-            type: app.type ?? '',
-            settingsUi: app.settingsUi ?? '',
-            language: settings.language ?? 'en',
-            theme: settings.theme ?? 'dark',
-        });
+        const hostUrl = new URL(
+            `/session/${safeSessionToken}/host/index.html`,
+            this._resolveModuleSettingsOrigin(),
+        );
+        hostUrl.searchParams.set('moduleId', app.id);
+        hostUrl.searchParams.set('name', app.name ?? app.id);
+        hostUrl.searchParams.set('category', app.category ?? '');
+        hostUrl.searchParams.set('type', app.type ?? '');
+        hostUrl.searchParams.set('settingsUi', app.settingsUi ?? '');
+        hostUrl.searchParams.set('language', settings.language ?? 'en');
+        hostUrl.searchParams.set('theme', settings.theme ?? 'dark');
 
-        return `${this._resolveModuleSettingsOrigin()}/session/${sessionToken}/host/index.html?${searchParams.toString()}`;
+        return hostUrl.href;
     }
 
     private _resolveModuleSettingsOrigin(): string {
         return navigator.userAgent.includes('Windows')
             ? WINDOWS_MODULE_SETTINGS_ORIGIN
             : DEFAULT_MODULE_SETTINGS_ORIGIN;
+    }
+
+    private _validateSessionToken(sessionToken: string): string {
+        if (!SESSION_TOKEN_PATTERN.test(sessionToken)) {
+            throw new Error('Invalid module settings session token');
+        }
+
+        return sessionToken;
     }
 
     private _disposeActiveSession(): void {
