@@ -218,19 +218,23 @@ impl<'a> LifecycleExecutor<'a> {
                         tokio::time::sleep(MODULE_CHILD_EXIT_POLL_INTERVAL).await;
                     }
                     Err(error) => {
+                        let error_message = error.to_string();
                         tracing::warn!(
                             "Failed to poll child status for module {}: {}",
                             module_id,
-                            error
+                            error_message
                         );
+                        std::mem::drop(error_message);
                         if let Some((_, mut child)) = controller_registry.remove(&module_id) {
                             crate::domain::integration_api::revoke_module_api_token(&module_id);
                             if let Err(kill_error) = child.kill().await {
+                                let kill_error_message = kill_error.to_string();
                                 tracing::warn!(
                                     "Failed to kill module {} after status polling failed: {}",
                                     module_id,
-                                    kill_error
+                                    kill_error_message
                                 );
+                                std::mem::drop(kill_error_message);
                             }
                             Self::reap_child_after_kill_attempt(&module_id, &mut child).await;
                         }

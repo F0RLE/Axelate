@@ -8,8 +8,13 @@ fn resume_request_for_module(
     module_id: &str,
     request: Option<DownloadRequest>,
 ) -> Result<DownloadRequest, AppError> {
-    request
-        .ok_or_else(|| AppError::NotFound(format!("No paused download metadata for {module_id}")))
+    request.ok_or_else(|| AppError::NotFound(no_paused_download_message(module_id)))
+}
+
+fn no_paused_download_message(module_id: &str) -> String {
+    let mut message = String::from("No paused download metadata for ");
+    message.push_str(module_id);
+    message
 }
 
 fn list_regular_file_names(path: &Path) -> Result<Vec<String>, AppError> {
