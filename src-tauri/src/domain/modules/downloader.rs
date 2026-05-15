@@ -5,7 +5,8 @@ use super::downloader_progress::{
     compute_progress, emit_progress,
 };
 use super::downloader_service::resolve_existing_module_path;
-use super::downloader_support::{package_install_dir, remove_partial_metadata};
+use super::downloader_support::package_install_dir;
+use super::downloader_support::remove_partial_metadata;
 use super::downloader_transfer::{
     DownloadTask, ReleaseDownloadAsset, build_client, build_public_client, clone_repository_into,
     download_file, resolve_download_url,

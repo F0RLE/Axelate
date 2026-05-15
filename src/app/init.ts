@@ -9,6 +9,7 @@ export class Core {
     private _isDestroyed = false;
     private _isInitialized = false;
     private _initPromise: Promise<void> | null = null;
+    private _initRunId = 0;
     private readonly _boundGlobalShortcutKeydown = (e: KeyboardEvent) => {
         const forbiddenKeys = ['F3', 'F7', 'F1'];
         if (forbiddenKeys.includes(e.key)) {
@@ -46,14 +47,16 @@ export class Core {
         }
 
         const initPromise = this._runInit();
+        const initRunId = this._initRunId + 1;
+        this._initRunId = initRunId;
         this._initPromise = initPromise;
         try {
             await initPromise;
-            if (this._initPromise === initPromise && !this._isCoreDestroyed()) {
+            if (this._initRunId === initRunId && !this._isCoreDestroyed()) {
                 this._isInitialized = true;
             }
         } finally {
-            if (this._initPromise === initPromise) {
+            if (this._initRunId === initRunId) {
                 this._initPromise = null;
             }
         }
@@ -83,6 +86,7 @@ export class Core {
         if (this._isDestroyed) return;
         this._isDestroyed = true;
         this._isInitialized = false;
+        this._initRunId += 1;
         const pendingInit = this._initPromise;
         this._initPromise = null;
         if (pendingInit !== null) {
