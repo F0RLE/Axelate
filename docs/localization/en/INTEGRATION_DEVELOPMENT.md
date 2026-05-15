@@ -13,6 +13,8 @@ npm run integration:doctor -- ./my-integration
 ```
 
 Then import the folder in the launcher integrations screen and launch it.
+Use `--runtime node` or `--runtime bun` when the integration entrypoint is
+JavaScript instead of Python.
 
 For an existing app, keep the app code in your integration folder, declare its
 entrypoint in `axelate-module.toml`, and use the launcher-provided environment
@@ -23,6 +25,7 @@ local API, then run `integration:doctor` before importing the folder.
 ## Repository Helpers
 
 - `npm run integration:new -- <folder>` creates a minimal Python integration.
+  Add `--runtime node` or `--runtime bun` for JavaScript runtimes.
 - `npm run integration:doctor -- <folder>` validates `axelate-module.toml`,
   entry files, settings UI, dependency paths, and common generated folders that
   should not be shipped.

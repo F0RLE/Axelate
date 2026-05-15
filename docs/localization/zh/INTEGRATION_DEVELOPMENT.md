@@ -13,6 +13,7 @@ npm run integration:doctor -- ./my-integration
 ```
 
 然后在 Axelate 的 Integrations 页面导入这个文件夹并启动卡片。
+如果集成入口是 JavaScript，可以使用 `--runtime node` 或 `--runtime bun`。
 
 如果要接入已有应用，把应用代码放在集成目录里，在 `axelate-module.toml`
 中声明入口文件，并在进程启动时读取启动器提供的环境变量。生成的状态写入
@@ -22,6 +23,7 @@ npm run integration:doctor -- ./my-integration
 ## 仓库工具
 
 - `npm run integration:new -- <folder>` 创建一个最小 Python 集成。
+  JavaScript runtime 可添加 `--runtime node` 或 `--runtime bun`。
 - `npm run integration:doctor -- <folder>` 检查 `axelate-module.toml`、入口文件、
   settings UI、依赖路径，以及不应该随包发布的生成目录。
 - `docs/examples/integrations/python-ai-tool/` 是最小可运行示例。

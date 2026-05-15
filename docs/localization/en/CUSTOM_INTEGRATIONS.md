@@ -12,6 +12,8 @@ npm run integration:new -- ./my-integration --id my-integration --name "My Integ
 npm run integration:doctor -- ./my-integration
 ```
 
+Use `--runtime node` or `--runtime bun` for JavaScript integrations.
+
 ## Minimal Layout
 
 ```text

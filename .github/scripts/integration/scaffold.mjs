@@ -9,7 +9,7 @@ const targetArg = args.find((arg) => !arg.startsWith('--'));
 
 if (!targetArg) {
     console.error(
-        'Usage: npm run integration:new -- <target-dir> [--id my-id] [--name "My Integration"]',
+        'Usage: npm run integration:new -- <target-dir> [--id my-id] [--name "My Integration"] [--runtime python|node|bun]',
     );
     process.exit(1);
 }
@@ -56,10 +56,20 @@ function validateName(value) {
     return trimmed;
 }
 
+function validateRuntime(value) {
+    const runtime = String(value).trim().toLowerCase();
+    if (!['python', 'node', 'bun'].includes(runtime)) {
+        fail('Integration runtime must be one of: python, node, bun.');
+    }
+
+    return runtime;
+}
+
 const target = path.resolve(targetArg);
 const defaultId = slugFromName(path.basename(target));
 const id = validateId(optionValue('--id', defaultId));
 const name = validateName(optionValue('--name', id.replace(/[-_]+/gu, ' ')));
+const runtime = validateRuntime(optionValue('--runtime', 'python'));
 
 if (existsSync(target)) {
     console.error(`Target already exists: ${target}`);
@@ -69,6 +79,7 @@ if (existsSync(target)) {
 mkdirSync(path.join(target, 'src'), { recursive: true });
 mkdirSync(path.join(target, 'settings-ui'), { recursive: true });
 
+const runtimeManifest = buildRuntimeManifest(runtime);
 writeFileSync(
     path.join(target, 'axelate-module.toml'),
     `api_version = "1"
@@ -83,9 +94,7 @@ readme = "README.md"
 settings_ui = "settings-ui/index.html"
 
 [runtime]
-kind = "python"
-version = "3.11"
-entry = "src/main.py"
+${runtimeManifest}
 `,
 );
 
@@ -94,6 +103,8 @@ writeFileSync(
     `# ${name}
 
 Axelate integration scaffold.
+
+Runtime: ${runtime}
 
 ## Run
 
@@ -105,9 +116,52 @@ Use \`npm run integration:doctor -- ${target}\` from the Axelate repository to v
 `,
 );
 
-writeFileSync(
-    path.join(target, 'src', 'main.py'),
-    `from __future__ import annotations
+if (runtime === 'python') {
+    writeFileSync(
+        path.join(target, 'src', 'main.py'),
+        buildPythonMain(),
+    );
+} else {
+    writeFileSync(path.join(target, 'package.json'), buildPackageJson(id, name, runtime));
+    writeFileSync(path.join(target, 'src', 'axelate-client.mjs'), buildJavaScriptClient());
+    writeFileSync(path.join(target, 'src', 'main.mjs'), buildJavaScriptMain());
+}
+
+function buildRuntimeManifest(selectedRuntime) {
+    if (selectedRuntime === 'python') {
+        return `kind = "python"
+version = "3.11"
+entry = "src/main.py"`;
+    }
+
+    return `kind = "${selectedRuntime}"
+version = "system"
+entry = "src/main.mjs"
+dependencies = "package.json"
+package_manager = "${selectedRuntime === 'bun' ? 'bun' : 'npm'}"`;
+}
+
+function buildPackageJson(packageId, packageName, selectedRuntime) {
+    return `${JSON.stringify(
+        {
+            name: packageId,
+            version: '0.1.0',
+            private: true,
+            description: `Connects ${packageName} to Axelate AI.`,
+            type: 'module',
+            scripts: {
+                start: `${selectedRuntime === 'bun' ? 'bun' : 'node'} src/main.mjs`,
+            },
+            dependencies: {},
+        },
+        null,
+        2,
+    )}
+`;
+}
+
+function buildPythonMain() {
+    return `from __future__ import annotations
 
 import json
 import os
@@ -177,8 +231,115 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-`,
-);
+`;
+}
+
+function buildJavaScriptClient() {
+    return `export class AxelateClient {
+  constructor(env = globalThis.process?.env ?? {}) {
+    this.baseUrl = validateBaseUrl(requiredEnv(env, "AXELATE_HTTP_API_BASE")).replace(/\\/$/u, "");
+    this.token = requiredEnv(env, "AXELATE_HTTP_API_TOKEN");
+    this.moduleId = requiredEnv(env, "AXELATE_MODULE_ID");
+    this.modulePathId = encodeURIComponent(this.moduleId);
+  }
+
+  async request(method, path, payload) {
+    const response = await fetch(\`\${this.baseUrl}\${path}\`, {
+      method,
+      headers: {
+        Authorization: \`Bearer \${this.token}\`,
+        "Content-Type": "application/json",
+      },
+      body: payload === undefined ? undefined : JSON.stringify(payload),
+    });
+
+    const body = await readResponseBody(response);
+    if (!response.ok) {
+      const message =
+        body && typeof body === "object" && "error" in body
+          ? body.error
+          : \`Axelate request failed: \${response.status}\`;
+      throw new Error(String(message));
+    }
+
+    return body;
+  }
+
+  settings() {
+    return this.request("GET", \`/v1/modules/\${this.modulePathId}/settings\`).then(
+      (body) => body.settings ?? {},
+    );
+  }
+
+  stage(stage, label, progress) {
+    const payload = { stage, label };
+    if (progress !== undefined) {
+      payload.progress = progress;
+    }
+    return this.request("POST", \`/v1/modules/\${this.modulePathId}/stage\`, payload);
+  }
+
+  aiText(prompt, options = {}) {
+    return this.request("POST", "/v1/ai/text", {
+      prompt,
+      sessionId: this.moduleId,
+      ...options,
+    });
+  }
+}
+
+function requiredEnv(env, name) {
+  const value = String(env[name] ?? "");
+  if (value.trim().length === 0) {
+    throw new Error(\`Missing required Axelate integration env var: \${name}\`);
+  }
+
+  return value;
+}
+
+function validateBaseUrl(value) {
+  const url = new URL(value);
+  const allowedHosts = new Set(["localhost", "127.0.0.1", "[::1]"]);
+  if (!["http:", "https:"].includes(url.protocol) || !allowedHosts.has(url.hostname)) {
+    throw new Error("AXELATE_HTTP_API_BASE must be an http(s) loopback URL.");
+  }
+
+  return value;
+}
+
+async function readResponseBody(response) {
+  if (response.status === 204) {
+    return {};
+  }
+
+  const contentType = response.headers.get("content-type") ?? "";
+  const text = await response.text();
+  if (text.length === 0) {
+    return {};
+  }
+
+  if (contentType.includes("application/json")) {
+    return JSON.parse(text);
+  }
+
+  return { text };
+}
+`;
+}
+
+function buildJavaScriptMain() {
+    return `import { AxelateClient } from "./axelate-client.mjs";
+
+const client = new AxelateClient();
+const settings = await client.settings();
+const prompt = settings.prompt ?? "Write a short status update.";
+
+await client.stage("ai.request", "Calling Axelate AI", 0.5);
+const result = await client.aiText(prompt);
+
+console.log(JSON.stringify(result, null, 2));
+`;
+}
 
 writeFileSync(
     path.join(target, 'settings-ui', 'axelate-settings-bridge.js'),

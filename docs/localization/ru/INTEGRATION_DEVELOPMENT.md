@@ -14,6 +14,8 @@ npm run integration:doctor -- ./my-integration
 
 После этого импортируй папку на странице интеграций в лаунчере и запусти
 карточку.
+Если entrypoint интеграции на JavaScript, используй `--runtime node` или
+`--runtime bun`.
 
 Для существующего приложения оставь код приложения внутри папки интеграции,
 укажи entrypoint в `axelate-module.toml` и читай переменные окружения лаунчера
@@ -24,6 +26,7 @@ npm run integration:doctor -- ./my-integration
 ## Инструменты в репозитории
 
 - `npm run integration:new -- <folder>` создает минимальную Python-интеграцию.
+  Для JavaScript runtime добавь `--runtime node` или `--runtime bun`.
 - `npm run integration:doctor -- <folder>` проверяет `axelate-module.toml`,
   entry-файлы, settings UI, dependency paths и типичные сгенерированные папки,
   которые нельзя поставлять.

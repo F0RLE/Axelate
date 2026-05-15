@@ -837,7 +837,7 @@ Tasks:
   setup          Validate prerequisites, install frontend deps, and configure hooks
   install-deps   Install frontend dependencies
   integration:doctor  Validate an Axelate integration folder
-  integration:new     Scaffold a minimal Python integration folder
+  integration:new     Scaffold a minimal Python, Node, or Bun integration folder
   update         Update npm and cargo dependencies, then verify
   prepare        Configure Git hooks
   check-size     Print a frontend bundle size report
