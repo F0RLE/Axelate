@@ -904,6 +904,33 @@ describe('AppUI lifecycle', () => {
         );
     });
 
+    it('should clear selected AI slots when their module disappears from catalog', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="selected">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+        const missingApp = {
+            id: 'local-text-engine',
+            name: 'Local Text Engine',
+            installed: true,
+            type: 'local',
+            capability: 'text',
+        } as IApp;
+        appUI.updateModuleCard('ai_text', missingApp);
+        getCatalogCategoryMock.mockImplementation((category: string) =>
+            category === 'ai' ? [] : [],
+        );
+
+        globalThis.dispatchEvent(new Event('catalog-loaded'));
+
+        expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('ai_text');
+        expect(document.getElementById('ai-module-card')?.classList.contains('empty')).toBe(true);
+    });
+
     it('should resolve app by id from injected catalog resolver', () => {
         appUI = createAppUI();
         getCatalogCategoryMock.mockImplementation((category: string) =>

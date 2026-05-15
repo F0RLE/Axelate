@@ -483,6 +483,8 @@ export class AppUI {
     }
 
     private _reconcileSelectionsWithCatalog(): void {
+        this._clearMissingSelection(CategoryKey.AI_TEXT);
+        this._clearMissingSelection(CategoryKey.AI_IMAGE);
         this._clearMissingSelection(CategoryKey.SERVICES);
     }
 
