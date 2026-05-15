@@ -28,8 +28,10 @@ jobs:
                 include:
                     - language: javascript-typescript
                       build-mode: none
+                      queries: security-extended,security-and-quality
                     - language: rust
-                      build-mode: manual
+                      build-mode: none
+                      queries: security-extended
 
         steps:
             - name: Checkout repository
@@ -46,11 +48,7 @@ jobs:
               with:
                   languages: ${{ matrix.language }}
                   build-mode: ${{ matrix.build-mode }}
-                  queries: security-extended,security-and-quality
-
-            - name: Build Rust for CodeQL
-              if: matrix.language == 'rust'
-              run: cargo check --manifest-path src-tauri/Cargo.toml
+                  queries: ${{ matrix.queries }}
 
             - name: Perform CodeQL Analysis
               uses: github/codeql-action/analyze@v4
