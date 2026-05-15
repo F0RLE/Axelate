@@ -71,6 +71,33 @@ Recommended use:
 - `typecheck`: read-only binding validation plus TypeScript checks
 - `verify`: full local release gate before handoff, release work, or a pull request
 
+## Manual Smoke Check
+
+Before merging a large PR to `nightly` or promoting `nightly` toward `main`, run
+the smallest manual desktop pass that touches the real Tauri runtime:
+
+- startup and shutdown: launch with `npm run dev`, close the app, relaunch, and
+  confirm the previous UI state restores without stale modals or stuck loading
+  states
+- chat text flow: send a normal message, cancel a streaming response, retry or
+  regenerate the last turn, and confirm provider errors appear as toasts rather
+  than persistent assistant messages
+- chat image flow: send an image-generation request, cancel one in progress, and
+  confirm generated images restore from history with image actions intact
+- provider settings: save, validate, remove, and relaunch after deleting an API
+  key; the key should stay removed after restart
+- local modules: open version selection, download a CPU or GPU package, start,
+  stop, restart, remove, and confirm the selection modal refreshes after disk
+  changes
+- integrations: import a folder or archive, run it, open settings, delete it
+  from the launcher, then delete or restore the folder externally and confirm
+  the integrations modal refreshes
+- console and downloads: filter log levels, pause/resume/cancel an active
+  download, and confirm controls stay clickable under hover
+
+If one of these checks fails, fix the product flow first and only update docs if
+the intended behavior changed.
+
 Current dev-server behavior:
 
 - the Tauri dev flow expects the frontend on `http://localhost:1420`

@@ -391,6 +391,29 @@ describe('CatalogService', () => {
             expect(service.getAppById('parser')).toBeUndefined();
             expect(mockBridge.listen).toHaveBeenCalledTimes(1);
         });
+
+        it('should unsubscribe the integration watcher if destroy runs while binding is pending', async () => {
+            let resolveListen: (unlisten: () => void) => void = () => {
+                throw new Error('listen promise was not started');
+            };
+            const unlisten = vi.fn();
+
+            setupBridgeMocks(mockBridge, createMockAppConfig());
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.listen.mockReturnValue(
+                new Promise((resolve) => {
+                    resolveListen = resolve;
+                }),
+            );
+
+            const loadPromise = service.loadCatalog();
+            service.destroy();
+            resolveListen(unlisten);
+            await loadPromise;
+            await Promise.resolve();
+
+            expect(unlisten).toHaveBeenCalledTimes(1);
+        });
     });
 
     describe('_initGlobalExposures DEV branch (L29)', () => {

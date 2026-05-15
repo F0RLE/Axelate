@@ -273,6 +273,7 @@ export class ChatSendController {
             await this._options.handleResponse(response, streamingHandle, imageHandle);
             if (!response.ok) {
                 this._rollbackOptimisticSend(historySnapshot, text);
+                return false;
             }
             return true;
         } catch (error: unknown) {

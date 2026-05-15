@@ -24,6 +24,7 @@ export class CatalogService {
     private readonly _appData: ICatalogData = { ai: [], services: [] };
     private _integrationWatcherUnlisten: (() => void) | null = null;
     private _integrationWatcherBinding = false;
+    private _destroyed = false;
 
     constructor(
         private readonly _bridge: IBridge,
@@ -34,6 +35,7 @@ export class CatalogService {
      * Asynchronously loads the application catalog from the Tauri backend.
      */
     public async loadCatalog(): Promise<void> {
+        this._destroyed = false;
         this._bindIntegrationWatcher();
         const snapshot = await this._loadSnapshot();
 
@@ -57,6 +59,7 @@ export class CatalogService {
     }
 
     public destroy(): void {
+        this._destroyed = true;
         this._integrationWatcherUnlisten?.();
         this._integrationWatcherUnlisten = null;
         this._integrationWatcherBinding = false;
@@ -77,6 +80,11 @@ export class CatalogService {
                 void this.loadCatalog();
             })
             .then((unlisten) => {
+                if (this._destroyed) {
+                    unlisten();
+                    this._integrationWatcherBinding = false;
+                    return;
+                }
                 this._integrationWatcherUnlisten = unlisten;
             })
             .catch((error: unknown) => {

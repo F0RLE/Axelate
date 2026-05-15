@@ -178,7 +178,7 @@ describe('ChatSendController', () => {
 
         const result = await controller.sendChat(input);
 
-        expect(result).toBe(true);
+        expect(result).toBe(false);
         expect(options.handleResponse).toHaveBeenCalledWith(
             { ok: false, error: 'provider failed' },
             streamingHandle,

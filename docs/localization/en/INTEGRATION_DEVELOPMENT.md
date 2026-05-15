@@ -49,7 +49,7 @@ api_version = "1"
 id = "my-integration"
 name = "My Integration"
 version = "0.1.0"
-category = "service"
+type = "service"
 settings_ui = "settings-ui/index.html"
 
 [runtime]
