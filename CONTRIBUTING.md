@@ -67,3 +67,8 @@ These files are planning documents and should not be used as current feature inv
 - `docs/localization/en/ROADMAP.md`
 
 Move future ideas into the planning documents instead of mixing them into current onboarding docs.
+
+When a change affects secrets, local API tokens, filesystem paths, shell-open,
+process lifecycle, archive extraction, runtime folders, or integration trust,
+update the trust and integration docs in the same change. The docs should explain
+the boundary the code enforces, not just the happy-path command.

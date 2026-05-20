@@ -476,6 +476,27 @@ describe('TauriProvider', () => {
             await expect(webProvider.openUrl('https://example.com')).resolves.toBeUndefined();
             expect(openExternal).toHaveBeenCalledWith('https://example.com');
         });
+
+        it('should allow mailto URLs', async () => {
+            (mockedTauriInvoke as unknown as Mock).mockResolvedValueOnce(undefined);
+
+            await provider.openUrl('mailto:support@example.com');
+
+            expect(mockedTauriInvoke).toHaveBeenCalledWith('plugin:shell|open', {
+                path: 'mailto:support@example.com',
+            });
+        });
+
+        it('should block unsupported URL protocols', async () => {
+            await expect(provider.openUrl('file:///C:/Windows/System32/calc.exe')).rejects.toThrow(
+                'Blocked external URL with unsupported protocol',
+            );
+            await expect(provider.openUrl('javascript:alert(1)')).rejects.toThrow(
+                'Blocked external URL with unsupported protocol',
+            );
+
+            expect(mockedTauriInvoke).not.toHaveBeenCalled();
+        });
     });
 
     // ---------------------------------------------------------- web mode

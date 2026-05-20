@@ -23,8 +23,31 @@ Current repository-grounded trust decisions:
 - frontend bindings are generated from Rust types
 - process and module lifecycle are controlled from the backend side
 - secure storage infrastructure exists for provider secrets
+- local integration API tokens are issued at runtime and scoped to the launcher
+  process or a specific module
+- module-owned local API routes reject access to other module ids
+- module ids, runtime entry paths, settings UI paths, archive entries, and log
+  target identifiers are validated before sensitive filesystem operations
+- frontend external URL opening is restricted to expected public protocols
 
 This means the UI is not the source of truth for secrets or runtime control.
+
+## Implemented Trust Controls Today
+
+These controls exist in the current codebase and should stay protected by tests:
+
+- backend-owned provider secret storage
+- generated Rust-to-TypeScript command bindings
+- scoped bearer tokens for launcher-managed integrations
+- loopback-only local integration API
+- per-module runtime and log directory ownership
+- archive extraction checks for traversal, unsupported entry types, duplicate
+  entries, file count limits, single-file size limits, and total-size limits
+- explicit validation before opening console log target folders
+- external URL protocol allowlisting before frontend shell-open calls
+
+These controls reduce accidental trust escalation. They do not make imported
+integrations sandboxed or verified packages.
 
 ## Current Security Boundaries
 
@@ -57,6 +80,11 @@ Local runtimes and modules are useful, but they are not automatically trusted.
 Current practical rule:
 
 - local modules are product capabilities, not arbitrary unrestricted execution promises
+- manually imported integrations are local code selected by the user
+- launcher-managed script runtimes receive scoped environment variables, runtime
+  directories, log directories, and local API tokens
+- future reviewed packages must not reuse the same trust language as manual
+  imports
 
 Future package and module UX should make this much more visible.
 

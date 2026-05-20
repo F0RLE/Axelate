@@ -51,6 +51,10 @@ manager and a package manifest outside the integration directory. Integrations m
 ship or write `.venv`, `node_modules`, caches, logs, or downloaded runtime
 dependencies inside the integration directory.
 
+Import URLs accepted by the launcher must use `https://`, except localhost
+development URLs. GitHub repository-root URLs may be resolved to branch archives;
+direct archive URLs are downloaded directly.
+
 ## Authentication
 
 Every endpoint except `GET /v1/health` requires bearer-token authentication:
@@ -58,6 +62,10 @@ Every endpoint except `GET /v1/health` requires bearer-token authentication:
 ```http
 Authorization: Bearer <AXELATE_HTTP_API_TOKEN>
 ```
+
+Module-scoped tokens can access shared AI endpoints and only that module's own
+`/v1/modules/{moduleId}/...` routes. They are not durable credentials and should
+not be stored outside the running process.
 
 ## Client Rules
 

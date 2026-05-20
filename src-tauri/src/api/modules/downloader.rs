@@ -2,6 +2,7 @@ use crate::domain::modules::downloader;
 use crate::domain::modules::downloader::DownloadRequest;
 use crate::errors::AppError;
 use std::path::Path;
+use std::process::Command;
 use tauri::AppHandle;
 
 fn resume_request_for_module(
@@ -30,6 +31,35 @@ fn list_regular_file_names(path: &Path) -> Result<Vec<String>, AppError> {
     files.sort();
 
     Ok(files)
+}
+
+fn resolve_existing_module_dir(module_id: &str) -> Result<std::path::PathBuf, AppError> {
+    downloader::validate_module_id(module_id)?;
+    let path = downloader::get_module_path(module_id);
+    if !path.is_dir() {
+        return Err(AppError::NotFound(format!(
+            "Module directory does not exist: {module_id}"
+        )));
+    }
+
+    Ok(path)
+}
+
+fn open_folder(path: &Path) -> std::io::Result<()> {
+    #[cfg(target_os = "windows")]
+    {
+        Command::new("explorer").arg(path).spawn().map(|_| ())
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        Command::new("open").arg(path).spawn().map(|_| ())
+    }
+
+    #[cfg(all(unix, not(target_os = "macos")))]
+    {
+        Command::new("xdg-open").arg(path).spawn().map(|_| ())
+    }
 }
 
 #[tauri::command]
@@ -136,6 +166,14 @@ pub fn get_module_path(module_id: &str) -> Result<String, AppError> {
     Ok(downloader::get_module_path(module_id)
         .to_string_lossy()
         .to_string())
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Opens an installed module directory in the system file manager.
+pub fn open_module_folder(module_id: &str) -> Result<(), AppError> {
+    let path = resolve_existing_module_dir(module_id)?;
+    open_folder(&path).map_err(|error| AppError::Io(error.to_string()))
 }
 
 #[tauri::command]
@@ -250,5 +288,12 @@ mod tests {
         let error = list_regular_file_names(&temp.path().join("missing")).unwrap_err();
 
         assert!(matches!(error, AppError::NotFound(_)));
+    }
+
+    #[test]
+    fn resolve_existing_module_dir_rejects_invalid_module_id() {
+        let error = resolve_existing_module_dir("..\\escape").unwrap_err();
+
+        assert!(matches!(error, AppError::Validation(_)));
     }
 }

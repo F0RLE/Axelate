@@ -68,6 +68,8 @@ export const commands = {
 	checkModuleInstalled: (moduleId: string) => typedError<boolean, AppError>(__TAURI_INVOKE("check_module_installed", { moduleId })),
 	/**  Retrieves the filesystem path to a module's directory */
 	getModulePath: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_path", { moduleId })),
+	/**  Opens an installed module directory in the system file manager. */
+	openModuleFolder: (moduleId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_module_folder", { moduleId })),
 	/**  Deletes a module from local storage */
 	deleteModule: (moduleId: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_module", { moduleId })),
 	/**  Lists all files in a module's directory */
@@ -140,7 +142,7 @@ export const commands = {
 	saveUiState: (state: UIState) => typedError<null, AppError>(__TAURI_INVOKE("save_ui_state", { state: ({...state,resolution_zoom:Object.fromEntries(Object.entries(state.resolution_zoom).map(([k,v])=>[k,v]))}) })),
 	/**  Retrieves all application state and configuration during app startup */
 	getAppBootstrapData: () => typedError<BootstrapData, AppError>(__TAURI_INVOKE("get_app_bootstrap_data")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,uiState:({...v.data.uiState,resolution_zoom:Object.fromEntries(Object.entries(v.data.uiState.resolution_zoom).map(([k,v])=>[k,v]))})}) } : v) as typeof v)),
-	/**  Saves anAPI key securely to system credential storage */
+	/**  Saves an API key securely to system credential storage */
 	saveSecureKey: (service: string, key: string) => typedError<null, AppError>(__TAURI_INVOKE("save_secure_key", { service, key })),
 	/**  Removes a frontend-managed secret from system credential storage */
 	removeSecureKey: (service: string) => typedError<null, AppError>(__TAURI_INVOKE("remove_secure_key", { service })),

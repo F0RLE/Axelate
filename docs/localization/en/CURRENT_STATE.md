@@ -1,6 +1,6 @@
 # Axelate Current State
 
-> Repository-grounded snapshot as of 2026-05-06.
+> Repository-grounded snapshot as of 2026-05-16.
 > This document describes what exists now, not what the future product aspires to become.
 
 For setup and contributor workflow, use [Getting Started](GETTING_STARTED.md) and [Development Workflow](DEVELOPMENT_WORKFLOW.md).
@@ -320,6 +320,26 @@ The project should not yet describe itself as:
 - a fully open ecosystem
 - a trusted managed execution platform
 - a finished MCP operating layer
+
+## Current Priority Stack
+
+The next useful work should stay in this order:
+
+1. Runtime reliability: install, resume, start, stop, restart, delete, and repair
+   should be boring and repeatable.
+2. Integration safety: imported folders, archives, URLs, runtime paths, settings,
+   tokens, and logs should have explicit ownership boundaries.
+3. Trust visibility: users should see the difference between local manual imports,
+   future verified packages, and future managed or hybrid execution.
+4. Provider clarity: cloud routing should remain useful without making OpenRouter
+   the permanent product identity.
+
+Recent hardening direction:
+
+- frontend external link opening is restricted to expected public protocols
+- console log folder targets validate module and engine identifiers before
+  touching filesystem paths
+- backend-owned commands are preferred for local folders and runtime paths
 
 ## Current Automation State
 

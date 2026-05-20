@@ -30,3 +30,16 @@ Additional repository security automation:
 - CodeRabbit is configured to review security-sensitive Rust/Tauri, TypeScript, workflow, and resource changes.
 
 Release tags must match project versions and point to commits reachable from `main`. Tags matching `v*` are protected against deletion and non-fast-forward updates.
+
+Current application security posture:
+
+- provider secrets are backend-owned
+- frontend/backend contracts are generated from Rust types
+- local integration API tokens are runtime-issued and scoped
+- import paths, runtime entry paths, settings UI paths, archive entries, and log
+  target identifiers are validated before sensitive filesystem operations
+- frontend external shell-open URLs are restricted to expected public protocols
+
+These controls are defense-in-depth for the current workstation core. Manually
+imported integrations are still local code selected by the user, not reviewed or
+signed packages.

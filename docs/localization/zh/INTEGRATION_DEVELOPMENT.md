@@ -1,5 +1,8 @@
 # 集成开发
 
+> English `docs/localization/en/INTEGRATION_DEVELOPMENT.md` is the canonical
+> reference and may be updated before this translation.
+
 > 将你的产品接入 Axelate，并使用启动器提供的 AI、设置、日志和运行时目录，
 > 而不是依赖应用内部文件。
 
@@ -132,3 +135,20 @@ iframe 协议：
 ## 信任规则
 
 导入的集成是用户选择运行的本地代码。目前它们不是经过审查、签名或沙箱隔离的包。
+
+保持集成干净且边界明确：
+
+- 不要发布生成的依赖目录
+- 不要硬编码端口或 Axelate 内部路径
+- 将运行时写入放在 `AXELATE_MODULE_RUNTIME_DIR`
+- 将日志写入放在 `AXELATE_MODULE_LOG_DIR`
+- 通过本地 API 读取和保存设置，不要直接编辑启动器内部配置文件
+- 导入或打包文件夹前运行 `integration:doctor`
+
+URL 导入必须使用 `https://`，本地开发的 `http://localhost` 或
+`http://127.0.0.1` 除外。GitHub 仓库根 URL 可以解析为 `main` 或 `master`
+分支归档；直接归档 URL 会按归档文件下载。
+
+启动器会验证 module id、runtime entry path、settings UI path、归档条目、文件数量
+和大小限制。这些检查可以防止常见导入错误和 path traversal，但不能替代对将要运行的
+集成代码进行审查。

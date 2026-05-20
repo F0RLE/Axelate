@@ -275,6 +275,11 @@ export class SettingsService {
     }
 
     private _resolveSecureKeyService(provider: string): string {
-        return resolveProviderSecretService(provider) ?? `${provider}_api_key`;
+        const service = resolveProviderSecretService(provider);
+        if (service === null) {
+            throw new Error(`Provider does not support frontend-managed secrets: ${provider}`);
+        }
+
+        return service;
     }
 }

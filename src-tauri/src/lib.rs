@@ -124,6 +124,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             downloader::resume_download,
             downloader::check_module_installed,
             downloader::get_module_path,
+            downloader::open_module_folder,
             downloader::delete_module,
             downloader::list_module_files,
             downloader::set_download_settings,

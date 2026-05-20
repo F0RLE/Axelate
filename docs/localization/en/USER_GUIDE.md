@@ -63,6 +63,11 @@ Imported integrations are code you chose to run. They are not reviewed or signed
 packages yet. Use the card actions to launch, stop, open, or delete an
 integration.
 
+Import only folders, archives, and URLs you would normally trust enough to run
+on your machine. Axelate validates manifests, paths, archive entries, runtime
+folders, settings, logs, and local API ownership, but it does not sandbox manual
+imports as reviewed packages.
+
 ## Data And Logs
 
 Axelate keeps runtime data under its application data directory, split by
@@ -76,6 +81,10 @@ purpose:
 
 Prefer launcher actions for deleting engines or integrations. Manual deletion
 can leave stale UI state until the launcher refreshes its module list.
+
+External links opened from the frontend are restricted to normal public link
+protocols. Local runtime folders and console log folders should be opened through
+launcher actions so backend path validation runs first.
 
 ## Troubleshooting
 

@@ -78,6 +78,25 @@ as reviewed or signed packages yet. Permission prompts, signing, verified
 publisher state, and remote managed execution are future layers documented in
 the roadmap and trust model.
 
+## Filesystem And Shell Boundaries
+
+Filesystem and shell access should remain backend-mediated or policy-checked:
+
+- module ids must be validated before deriving module install, runtime, settings,
+  or log paths
+- archive extraction must normalize paths and reject traversal, unsupported entry
+  types, duplicate entries, and suspicious size patterns
+- custom settings UI and runtime entry paths must resolve inside their owning
+  module root
+- frontend external URL opening must use the shared URL policy instead of direct
+  shell calls
+- local folders should be opened through backend commands that validate the
+  target first
+
+When adding a new feature that touches files, URLs, processes, or shell-open,
+start by deciding which component owns validation and add a targeted test for
+that boundary.
+
 ## Contracts
 
 Use this sequence when changing a frontend-visible backend contract:

@@ -234,17 +234,16 @@ describe('SettingsService', () => {
             });
         });
 
-        it('should keep provider-specific slots for unknown providers', async () => {
-            await service.saveSecureKey('unknown-provider', 'my-api-key');
-            expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
-                service: 'unknown-provider_api_key',
-                key: 'my-api-key',
-            });
+        it('should reject unknown provider secure key storage', async () => {
+            await expect(service.saveSecureKey('unknown-provider', 'my-api-key')).rejects.toThrow(
+                'Provider does not support frontend-managed secrets',
+            );
+            expect(tauri.invoke).not.toHaveBeenCalledWith('save_secure_key', expect.anything());
         });
 
         it('should handle error gracefully', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
-            await expect(service.saveSecureKey('x', 'k')).rejects.toThrow('fail');
+            await expect(service.saveSecureKey('gemini', 'k')).rejects.toThrow('fail');
         });
     });
 

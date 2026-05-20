@@ -165,4 +165,16 @@ describe('ConsoleLogService', () => {
             viewId: 'engine:sdcpp',
         });
     });
+
+    it('opens module folders through the backend command', async () => {
+        setupTauri(bridge, true);
+        vi.mocked(bridge.invoke).mockResolvedValue(undefined);
+
+        await expect(service.openModuleFolder('axelate-telegram-parser')).resolves.toBe(true);
+
+        expect(bridge.invoke).toHaveBeenCalledWith('open_module_folder', {
+            moduleId: 'axelate-telegram-parser',
+        });
+        expect(bridge.invoke).not.toHaveBeenCalledWith('plugin:shell|open', expect.anything());
+    });
 });

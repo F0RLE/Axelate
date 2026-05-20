@@ -139,3 +139,12 @@ as the current reference.
 
 Imported integrations are local code chosen by the user. They are not reviewed,
 signed, or sandboxed packages yet.
+
+Keep the integration clean and explicit:
+
+- do not ship generated dependency folders
+- do not rely on hardcoded ports or Axelate internal paths
+- keep runtime writes under `AXELATE_MODULE_RUNTIME_DIR`
+- keep logs under `AXELATE_MODULE_LOG_DIR`
+- use the local API for settings instead of editing launcher config files
+- run `integration:doctor` before importing or packaging the folder

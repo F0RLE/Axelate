@@ -3,6 +3,7 @@ import { ConsoleUI } from './ConsoleUI';
 import type { ConsoleLogService, ILogEntry } from '../services/ConsoleLogService';
 import { ConsoleLogNormalizer } from '../services/ConsoleLogNormalizer';
 import { EventBus } from '@/shared/services/EventBus';
+import { ConsoleLogRenderHelper } from './ConsoleLogRenderHelper';
 
 describe('ConsoleUI lifecycle', () => {
     let ui: ConsoleUI | null = null;
@@ -770,6 +771,25 @@ describe('ConsoleUI lifecycle', () => {
         debugButton.dispatchEvent(new MouseEvent('click', { bubbles: true, shiftKey: true }));
 
         expect(document.getElementById('logs-general')?.textContent).toContain('Page modules');
+    });
+
+    it('should replace stale rendered rows with the empty state when filters match nothing', () => {
+        const pane = document.createElement('div');
+        const staleRow = document.createElement('div');
+        staleRow.textContent = 'stale debug row';
+        pane.append(staleRow);
+
+        const helper = new ConsoleLogRenderHelper({
+            emptyStateId: 'console-filter-empty-state',
+            getEmptyStateText: () => 'No logs match selected levels',
+            getNormalizedLevel: () => 'INFO',
+            matchesNormalizedLevel: () => false,
+        });
+
+        helper.applyFiltersToPane(pane, []);
+
+        expect(pane.textContent).toBe('No logs match selected levels');
+        expect(pane.querySelector('.log-entry-card')).toBeNull();
     });
 
     it('should hide launcher source labels like frontend from rendered logs', async () => {
