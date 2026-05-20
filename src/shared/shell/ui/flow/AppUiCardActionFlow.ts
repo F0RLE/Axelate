@@ -1,11 +1,11 @@
-import type { IApp } from '../../types/coreTypes';
-import type { ModulePlatformService } from '../../services/ModulePlatformService';
+import type { IApp } from '../../../types/coreTypes';
+import type { ModulePlatformService } from '../../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import {
     markModuleCardDownloadPaused,
     markModuleCardDownloadResuming,
-} from './ModuleCardDownloadProgress';
-import { resolveDownloadButtonAction } from './ModuleCardActions';
+} from '../card/ModuleCardDownloadProgress';
+import { resolveDownloadButtonAction } from '../card/ModuleCardActions';
 
 type AppUiCardActionFlowDeps = {
     platformService: ModulePlatformService;

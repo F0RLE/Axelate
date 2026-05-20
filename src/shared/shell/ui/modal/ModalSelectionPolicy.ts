@@ -1,7 +1,7 @@
-import type { IApp } from '../../types/coreTypes';
-import { CategoryKey } from '../../types/categoryKeys';
-import { isCustomProviderId } from '../../utils/customProviderSupport';
-import { isAiCategory } from '../../utils/moduleCategoryPolicy';
+import type { IApp } from '../../../types/coreTypes';
+import { CategoryKey } from '../../../types/categoryKeys';
+import { isCustomProviderId } from '../../../utils/customProviderSupport';
+import { isAiCategory } from '../../../utils/moduleCategoryPolicy';
 
 export class ModalSelectionPolicy {
     public getModalTitleInfo(category: string): { key: string; defaultText: string } {

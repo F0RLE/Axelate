@@ -1,4 +1,4 @@
-import type { IApp } from '../../types/coreTypes';
+import type { IApp } from '../../../types/coreTypes';
 type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 
 type AppUiSelectionFlowDeps = {

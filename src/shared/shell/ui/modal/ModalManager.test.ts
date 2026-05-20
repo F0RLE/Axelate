@@ -1,12 +1,12 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ModalManager } from './ModalManager';
-import { ModuleCardRenderer } from './ModuleCardRenderer';
+import { ModuleCardRenderer } from '../card/ModuleCardRenderer';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import type { IntegrationImportAction } from './ModalManagerSupport';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
-import type { IApp } from '../../types/coreTypes';
-import { CUSTOM_TEXT_PROVIDER_ID } from '../../utils/customProviderSupport';
+import type { IApp } from '../../../types/coreTypes';
+import { CUSTOM_TEXT_PROVIDER_ID } from '../../../utils/customProviderSupport';
 
 describe('ModalManager lifecycle', () => {
     let modalManager: ModalManager | null = null;

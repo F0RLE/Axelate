@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import type { IApp } from '../../types/coreTypes';
+import type { IApp } from '../../../types/coreTypes';
 import { AppUiSelectionState } from './AppUiSelectionState';
 
 describe('AppUiSelectionState', () => {

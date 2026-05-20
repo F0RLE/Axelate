@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IApp } from '../../types/coreTypes';
+import type { IApp } from '../../../types/coreTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AppUiModuleLifecycle } from './AppUiModuleLifecycle';
 

@@ -1,9 +1,9 @@
-import type { IApp } from '../../types/coreTypes';
-import { CategoryKey } from '../../types/categoryKeys';
+import type { IApp } from '../../../types/coreTypes';
+import { CategoryKey } from '../../../types/categoryKeys';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
-import type { ModuleCardRenderer } from './ModuleCardRenderer';
-import type { ModuleCardDownloadAction } from './ModuleCardActions';
+import type { ModuleCardRenderer } from '../card/ModuleCardRenderer';
+import type { ModuleCardDownloadAction } from '../card/ModuleCardActions';
 import { ModalFilterTransitionController } from './ModalFilterTransitionController';
 import {
     cancelModalDownload,
@@ -16,15 +16,15 @@ import {
 import {
     markModuleCardDownloadPaused,
     markModuleCardDownloadResuming,
-} from './ModuleCardDownloadProgress';
+} from '../card/ModuleCardDownloadProgress';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { ModalFocusTrapHelper } from './ModalFocusTrapHelper';
 import {
     getAiSlotForCapability,
     isAiCategory,
     resolveModalSidebarCategory,
-} from '../../utils/moduleCategoryPolicy';
-import { escapeCssSelectorValue } from '../../utils/cssSelectors';
+} from '../../../utils/moduleCategoryPolicy';
+import { escapeCssSelectorValue } from '../../../utils/cssSelectors';
 
 /**
  * @class ModalManager

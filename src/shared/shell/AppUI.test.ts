@@ -6,7 +6,7 @@ import type { NavigationService } from '@/infrastructure/navigation/NavigationSe
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '../types/coreTypes';
 import { CUSTOM_IMAGE_PROVIDER_ID, CUSTOM_TEXT_PROVIDER_ID } from '../utils/customProviderSupport';
-import { openIntegrationUrlDialog } from './ui/IntegrationImportDialog';
+import { openIntegrationUrlDialog } from './ui/dialog/IntegrationImportDialog';
 
 describe('AppUI lifecycle', () => {
     let appUI: AppUI | null = null;

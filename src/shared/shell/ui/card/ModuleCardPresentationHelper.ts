@@ -1,5 +1,5 @@
 import DOMPurify from 'dompurify';
-import type { IApp } from '../../types/coreTypes';
+import type { IApp } from '../../../types/coreTypes';
 
 type PurifyConfig = {
     ALLOWED_TAGS: string[];

@@ -1,7 +1,7 @@
-import type { IApp, IModuleDownloadState } from '../../types/coreTypes';
-import type { LoggerService } from '../../../infrastructure/logging/LoggerService';
-import { isApiApp } from '../../utils/moduleTypeUtils';
-import { supportsModuleSettings } from '../../utils/moduleSettingsSupport';
+import type { IApp, IModuleDownloadState } from '../../../types/coreTypes';
+import type { LoggerService } from '../../../../infrastructure/logging/LoggerService';
+import { isApiApp } from '../../../utils/moduleTypeUtils';
+import { supportsModuleSettings } from '../../../utils/moduleSettingsSupport';
 import {
     buildModuleCardActionButton,
     buildModuleCardComingSoonButton,
