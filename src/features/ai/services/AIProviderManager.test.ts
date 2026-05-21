@@ -262,9 +262,7 @@ describe('AIProviderManager', () => {
 
             expect(result).toBe(true);
             expect(manager.isActive()).toBe(true);
-            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith(
-                'custom_text_api_key',
-            );
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith('custom_text_api_key');
         });
     });
 

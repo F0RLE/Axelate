@@ -10,10 +10,7 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAIModelData } from '../types/aiTypes';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import {
-    CUSTOM_TEXT_PROVIDER_ID,
-    isCustomProviderId,
-} from '@/shared/utils/customProviderSupport';
+import { CUSTOM_TEXT_PROVIDER_ID, isCustomProviderId } from '@/shared/utils/customProviderSupport';
 import {
     getSharedCloudSecretService,
     resolveProviderSecretService,
