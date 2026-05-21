@@ -2,6 +2,7 @@ mod ai_dispatch;
 mod ai_provider_resolution;
 /// AI service implementation
 pub mod ai_service;
+mod ai_validation;
 /// Custom model management service
 pub mod custom_model_service;
 mod image_cloud;
