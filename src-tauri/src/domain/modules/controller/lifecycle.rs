@@ -11,6 +11,8 @@ use std::time::Duration;
 use tokio::process::{Child, Command};
 use tokio::time::timeout;
 
+const MODULE_CHILD_EXIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
+
 fn build_command(cmd: CommandDefinition) -> Command {
     match cmd {
         CommandDefinition::Simple(script) => {
@@ -172,7 +174,7 @@ impl<'a> LifecycleExecutor<'a> {
                         return;
                     }
                     Ok(None) => {
-                        tokio::time::sleep(Duration::from_millis(250)).await;
+                        tokio::time::sleep(MODULE_CHILD_EXIT_POLL_INTERVAL).await;
                     }
                     Err(error) => {
                         tracing::warn!(

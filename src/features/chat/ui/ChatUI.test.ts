@@ -357,6 +357,8 @@ describe('ChatUI lifecycle', () => {
         expect(document.querySelector('.chat-copy-own-btn')).toBeNull();
 
         const saveButton = requireSaveImageButton();
+        expect(saveButton.dataset['imageBase64']).toBeUndefined();
+        expect(saveButton.dataset['imageMime']).toBeUndefined();
         await saveGeneratedImage(saveButton);
 
         expect(invoke).toHaveBeenCalledWith('save_chat_image_default', {

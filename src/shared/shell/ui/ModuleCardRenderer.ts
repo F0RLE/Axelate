@@ -364,7 +364,6 @@ export class ModuleCardRenderer {
         } else {
             delete card.dataset['currentCapability'];
         }
-        card.dataset['originalHtml'] ??= card.innerHTML;
     }
 
     /**

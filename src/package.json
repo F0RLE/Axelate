@@ -48,7 +48,6 @@
         "@tauri-apps/api": "~2.10.1",
         "@tauri-apps/plugin-dialog": "~2.7.0",
         "@tauri-apps/plugin-fs": "~2.5.0",
-        "axelate-frontend": "file:",
         "dompurify": "^3.4.1",
         "marked": "^18.0.2",
         "marked-alert": "^2.1.2",

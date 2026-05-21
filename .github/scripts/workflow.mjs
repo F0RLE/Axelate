@@ -40,6 +40,7 @@ function cleanupTargets() {
         path.join(srcDir, 'coverage'),
         path.join(srcDir, 'node_modules', '.cache'),
         path.join(srcDir, 'node_modules', '.vite'),
+        path.join(srcDir, '.axelate'),
         path.join(srcDir, '.vite'),
         path.join(srcDir, 'playwright-report'),
         path.join(srcDir, 'test-results'),

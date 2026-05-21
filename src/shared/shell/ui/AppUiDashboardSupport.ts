@@ -128,10 +128,7 @@ export class AppUiDashboardSupport {
         delete card.dataset['currentCapability'];
         delete card.dataset['runtimeStatus'];
 
-        const originalHtml = card.dataset['originalHtml'];
-        if (originalHtml !== undefined && originalHtml !== '') {
-            card.innerHTML = originalHtml;
-        }
+        this._renderEmptyCardContent(card);
     }
 
     public markSlotCardAsInstalled(card: HTMLElement, app: IApp): void {
@@ -315,5 +312,55 @@ export class AppUiDashboardSupport {
         card.style.removeProperty('transition');
         card.style.removeProperty('opacity');
         card.style.removeProperty('transform');
+    }
+
+    private _renderEmptyCardContent(card: HTMLElement): void {
+        const isAiCard = card.id === 'ai-module-card';
+        card.replaceChildren(
+            this._createEmptyIcon(isAiCard ? 'icon-ai' : 'icon-services'),
+            this._createEmptyText(
+                'module-slot-card-title',
+                isAiCard ? 'ui.launcher.models.ai' : 'ui.launcher.models.services',
+                isAiCard ? 'AI' : 'Scripts',
+            ),
+            this._createEmptyText(
+                'module-slot-card-description',
+                isAiCard ? 'ui.launcher.models.ai_desc' : 'ui.launcher.models.services_desc',
+                isAiCard
+                    ? 'Unified platform for high-quality text, image, and code generation.'
+                    : 'Manage scripts, bots, and background automation.',
+            ),
+            this._createEmptyAction(isAiCard),
+        );
+    }
+
+    private _createEmptyIcon(symbolId: string): HTMLElement {
+        const wrapper = document.createElement('div');
+        wrapper.className = 'module-slot-card-icon';
+        const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+        svg.classList.add('icon');
+        const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
+        use.setAttribute('href', `#${symbolId}`);
+        svg.appendChild(use);
+        wrapper.appendChild(svg);
+        return wrapper;
+    }
+
+    private _createEmptyText(className: string, i18nKey: string, fallback: string): HTMLElement {
+        const element = document.createElement('div');
+        element.className = className;
+        element.dataset['i18n'] = i18nKey;
+        element.textContent = fallback;
+        return element;
+    }
+
+    private _createEmptyAction(isAiCard: boolean): HTMLElement {
+        const action = this._createEmptyText(
+            'module-slot-card-action',
+            'ui.launcher.button.launch',
+            'Launch',
+        );
+        action.id = isAiCard ? 'ai-module-add-btn' : 'services-module-add-btn';
+        return action;
     }
 }

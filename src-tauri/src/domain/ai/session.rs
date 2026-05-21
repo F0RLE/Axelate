@@ -9,6 +9,7 @@ use std::sync::{
     Arc,
     atomic::{AtomicBool, Ordering},
 };
+use tokio::sync::Notify;
 
 use super::session_context::{
     build_summary_lines, estimate_message_tokens, estimate_messages_tokens, extract_message_text,
@@ -43,6 +44,7 @@ struct LocalContextState {
 pub struct ChatSessionManager {
     sessions: Arc<DashMap<String, ChatSession>>,
     dirty: Arc<AtomicBool>,
+    save_notify: Arc<Notify>,
 }
 
 impl ChatSessionManager {
@@ -52,6 +54,7 @@ impl ChatSessionManager {
         Self {
             sessions: Arc::new(Self::load_from_disk().unwrap_or_default()),
             dirty: Arc::new(AtomicBool::new(false)),
+            save_notify: Arc::new(Notify::new()),
         }
     }
 
@@ -74,6 +77,11 @@ impl ChatSessionManager {
             .collect()
     }
 
+    fn mark_dirty(&self) {
+        self.dirty.store(true, Ordering::Relaxed);
+        self.save_notify.notify_one();
+    }
+
     // ── Background saver ──────────────────────────────────────────────────────
 
     /// Starts the background debounced saver.
@@ -81,12 +89,14 @@ impl ChatSessionManager {
     pub fn start_saver(&self) {
         let sessions = Arc::clone(&self.sessions);
         let dirty = Arc::clone(&self.dirty);
+        let save_notify = Arc::clone(&self.save_notify);
 
         tauri::async_runtime::spawn(async move {
             tracing::info!("Background chat session saver started.");
             loop {
+                save_notify.notified().await;
                 tokio::time::sleep(std::time::Duration::from_secs(5)).await;
-                if dirty.load(Ordering::Relaxed) {
+                if dirty.swap(false, Ordering::AcqRel) {
                     let snapshot: HashMap<String, ChatSession> = sessions
                         .iter()
                         .map(|e| (e.key().clone(), e.value().clone()))
@@ -95,11 +105,18 @@ impl ChatSessionManager {
                     match tokio::task::spawn_blocking(move || Self::flush_snapshot(&snapshot)).await
                     {
                         Ok(Ok(())) => {
-                            dirty.store(false, Ordering::Relaxed);
                             tracing::debug!("Chat history saved to disk.");
                         }
-                        Ok(Err(e)) => tracing::error!("Failed to save chat history: {e}"),
-                        Err(e) => tracing::error!("Saver task join error: {e}"),
+                        Ok(Err(e)) => {
+                            dirty.store(true, Ordering::Release);
+                            save_notify.notify_one();
+                            tracing::error!("Failed to save chat history: {e}");
+                        }
+                        Err(e) => {
+                            dirty.store(true, Ordering::Release);
+                            save_notify.notify_one();
+                            tracing::error!("Saver task join error: {e}");
+                        }
                     }
                 }
             }
@@ -153,7 +170,8 @@ impl ChatSessionManager {
             entry.history.extend_from_slice(new_messages);
         }
         entry.last_updated = Self::current_timestamp();
-        self.dirty.store(true, Ordering::Relaxed);
+        drop(entry);
+        self.mark_dirty();
 
         incoming_messages.to_vec()
     }
@@ -192,7 +210,8 @@ impl ChatSessionManager {
                 thought_signature: signature,
             });
             session.last_updated = Self::current_timestamp();
-            self.dirty.store(true, Ordering::Relaxed);
+            drop(session);
+            self.mark_dirty();
         }
     }
 
@@ -207,7 +226,7 @@ impl ChatSessionManager {
     /// Removes a session and marks dirty.
     pub fn clear_chat_history(&self, session_id: &str) {
         if self.sessions.remove(session_id).is_some() {
-            self.dirty.store(true, Ordering::Relaxed);
+            self.mark_dirty();
         }
     }
 
@@ -223,7 +242,8 @@ impl ChatSessionManager {
         session.summary = None;
         session.summary_message_count = 0;
         session.last_updated = Self::current_timestamp();
-        self.dirty.store(true, Ordering::Relaxed);
+        drop(session);
+        self.mark_dirty();
 
         Some(removed_text)
     }
@@ -247,11 +267,13 @@ impl ChatSessionManager {
         let budget = LocalContextBudget::new(context_size);
         let state = LocalContextState::from_session(&session);
         let summary_changed = state.refresh_summary(&mut session, budget.summary_tokens, model);
+        let context = state.build_context(&session, budget.available_tokens, model);
         if summary_changed {
-            self.dirty.store(true, Ordering::Relaxed);
+            drop(session);
+            self.mark_dirty();
         }
 
-        state.build_context(&session, budget.available_tokens, model)
+        context
     }
 
     /// Returns the current UNIX timestamp in seconds (used for `last_updated` fields).
@@ -511,6 +533,14 @@ mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
 
+    fn test_manager() -> ChatSessionManager {
+        ChatSessionManager {
+            sessions: Arc::new(DashMap::new()),
+            dirty: Arc::new(AtomicBool::new(false)),
+            save_notify: Arc::new(Notify::new()),
+        }
+    }
+
     #[test]
     fn test_chat_session_default_timestamp_is_nonzero() {
         let ts = ChatSessionManager::current_timestamp();
@@ -519,10 +549,7 @@ mod tests {
 
     #[test]
     fn test_merge_request_messages_in_memory() {
-        let manager = ChatSessionManager {
-            sessions: Arc::new(DashMap::new()),
-            dirty: Arc::new(AtomicBool::new(false)),
-        };
+        let manager = test_manager();
 
         let msg = ChatMessage {
             id: "msg-1".to_string(),
@@ -539,10 +566,7 @@ mod tests {
 
     #[test]
     fn test_clear_chat_history_in_memory() {
-        let manager = ChatSessionManager {
-            sessions: Arc::new(DashMap::new()),
-            dirty: Arc::new(AtomicBool::new(false)),
-        };
+        let manager = test_manager();
 
         let msg = ChatMessage {
             id: "msg-1".to_string(),
@@ -560,10 +584,7 @@ mod tests {
 
     #[test]
     fn test_rewind_last_turn_in_memory() {
-        let manager = ChatSessionManager {
-            sessions: Arc::new(DashMap::new()),
-            dirty: Arc::new(AtomicBool::new(false)),
-        };
+        let manager = test_manager();
 
         manager.merge_request_messages(
             "session-1",
@@ -615,10 +636,7 @@ mod tests {
 
     #[test]
     fn test_rewind_last_turn_extracts_text_from_multimodal_content() {
-        let manager = ChatSessionManager {
-            sessions: Arc::new(DashMap::new()),
-            dirty: Arc::new(AtomicBool::new(false)),
-        };
+        let manager = test_manager();
 
         manager.merge_request_messages(
             "session-1",
@@ -643,10 +661,7 @@ mod tests {
 
     #[test]
     fn test_merge_request_messages_deduplicates_overlap() {
-        let manager = ChatSessionManager {
-            sessions: Arc::new(DashMap::new()),
-            dirty: Arc::new(AtomicBool::new(false)),
-        };
+        let manager = test_manager();
 
         let existing = vec![
             ChatMessage {
@@ -746,10 +761,7 @@ mod tests {
 
     #[test]
     fn test_build_local_context_uses_persisted_summary_and_recent_turns() {
-        let manager = ChatSessionManager {
-            sessions: Arc::new(DashMap::new()),
-            dirty: Arc::new(AtomicBool::new(false)),
-        };
+        let manager = test_manager();
 
         let session = ChatSession {
             history: vec![
@@ -834,10 +846,7 @@ mod tests {
 
     #[test]
     fn test_rewind_last_turn_resets_persisted_summary_state() {
-        let manager = ChatSessionManager {
-            sessions: Arc::new(DashMap::new()),
-            dirty: Arc::new(AtomicBool::new(false)),
-        };
+        let manager = test_manager();
 
         manager.sessions.insert(
             "session-1".to_string(),

@@ -119,8 +119,6 @@ export class ChatImageController {
 
             void this._handleSaveImageAction(saveBtn, image.data_base64, image.mime);
         });
-        saveBtn.dataset['imageBase64'] = image.data_base64;
-        saveBtn.dataset['imageMime'] = image.mime;
 
         actionBar.appendChild(saveBtn);
     }

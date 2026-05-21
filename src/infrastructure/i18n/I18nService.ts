@@ -52,13 +52,11 @@ export class I18nService {
      */
     private async _getTauriLanguage(): Promise<string | null> {
         try {
-            const invokePromise = this._bridge.invoke('get_system_language');
-            const timeoutPromise = new Promise((_, reject) =>
-                setTimeout(() => {
-                    reject(new Error('Timeout'));
-                }, 1000),
+            const res = await this._runWithTimeout(
+                this._bridge.invoke<string | undefined>('get_system_language'),
+                1000,
+                'Timeout',
             );
-            const res = (await Promise.race([invokePromise, timeoutPromise])) as string | undefined;
 
             if (res !== undefined && res !== 'unknown') return res;
         } catch {
@@ -110,13 +108,30 @@ export class I18nService {
     private async _fetchTranslations(lang: string): Promise<Record<string, string>> {
         const timeoutMs = 2000;
         const failMsg = `Timeout loading translations for ${lang}`;
-        const p = this._bridge.invoke<Record<string, string>>('get_translations', { lang });
-        const t = new Promise<Record<string, string>>((_, r) =>
-            setTimeout(() => {
-                r(new Error(failMsg));
-            }, timeoutMs),
+        return await this._runWithTimeout(
+            this._bridge.invoke<Record<string, string>>('get_translations', { lang }),
+            timeoutMs,
+            failMsg,
         );
-        return await Promise.race([p, t]);
+    }
+
+    private async _runWithTimeout<T>(
+        operation: Promise<T>,
+        timeoutMs: number,
+        timeoutMessage: string,
+    ): Promise<T> {
+        let timeoutId!: ReturnType<typeof setTimeout>;
+        const timeout = new Promise<never>((_, reject) => {
+            timeoutId = setTimeout(() => {
+                reject(new Error(timeoutMessage));
+            }, timeoutMs);
+        });
+
+        try {
+            return await Promise.race([operation, timeout]);
+        } finally {
+            clearTimeout(timeoutId);
+        }
     }
 
     /**
