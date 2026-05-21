@@ -43,7 +43,7 @@ type ChatSendControllerOptions = {
         streamingHandleRef: () => StreamingMessageHandle | null,
     ) => void;
     clearInput: () => void;
-    updateTokenCount: (count: number) => void;
+    addContextTokens: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     getPreferredAiCategory: () => 'ai_text' | 'ai_image';
@@ -62,6 +62,7 @@ type ChatSendControllerOptions = {
         sendBtn: HTMLButtonElement | null;
         voiceBtn: HTMLButtonElement | null;
         attachBtn: HTMLButtonElement | null;
+        contextBtn: HTMLButtonElement | null;
     };
     unlockUi: (els: UiLock) => void;
     handleError: (error: unknown) => void;
@@ -95,8 +96,8 @@ export class ChatSendController {
         return text !== '' || this._options.fileHandler.hasFiles();
     }
 
-    public resolveSelectedModuleId(): string | null {
-        return this._autoStartHelper.resolveSelectedModuleId();
+    public resolveSelectedModuleId(prompt?: string): string | null {
+        return this._autoStartHelper.resolveSelectedModuleId(prompt);
     }
 
     public async sendChat(input: HTMLTextAreaElement | null): Promise<boolean> {
@@ -116,7 +117,7 @@ export class ChatSendController {
             const sendPlan = await this._sendFlow.prepare(text);
 
             this._options.clearInput();
-            this._options.updateTokenCount(0);
+            this._options.addContextTokens(sendPlan.tokenCount);
             this._options.appendUserMessage(text, sendPlan.attachments, sendPlan.tokenCount);
             this._options.pushUserMessage(sendPlan.userContent);
 
@@ -168,7 +169,7 @@ export class ChatSendController {
         }
     }
 
-    public async tryAutoStartAi(): Promise<boolean> {
-        return await this._autoStartHelper.startSelectedModule();
+    public async tryAutoStartAi(prompt?: string): Promise<boolean> {
+        return await this._autoStartHelper.startSelectedModule(prompt);
     }
 }

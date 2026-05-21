@@ -125,6 +125,16 @@ export class AIProviderManager {
         return modelData?.maxOutputTokens ?? undefined;
     }
 
+    public get contextWindow(): number | undefined {
+        if (this._activeProviderId === null) return undefined;
+        const modelData = getModelData(
+            this._getAiCatalogApps(),
+            this._activeProviderId,
+            this.model,
+        );
+        return modelData?.contextWindow ?? undefined;
+    }
+
     public getProviderDisplayName(id: string): string {
         const customDisplayName = getCustomProviderDisplayName(id);
         if (customDisplayName !== null) {

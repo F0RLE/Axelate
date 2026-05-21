@@ -53,6 +53,8 @@ type ImageGenerationMessageHandle = {
 
 export class ChatUI {
     private _lastTokenCount = 0;
+    private _lastContextTokenCount = 0;
+    private _lastContextWindow: number | undefined;
     private _lastEditableUserActionBar: HTMLElement | null = null;
     private _editMessageHandler: ((text: string) => void | Promise<void>) | null = null;
     private readonly _boundDocumentClick: (e: Event) => void;
@@ -411,9 +413,34 @@ export class ChatUI {
     /**
      * Updates the token count display.
      */
-    public updateTokenCount(count: number): void {
+    public updateTokenCount(count: number, maxTokens?: number): void {
         this._lastTokenCount = count;
-        this._tokenCountPresenter.update(this._dom.getTranslationTargets().tokenCount, count);
+        this._lastContextWindow = maxTokens;
+        const targets = this._dom.getTranslationTargets();
+        const hasMessages = this._dom.chatContainer?.classList.contains('has-messages') === true;
+        if (!hasMessages) {
+            this._lastContextTokenCount = 0;
+        }
+        this._tokenCountPresenter.update(targets.tokenCount, count, null, maxTokens, hasMessages);
+        this._refreshContextTokenButton();
+    }
+
+    public updateContextTokenCount(count: number, maxTokens?: number): void {
+        this._lastContextTokenCount = Math.max(0, count);
+        this._lastContextWindow = maxTokens;
+        this._refreshContextTokenButton();
+    }
+
+    private _refreshContextTokenButton(): void {
+        const targets = this._dom.getTranslationTargets();
+        const hasMessages = this._dom.chatContainer?.classList.contains('has-messages') === true;
+        this._tokenCountPresenter.update(
+            null,
+            this._lastContextTokenCount,
+            targets.contextBtn,
+            this._lastContextWindow,
+            hasMessages,
+        );
     }
 
     /**
@@ -444,7 +471,7 @@ export class ChatUI {
                 this._messageInteractionController.refreshTranslations(translate);
             },
             () => {
-                this.updateTokenCount(this._lastTokenCount);
+                this.updateTokenCount(this._lastTokenCount, this._lastContextWindow);
             },
         );
     }

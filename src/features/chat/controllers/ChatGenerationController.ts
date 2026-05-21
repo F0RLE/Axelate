@@ -37,6 +37,7 @@ type ChatGenerationControllerOptions = {
         text: string,
     ) => IChatMessage['content'];
     estimateReplyTokens: (text: string) => Promise<number>;
+    addContextTokens: (tokens: number) => void;
     getFriendlyErrorMessage: (errorMsg: unknown, model?: string) => string;
     handleError: (errorMsg: unknown, model?: string) => void;
     isDestroyed: () => boolean;
@@ -153,7 +154,7 @@ export class ChatGenerationController {
         const generatedImages = response.reply?.images ?? [];
 
         if (generatedImages.length > 0) {
-            this.handleGeneratedImages(response, replyText, generatedImages, imageHandle);
+            await this.handleGeneratedImages(response, replyText, generatedImages, imageHandle);
             return;
         }
 
@@ -170,13 +171,16 @@ export class ChatGenerationController {
         imageHandle?.discard();
     }
 
-    private handleGeneratedImages(
+    private async handleGeneratedImages(
         response: IChatResponse,
         replyText: string,
         generatedImages: { mime: string; data_base64: string }[],
         imageHandle?: ImageGenerationHandle | null,
-    ): void {
+    ): Promise<void> {
         const caption = replyText || this._options.i18n.t('ui.chat.image_ready', 'Generated image');
+        const captionTokens =
+            replyText.trim() === '' ? 0 : await this._options.estimateReplyTokens(replyText);
+        this._options.addContextTokens(captionTokens + generatedImages.length * 258);
 
         if (imageHandle !== null && imageHandle !== undefined) {
             imageHandle.finalize({ text: caption, images: generatedImages });
@@ -196,6 +200,7 @@ export class ChatGenerationController {
         streamingHandle?: StreamingMessageHandle | null,
     ): Promise<void> {
         const tokens = await this._options.estimateReplyTokens(replyText);
+        this._options.addContextTokens(tokens);
 
         if (streamingHandle) {
             streamingHandle.finalize(replyText, { tokens });

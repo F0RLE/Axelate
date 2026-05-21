@@ -25,6 +25,7 @@ export class FilePickerController {
         private readonly _ui: ChatUI,
         private readonly _estimateTokens: (text: string, model?: string) => Promise<number>,
         private readonly _isNativeRuntime: () => boolean,
+        private readonly _getContextWindow: () => number | undefined,
         private readonly _fileHandler: Pick<
             ChatFileHandler,
             'addFiles' | 'getTotalTokenEstimate' | 'hasFiles'
@@ -68,21 +69,24 @@ export class FilePickerController {
         try {
             const count = await this._fileHandler.getTotalTokenEstimate(text);
             if (requestId !== this._tokenEstimateRequestId) return;
-            this._ui.updateTokenCount(count);
+            this._ui.updateTokenCount(count, this._getContextWindow());
         } catch (error) {
             this._tracer.error('[FilePickerController] Failed to update token count:', error);
             if (requestId !== this._tokenEstimateRequestId) return;
             try {
                 const fallbackCount = await this._estimateTokens(text);
                 if (requestId !== this._tokenEstimateRequestId) return;
-                this._ui.updateTokenCount(fallbackCount);
+                this._ui.updateTokenCount(fallbackCount, this._getContextWindow());
             } catch (fallbackError) {
                 this._tracer.error(
                     '[FilePickerController] Fallback token count failed, using rough estimate:',
                     fallbackError,
                 );
                 if (requestId !== this._tokenEstimateRequestId) return;
-                this._ui.updateTokenCount(Math.max(0, Math.ceil(text.trim().length / 4)));
+                this._ui.updateTokenCount(
+                    Math.max(0, Math.ceil(text.trim().length / 4)),
+                    this._getContextWindow(),
+                );
             }
         }
     }

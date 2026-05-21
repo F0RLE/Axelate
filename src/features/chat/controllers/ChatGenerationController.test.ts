@@ -20,6 +20,7 @@ describe('ChatGenerationController', () => {
         extractText: vi.fn((value: unknown) => String(value ?? '')),
         buildGeneratedImageContent: vi.fn(),
         estimateReplyTokens: vi.fn().mockResolvedValue(0),
+        addContextTokens: vi.fn(),
         getFriendlyErrorMessage: vi.fn(),
         handleError: vi.fn(),
         isDestroyed: vi.fn().mockReturnValue(false),
@@ -104,5 +105,33 @@ describe('ChatGenerationController', () => {
 
         expect(streamingHandle.discard).toHaveBeenCalledTimes(1);
         expect(baseOptions.handleError).toHaveBeenCalled();
+    });
+
+    it('adds assistant text tokens to the context counter', async () => {
+        baseOptions.estimateReplyTokens.mockResolvedValueOnce(7);
+        const controller = new ChatGenerationController(baseOptions as never);
+
+        await controller.handleChatResponse({ ok: true, message: 'answer' } as never, null, null);
+
+        expect(baseOptions.addContextTokens).toHaveBeenCalledWith(7);
+    });
+
+    it('adds generated image tokens to the context counter', async () => {
+        baseOptions.estimateReplyTokens.mockResolvedValueOnce(3);
+        const controller = new ChatGenerationController(baseOptions as never);
+
+        await controller.handleChatResponse(
+            {
+                ok: true,
+                reply: {
+                    text: 'caption',
+                    images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+                },
+            } as never,
+            null,
+            null,
+        );
+
+        expect(baseOptions.addContextTokens).toHaveBeenCalledWith(261);
     });
 });

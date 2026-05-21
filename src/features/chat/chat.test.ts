@@ -25,6 +25,7 @@ vi.mock('./ui/ChatUI', () => ({
         public appendMessage = appendMessage;
         public clear = clearUi;
         public updateTokenCount = updateTokenCount;
+        public updateContextTokenCount = vi.fn();
     },
 }));
 
@@ -97,6 +98,7 @@ describe('ChatController', () => {
         getState: vi.fn().mockReturnValue({ activeProviderId: null, isRunning: false }),
         stopProvider: vi.fn(),
         getSessionId: vi.fn().mockReturnValue('session-1'),
+        getContextWindow: vi.fn().mockReturnValue(undefined),
         getHistory: vi.fn().mockResolvedValue([]),
         clearHistory: vi.fn().mockResolvedValue(undefined),
         startProvider: vi.fn().mockResolvedValue(false),
@@ -186,7 +188,7 @@ describe('ChatController', () => {
 
         expect(appendMessage).not.toHaveBeenCalled();
         expect(clearUi).toHaveBeenCalledTimes(1);
-        expect(updateTokenCount).toHaveBeenCalledWith(0);
+        expect(updateTokenCount).toHaveBeenCalledWith(0, undefined);
         vi.useRealTimers();
     });
 

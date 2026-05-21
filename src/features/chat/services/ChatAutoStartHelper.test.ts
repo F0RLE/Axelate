@@ -19,6 +19,38 @@ describe('ChatAutoStartHelper', () => {
         expect(helper.resolveSelectedModuleId()).toBe('image-model');
     });
 
+    it('should prefer text module for regular chat even when image slot is visible', () => {
+        const helper = new ChatAutoStartHelper({
+            aiBridge: {
+                startProvider: vi.fn().mockResolvedValue(true),
+            },
+            getSelectedModule: (category) =>
+                category === 'ai_text' ? { id: 'text-model' } : { id: 'image-model' },
+            getPreferredAiCategory: () => 'ai_image',
+            tracer: {
+                info: vi.fn(),
+            },
+        });
+
+        expect(helper.resolveSelectedModuleId('расскажи про проект')).toBe('text-model');
+    });
+
+    it('should prefer image module for image generation prompts', () => {
+        const helper = new ChatAutoStartHelper({
+            aiBridge: {
+                startProvider: vi.fn().mockResolvedValue(true),
+            },
+            getSelectedModule: (category) =>
+                category === 'ai_text' ? { id: 'text-model' } : { id: 'image-model' },
+            getPreferredAiCategory: () => 'ai_text',
+            tracer: {
+                info: vi.fn(),
+            },
+        });
+
+        expect(helper.resolveSelectedModuleId('сгенерируй картинку дома')).toBe('image-model');
+    });
+
     it('should fall back to the other AI slot when the visible slot is empty', () => {
         const helper = new ChatAutoStartHelper({
             aiBridge: {
