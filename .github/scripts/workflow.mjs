@@ -32,6 +32,7 @@ const passthroughArgs = rawArgs.filter((arg, index) => {
 
 let cachedEnv;
 const webView2RuntimeClientId = '{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}';
+const cargoLlvmCovVersion = '0.8.5';
 const sleepSignal = new Int32Array(new SharedArrayBuffer(4));
 
 function cleanupTargets() {
@@ -105,7 +106,9 @@ function removePath(targetPath) {
             }
 
             const delayMs = attempt * 250;
-            log(`retry remove ${path.relative(repoRoot, targetPath) || '.'} in ${String(delayMs)}ms`);
+            log(
+                `retry remove ${path.relative(repoRoot, targetPath) || '.'} in ${String(delayMs)}ms`,
+            );
             sleep(delayMs);
         }
     }
@@ -168,11 +171,66 @@ function withPassthroughArgs(baseArgs) {
     return [...baseArgs, '--', ...passthroughArgs];
 }
 
+function withDirectPassthroughArgs(baseArgs) {
+    if (passthroughArgs.length === 0) {
+        return baseArgs;
+    }
+
+    return [...baseArgs, ...passthroughArgs];
+}
+
 function withEnvOverrides(overrides = {}) {
     return {
         ...toolEnv(),
         ...overrides,
     };
+}
+
+function ensureCargoLlvmCov() {
+    if (commandExists('cargo-llvm-cov', toolEnv())) {
+        const invocation = buildCommandInvocation('cargo', ['llvm-cov', '--version'], toolEnv());
+        const result = spawnSync(invocation.command, invocation.args, {
+            cwd: tauriDir,
+            env: toolEnv(),
+            encoding: 'utf8',
+            stdio: ['ignore', 'pipe', 'pipe'],
+            shell: false,
+        });
+        const versionOutput = result.stdout?.trim() || result.stderr?.trim() || '';
+        const installedVersion = versionOutput.match(/\d+\.\d+\.\d+/u)?.[0];
+        if (!result.error && result.status === 0 && installedVersion === cargoLlvmCovVersion) {
+            ensureLlvmTools();
+            return;
+        }
+
+        log(
+            `cargo-llvm-cov version mismatch (installed: ${installedVersion ?? 'unknown'}, expected: ${cargoLlvmCovVersion}); reinstalling`,
+        );
+    }
+
+    log(`installing cargo-llvm-cov version ${cargoLlvmCovVersion} with cargo install --locked`);
+    run('cargo', [
+        'install',
+        'cargo-llvm-cov',
+        '--locked',
+        '--version',
+        cargoLlvmCovVersion,
+        '--force',
+    ]);
+    ensureLlvmTools();
+}
+
+function ensureLlvmTools() {
+    if (!commandExists('rustup', toolEnv())) {
+        return;
+    }
+
+    run('rustup', ['component', 'add', 'llvm-tools']);
+}
+
+function runRustCoverage(args = []) {
+    ensureCargoLlvmCov();
+    run('cargo', ['llvm-cov', ...args], { cwd: tauriDir });
 }
 
 function checkCommand(label, command, args = ['--version'], options = {}) {
@@ -411,13 +469,7 @@ function runDoctor() {
 
     if (isWindows) {
         results.push(checkWindowsWebView2Runtime(env));
-        results.push(
-            checkAvailableCommand(
-                'MSVC compiler',
-                'cl',
-                env,
-            ),
-        );
+        results.push(checkAvailableCommand('MSVC compiler', 'cl', env));
         results.push(checkAvailableCommand('Windows SDK rc.exe', 'rc', env));
     }
 
@@ -544,7 +596,10 @@ function verifyReleaseHardening() {
     const targets = Array.isArray(tauriConfig.bundle?.targets) ? tauriConfig.bundle.targets : [];
 
     assertCondition(releaseProfile.get('lto') === 'true', 'Cargo release profile enables LTO');
-    assertCondition(releaseProfile.get('panic') === '"abort"', 'Cargo release profile aborts on panic');
+    assertCondition(
+        releaseProfile.get('panic') === '"abort"',
+        'Cargo release profile aborts on panic',
+    );
     assertCondition(releaseProfile.get('strip') === 'true', 'Cargo release profile strips symbols');
     assertCondition(
         releaseProfile.get('overflow-checks') === 'true',
@@ -632,13 +687,15 @@ function stopRunningApp() {
     const workspaceExecutables = new Set(
         workspaceAxelateExecutablePaths().map((candidate) => normalizeWindowsPath(candidate)),
     );
-    const runningProcesses = getRunningWindowsProcesses('Axelate.exe', env).filter((processInfo) => {
-        if (!processInfo?.ExecutablePath) {
-            return false;
-        }
+    const runningProcesses = getRunningWindowsProcesses('Axelate.exe', env).filter(
+        (processInfo) => {
+            if (!processInfo?.ExecutablePath) {
+                return false;
+            }
 
-        return workspaceExecutables.has(normalizeWindowsPath(processInfo.ExecutablePath));
-    });
+            return workspaceExecutables.has(normalizeWindowsPath(processInfo.ExecutablePath));
+        },
+    );
 
     for (const processInfo of runningProcesses) {
         stopWindowsProcessTree(processInfo, 'Axelate.exe');
@@ -717,10 +774,25 @@ function verifyProject() {
     ensureFrontendDependencies();
     run('npm', ['run', 'format:check'], { cwd: srcDir });
     run('npm', ['run', 'typecheck'], { cwd: srcDir });
-    run('npm', ['run', 'lint'], { cwd: srcDir });
+    lintProject();
     run('npm', ['run', 'test'], { cwd: srcDir });
     run('npm', ['run', 'build:bundle'], { cwd: srcDir });
-    run('npm', ['run', 'check-size'], { cwd: srcDir });
+}
+
+function lintProject() {
+    run('npm', ['--prefix', 'src', 'run', 'lint']);
+    run('npm', [
+        '--prefix',
+        'src',
+        'exec',
+        '--',
+        'eslint',
+        '--config',
+        'src/eslint.config.js',
+        '.github/scripts',
+        '.github/commitlint.config.js',
+        '--no-ignore',
+    ]);
 }
 
 function setupProject() {
@@ -749,20 +821,26 @@ Tasks:
   release:checksums  Generate SHA256 checksums for release bundles
   release:verify-hardening  Validate release hardening settings
   run            Launch the built app artifact
-  lint           Run frontend lint checks
+  lint           Run frontend and repository tooling lint checks
   format         Format frontend files
   format:check   Check frontend formatting
   test           Run frontend tests
   test:coverage  Run frontend tests with coverage
+  test:coverage:all  Run frontend and Rust coverage
+  rust:test:coverage  Run Rust tests with coverage summary
+  rust:test:coverage:lcov  Generate Rust LCOV report at src-tauri/lcov.info
+    Note: Rust coverage passthrough args go directly to cargo-llvm-cov; bare "--" is stripped, so cargo test filters cannot be forwarded here.
   test:watch     Run frontend tests in watch mode
   typecheck      Run frontend type checks
   verify         Run the full local verification pipeline
   doctor         Check local development prerequisites
   setup          Validate prerequisites, install frontend deps, and configure hooks
   install-deps   Install frontend dependencies
+  integration:doctor  Validate an Axelate integration folder
+  integration:new     Scaffold a minimal Python, Node, or Bun integration folder
   update         Update npm and cargo dependencies, then verify
   prepare        Configure Git hooks
-  check-size     Validate built frontend size
+  check-size     Print a frontend bundle size report
 `);
     },
     dev() {
@@ -835,7 +913,7 @@ Tasks:
         runReleaseBinary();
     },
     lint() {
-        run('npm', ['--prefix', 'src', 'run', 'lint']);
+        lintProject();
     },
     format() {
         run('npm', ['--prefix', 'src', 'run', 'format']);
@@ -848,6 +926,24 @@ Tasks:
     },
     'test:coverage'() {
         run('npm', ['--prefix', 'src', 'run', 'test:coverage']);
+    },
+    'test:coverage:all'() {
+        tasks['test:coverage']();
+        tasks['rust:test:coverage']();
+    },
+    'rust:test:coverage'() {
+        runRustCoverage(withDirectPassthroughArgs(['--workspace', '--all-features']));
+    },
+    'rust:test:coverage:lcov'() {
+        runRustCoverage(
+            withDirectPassthroughArgs([
+                '--workspace',
+                '--all-features',
+                '--lcov',
+                '--output-path',
+                'lcov.info',
+            ]),
+        );
     },
     'test:watch'() {
         run('npm', ['--prefix', 'src', 'run', 'test:watch']);
@@ -869,6 +965,24 @@ Tasks:
     },
     'install-deps'() {
         run('npm', ['ci'], { cwd: srcDir });
+    },
+    'integration:doctor'() {
+        ensureFrontendDependencies();
+        run(
+            'node',
+            withPassthroughArgs([
+                path.join(repoRoot, '.github', 'scripts', 'integration', 'doctor.mjs'),
+            ]),
+        );
+    },
+    'integration:new'() {
+        ensureFrontendDependencies();
+        run(
+            'node',
+            withPassthroughArgs([
+                path.join(repoRoot, '.github', 'scripts', 'integration', 'scaffold.mjs'),
+            ]),
+        );
     },
     update() {
         run('npm', ['update'], { cwd: srcDir });

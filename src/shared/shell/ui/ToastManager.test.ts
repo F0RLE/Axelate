@@ -131,4 +131,22 @@ describe('ToastManager', () => {
         expect(document.getElementById('toast-container')).toBeNull();
         expect(document.querySelector('.toast')).toBeNull();
     });
+
+    it('should run an action when an actionable toast is clicked', () => {
+        const onClick = vi.fn();
+
+        manager.show('Open settings', 'warning', 1000, null, 'settings', onClick);
+
+        const toast = document.getElementById('toast-settings');
+        if (!(toast instanceof HTMLElement)) {
+            throw new Error('Toast was not created');
+        }
+
+        expect(toast.classList.contains('toast--actionable')).toBe(true);
+        expect(toast.getAttribute('role')).toBe('button');
+
+        toast.click();
+
+        expect(onClick).toHaveBeenCalledTimes(1);
+    });
 });

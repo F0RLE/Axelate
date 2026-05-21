@@ -2,7 +2,7 @@ import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage } from '../types/chatTypes';
 
-type ChatHistoryLogger = Pick<LoggerService, 'info' | 'error'>;
+type ChatHistoryLogger = Pick<LoggerService, 'debug' | 'error'>;
 
 type PendingChatRevealStore = {
     getState: () => { pending_chat_reveal?: boolean };
@@ -46,6 +46,9 @@ export class ChatHistoryController {
         if (this._historyLoaded && this._loadedSessionId === sessionId) return;
         if (this._historyLoadInFlight !== null) {
             await this._historyLoadInFlight;
+            if (this._loadedSessionId !== this._options.aiBridge.getSessionId()) {
+                await this.ensureHistoryLoaded();
+            }
             return;
         }
 
@@ -95,6 +98,22 @@ export class ChatHistoryController {
         }
     }
 
+    public canRegenerateLastTurnFromText(): boolean {
+        const lastUserMessage = [...this._options.getHistory()]
+            .reverse()
+            .find((message) => message.role === 'user');
+        return typeof lastUserMessage?.content === 'string';
+    }
+
+    public getLocalHistorySnapshot(): IChatMessage[] {
+        return this._cloneHistory(this._options.getHistory());
+    }
+
+    public restoreLocalHistorySnapshot(history: IChatMessage[]): void {
+        this._options.setHistory(this._cloneHistory(history));
+        this._options.renderHistory(this._options.getHistory());
+    }
+
     public rewindLocalHistory(): void {
         const history = [...this._options.getHistory()];
 
@@ -118,6 +137,12 @@ export class ChatHistoryController {
         try {
             const sessionId = this._options.aiBridge.getSessionId();
             const history = await this._options.aiBridge.getHistory();
+            if (
+                this._options.isDestroyed() ||
+                this._options.aiBridge.getSessionId() !== sessionId
+            ) {
+                return;
+            }
             this._historyLoaded = true;
             this._loadedSessionId = sessionId;
 
@@ -125,23 +150,24 @@ export class ChatHistoryController {
                 ? history
                       .filter((msg) => msg.role === 'user' || msg.role === 'assistant')
                       .map((msg) => {
-                          const historyMessage: IChatMessage = {
+                          const historyMessage = this._cloneMessage({
                               role: msg.role as 'user' | 'assistant',
                               content: msg.content,
-                          };
+                          });
                           if (msg.thought_signature !== undefined) {
                               historyMessage.thought_signature = msg.thought_signature;
                           }
                           return historyMessage;
                       })
                 : [];
+            const visibleHistory = this._stripPersistedImagePromptPreparation(nextHistory);
 
-            this._options.setHistory(nextHistory);
-            this._options.renderHistory(nextHistory);
+            this._options.setHistory(visibleHistory);
+            this._options.renderHistory(visibleHistory);
 
-            if (nextHistory.length > 0) {
-                this._options.tracer.info(
-                    `[ChatController] Restoring ${String(nextHistory.length)} messages from persistence`,
+            if (visibleHistory.length > 0) {
+                this._options.tracer.debug(
+                    `[ChatController] Restoring ${String(visibleHistory.length)} messages from persistence`,
                 );
             }
 
@@ -154,6 +180,70 @@ export class ChatHistoryController {
                 error,
             );
         }
+    }
+
+    private _stripPersistedImagePromptPreparation(history: IChatMessage[]): IChatMessage[] {
+        const visible: IChatMessage[] = [];
+        for (let index = 0; index < history.length; index += 1) {
+            const message = history[index];
+            if (message === undefined) {
+                continue;
+            }
+
+            if (message.role === 'user' && this._isImagePromptPreparationRequest(message.content)) {
+                const next = history[index + 1];
+                if (next?.role === 'assistant') {
+                    index += 1;
+                }
+                continue;
+            }
+
+            visible.push(message);
+        }
+
+        return visible;
+    }
+
+    private _isImagePromptPreparationRequest(content: IChatMessage['content']): boolean {
+        if (typeof content !== 'string') {
+            return false;
+        }
+
+        return (
+            content.includes('Stable Diffusion') &&
+            content.includes('Return only the final prompt text')
+        );
+    }
+
+    private _cloneHistory(history: IChatMessage[]): IChatMessage[] {
+        return history.map((message) => this._cloneMessage(message));
+    }
+
+    private _cloneMessage(message: IChatMessage): IChatMessage {
+        const clone: IChatMessage = {
+            role: message.role,
+            content: this._cloneContent(message.content),
+        };
+        if (message.thought_signature !== undefined) {
+            clone.thought_signature = message.thought_signature;
+        }
+        return clone;
+    }
+
+    private _cloneContent(content: IChatMessage['content']): IChatMessage['content'] {
+        if (typeof content === 'string') {
+            return content;
+        }
+
+        return content.map((part) => {
+            if (part.type === 'image_url') {
+                return {
+                    ...part,
+                    image_url: { ...part.image_url },
+                };
+            }
+            return { ...part };
+        });
     }
 
     public scheduleRevealLatestMessage(): void {

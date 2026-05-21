@@ -28,8 +28,7 @@ export function setModuleCardDownloadProgress(
 
     const label = btn.querySelector<HTMLElement>('.download-label');
     if (label) {
-        const cardEl = label.closest<HTMLElement>('.app-card');
-        const extractingLabel = (cardEl?.dataset['translateExtracting'] ?? 'Extracting').replace(
+        const extractingLabel = (btn.dataset['translateExtracting'] ?? 'Extracting').replace(
             /\.+$/,
             '',
         );

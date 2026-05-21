@@ -1,5 +1,4 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import { AIBridgeProviderPolicy } from '@/features/ai/services/AIBridgeProviderPolicy';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IChatMessage, IChatResponse } from '../types/chatTypes';
@@ -43,6 +42,7 @@ type ChatGenerationControllerOptions = {
     handleError: (errorMsg: unknown, model?: string) => void;
     isDestroyed: () => boolean;
     isSending: () => boolean;
+    isImageProvider: (providerId: string | null) => boolean;
     tracer: ChatGenerationLogger;
 };
 
@@ -55,19 +55,19 @@ export class ChatGenerationController {
     private _lastImagePreviewUpdatedAtMs = 0;
     private _imageGenerationStartedAtMs = 0;
     private _lastConcreteImageProgressAtMs = 0;
-    private readonly _providerPolicy = new AIBridgeProviderPolicy();
 
     constructor(private readonly _options: ChatGenerationControllerOptions) {}
 
     public cleanupStreamingState(listenerId: string, typingId: string): void {
         this._options.aiBridge.removeChunkListener(listenerId);
         this._options.aiBridge.removeReplaceChunkListener(listenerId);
+        this._options.aiBridge.removeThoughtListener(listenerId);
         this.stopImagePreviewPolling();
         this._options.removeTyping(typingId);
     }
 
     public isImageProvider(providerId: string | null): boolean {
-        return providerId !== null && this._providerPolicy.isImageProvider(providerId);
+        return this._options.isImageProvider(providerId);
     }
 
     public startImagePreviewPolling(handle: ImageGenerationHandle): void {
@@ -228,13 +228,12 @@ export class ChatGenerationController {
 
         await this.handleSuccessfulChatResponse(response, streamingHandle, imageHandle);
     }
-
     private async handleSuccessfulChatResponse(
         response: IChatResponse,
         streamingHandle?: StreamingMessageHandle | null,
         imageHandle?: ImageGenerationHandle | null,
     ): Promise<void> {
-        const rawReply = response.message ?? response.reply?.text ?? '';
+        const rawReply = response.reply?.text ?? '';
         const replyText = this._options.extractText(rawReply);
         const generatedImages = response.reply?.images ?? [];
 
@@ -283,9 +282,7 @@ export class ChatGenerationController {
         replyText: string,
         streamingHandle?: StreamingMessageHandle | null,
     ): Promise<void> {
-        const tokens =
-            this._resolveBackendCompletionTokens(response) ??
-            (await this._options.estimateReplyTokens(replyText));
+        const tokens = await this._resolveBackendCompletionTokens(response, replyText);
         if (tokens > 0) {
             this._options.addContextTokens(tokens);
         }
@@ -299,10 +296,21 @@ export class ChatGenerationController {
         this._options.pushAssistantMessage(replyText, response.thought_signature);
     }
 
-    private _resolveBackendCompletionTokens(response: IChatResponse): number | null {
+    private async _resolveBackendCompletionTokens(
+        response: IChatResponse,
+        replyText: string,
+    ): Promise<number> {
         const completionTokens = response.usage?.completion_tokens;
         if (typeof completionTokens !== 'number' || !Number.isFinite(completionTokens)) {
-            return null;
+            try {
+                const estimatedTokens = await this._options.estimateReplyTokens(replyText);
+                if (!Number.isFinite(estimatedTokens)) {
+                    return 0;
+                }
+                return Math.max(0, Math.trunc(estimatedTokens));
+            } catch {
+                return 0;
+            }
         }
 
         return Math.max(0, Math.trunc(completionTokens));
@@ -318,7 +326,8 @@ export class ChatGenerationController {
             response.model,
         );
         if (imageHandle !== null && imageHandle !== undefined) {
-            imageHandle.fail(friendlyMsg);
+            imageHandle.discard();
+            this._options.handleError(friendlyMsg, response.model);
             return;
         }
 

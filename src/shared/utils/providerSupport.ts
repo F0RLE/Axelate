@@ -18,28 +18,8 @@ const CLOUD_PROVIDER_IDS = new Set([
     CUSTOM_IMAGE_PROVIDER_ID,
 ]);
 
-const IMAGE_PROVIDER_IDS = new Set([
-    'sdcpp',
-    'stable-diffusion',
-    'comfyui',
-    'gemini-image',
-    'gpt-image',
-    'seedream-image',
-    CUSTOM_IMAGE_PROVIDER_ID,
-]);
-
-const MANAGED_LOCAL_IMAGE_PROVIDER_IDS = new Set(['sdcpp', 'stable-diffusion']);
-
 export function isCloudProviderId(providerId: string): boolean {
     return CLOUD_PROVIDER_IDS.has(providerId);
-}
-
-export function isImageProviderId(providerId: string): boolean {
-    return IMAGE_PROVIDER_IDS.has(providerId);
-}
-
-export function isManagedLocalImageProviderId(providerId: string): boolean {
-    return MANAGED_LOCAL_IMAGE_PROVIDER_IDS.has(providerId);
 }
 
 export function getSharedCloudSecretService(): string {

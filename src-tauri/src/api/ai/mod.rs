@@ -1,22 +1,19 @@
-use crate::app::window::{create_main_window, show_and_focus_window};
 use crate::domain::ai::{
     self, ChatSessionManager, ai_service,
     ai_service::{ChatRequest, ChatResponse},
 };
 use crate::domain::ai::{StreamEvent, StreamSink};
 use crate::domain::engine::manager::EngineManager;
-use crate::domain::engine::types::Capability;
 use crate::domain::system::config_service::ConfigService;
 use crate::errors::AppError;
-use crate::infrastructure::config::ui_state::UiStateService;
 use crate::infrastructure::crypto::secure_storage::SecureStorage;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use dashmap::DashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
+use tauri::State;
 use tauri::ipc::Channel;
-use tauri::{Manager, State, Window};
 use tokio::sync::oneshot;
 
 #[cfg(target_os = "windows")]
@@ -197,16 +194,6 @@ impl StreamSink for TauriStreamSink {
     }
 }
 
-#[derive(Clone)]
-struct BackgroundImageGenerationContext {
-    sessions: Arc<ChatSessionManager>,
-    config_service: Arc<ConfigService>,
-    engine_manager: Arc<EngineManager>,
-    image_generation_state: Arc<crate::domain::ai::ImageGenerationState>,
-    settings_service: crate::infrastructure::config::settings::SettingsService,
-    ui_state_service: UiStateService,
-}
-
 fn ensure_request_id(request: &mut ChatRequest) -> String {
     let request_id = request
         .request_id
@@ -244,15 +231,7 @@ fn configured_provider_secret_service(
         ));
     }
 
-    default_secret_service_for_provider(provider)
-}
-
-fn default_secret_service_for_provider(provider: &str) -> Option<String> {
-    if is_local_provider(provider) {
-        return None;
-    }
-
-    Some("openrouter_api_key".to_string())
+    None
 }
 
 async fn load_stored_provider_api_key(
@@ -277,122 +256,6 @@ pub(crate) async fn fill_chat_request_api_key(
         .is_none_or(|value| value.trim().is_empty())
     {
         request.api_key = load_stored_provider_api_key(config_service, &request.provider).await?;
-    }
-
-    Ok(())
-}
-
-fn build_background_image_generation_context(
-    sessions: &State<'_, Arc<ChatSessionManager>>,
-    config_service: &State<'_, Arc<ConfigService>>,
-    engine_manager: &State<'_, Arc<EngineManager>>,
-    image_generation_state: &State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
-    settings_service: &State<'_, crate::infrastructure::config::settings::SettingsService>,
-    ui_state_service: &State<'_, UiStateService>,
-) -> BackgroundImageGenerationContext {
-    BackgroundImageGenerationContext {
-        sessions: Arc::clone(sessions.inner()),
-        config_service: Arc::clone(config_service.inner()),
-        engine_manager: Arc::clone(engine_manager.inner()),
-        image_generation_state: Arc::clone(image_generation_state.inner()),
-        settings_service: settings_service.inner().clone(),
-        ui_state_service: ui_state_service.inner().clone(),
-    }
-}
-
-fn spawn_background_image_generation(
-    app_handle: tauri::AppHandle,
-    request: ai::ImageGenerationRequest,
-    context: BackgroundImageGenerationContext,
-) {
-    tauri::async_runtime::spawn(async move {
-        crate::app::tray::set_background_generation_active(&app_handle, "Generating image...");
-        let result = ai_service::process_image_request(
-            request,
-            &context.sessions,
-            &context.config_service,
-            &context.engine_manager,
-            &context.image_generation_state,
-            &context.settings_service,
-        )
-        .await;
-
-        if let Err(error) = &result {
-            tracing::error!("Background image generation failed: {error}");
-        }
-
-        reveal_chat_window_after_background_generation(&context.ui_state_service).await;
-        crate::app::tray::clear_background_generation(&app_handle);
-        restore_or_create_main_window(&app_handle);
-    });
-}
-
-async fn reveal_chat_window_after_background_generation(ui_state_service: &UiStateService) {
-    let mut ui_state = ui_state_service.get_ui_state().await.unwrap_or_default();
-    ui_state.last_page = Some("chat".to_string());
-    ui_state.pending_chat_reveal = true;
-    let _ = ui_state_service.save_ui_state(&ui_state).await;
-}
-
-fn restore_or_create_main_window(app_handle: &tauri::AppHandle) {
-    if let Some(window) = app_handle.get_webview_window("main") {
-        show_and_focus_window(&window);
-    } else if let Some(window) = create_main_window(app_handle) {
-        show_and_focus_window(&window);
-    }
-}
-
-async fn cancel_comfyui_job(
-    provider: &str,
-    image_generation_state: &crate::domain::ai::ImageGenerationState,
-) -> Result<(), AppError> {
-    if let Some(job) = image_generation_state.cancel(provider).await {
-        let client = reqwest::Client::new();
-        let response = client
-            .post(format!("{}/interrupt", job.base_url.trim_end_matches('/')))
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let body = response.text().await.unwrap_or_default();
-            return Err(AppError::External {
-                request_id: None,
-                message: format!("Failed to interrupt ComfyUI job: {body}"),
-            });
-        }
-    }
-
-    Ok(())
-}
-
-async fn cancel_sdcpp_job(
-    provider: &str,
-    engine_manager: &EngineManager,
-    image_generation_state: &crate::domain::ai::ImageGenerationState,
-) -> Result<(), AppError> {
-    let mut should_stop_engine = true;
-
-    if let Some(job) = image_generation_state.cancel(provider).await
-        && let Some(job_id) = job.prompt_id
-    {
-        let client = reqwest::Client::new();
-        let response = client
-            .post(format!(
-                "{}/sdcpp/v1/jobs/{job_id}/cancel",
-                job.base_url.trim_end_matches('/')
-            ))
-            .send()
-            .await?;
-
-        should_stop_engine = !response.status().is_success();
-        if should_stop_engine && response.status().as_u16() != 409 {
-            let body = response.text().await.unwrap_or_default();
-            tracing::warn!("Failed to cancel stable-diffusion.cpp job via native API: {body}");
-        }
-    }
-
-    if should_stop_engine {
-        engine_manager.stop_slot(Capability::Image).await?;
     }
 
     Ok(())
@@ -438,22 +301,57 @@ fn read_image_generation_preview_file(path: &Path) -> Option<ImageGenerationPrev
     })
 }
 
-fn image_extension_for_mime_type(mime_type: &str) -> &'static str {
-    match mime_type.to_ascii_lowercase().as_str() {
-        mime if mime.contains("jpeg") || mime.contains("jpg") => "jpg",
-        mime if mime.contains("webp") => "webp",
-        mime if mime.contains("gif") => "gif",
-        _ => "png",
+fn image_extension_for_mime_type(mime_type: &str) -> Result<&'static str, AppError> {
+    match mime_type.trim().to_ascii_lowercase().as_str() {
+        "image/png" => Ok("png"),
+        "image/jpeg" | "image/jpg" => Ok("jpg"),
+        "image/webp" => Ok("webp"),
+        "image/gif" => Ok("gif"),
+        "image/bmp" => Ok("bmp"),
+        "image/avif" => Ok("avif"),
+        _ => Err(AppError::Validation(format!(
+            "Unsupported image type: {mime_type}"
+        ))),
     }
 }
 
-fn decode_chat_image_payload(base64_data: &str) -> Result<Vec<u8>, AppError> {
+fn decode_chat_image_payload(base64_data: &str, mime_type: &str) -> Result<Vec<u8>, AppError> {
     let payload = base64_data
         .split_once(',')
         .map_or(base64_data, |(_, data)| data);
-    STANDARD
+    let bytes = STANDARD
         .decode(payload)
-        .map_err(|error| AppError::Validation(format!("Invalid image data: {error}")))
+        .map_err(|error| AppError::Validation(format!("Invalid image data: {error}")))?;
+
+    validate_chat_image_signature(&bytes, mime_type)?;
+    Ok(bytes)
+}
+
+fn validate_chat_image_signature(bytes: &[u8], mime_type: &str) -> Result<(), AppError> {
+    let mime = mime_type.trim().to_ascii_lowercase();
+    let valid = match mime.as_str() {
+        "image/png" => bytes.starts_with(b"\x89PNG\r\n\x1a\n"),
+        "image/jpeg" | "image/jpg" => bytes.starts_with(&[0xFF, 0xD8, 0xFF]),
+        "image/webp" => {
+            bytes.len() >= 12 && bytes.starts_with(b"RIFF") && bytes.get(8..12) == Some(b"WEBP")
+        }
+        "image/gif" => bytes.starts_with(b"GIF87a") || bytes.starts_with(b"GIF89a"),
+        "image/bmp" => bytes.starts_with(b"BM"),
+        "image/avif" => {
+            bytes.len() >= 12
+                && bytes.get(4..8) == Some(b"ftyp")
+                && (bytes.get(8..12) == Some(b"avif") || bytes.get(8..12) == Some(b"avis"))
+        }
+        _ => false,
+    };
+
+    if valid {
+        Ok(())
+    } else {
+        Err(AppError::Validation(
+            "Image data does not match the declared image type".to_string(),
+        ))
+    }
 }
 
 fn build_chat_image_file_path(target_dir: &Path, ext: &str) -> PathBuf {
@@ -608,7 +506,7 @@ pub async fn clear_chat_history(
     sessions: State<'_, Arc<ChatSessionManager>>,
 ) -> Result<(), AppError> {
     sessions.clear_chat_history(session_id);
-    let _ = sessions.force_save().await;
+    sessions.force_save().await?;
     Ok(())
 }
 
@@ -632,7 +530,7 @@ pub async fn rewind_last_turn(
     sessions: State<'_, Arc<ChatSessionManager>>,
 ) -> Result<Option<String>, AppError> {
     let removed = sessions.rewind_last_turn(session_id);
-    let _ = sessions.force_save().await;
+    sessions.force_save().await?;
     Ok(removed)
 }
 
@@ -673,48 +571,13 @@ pub async fn generate_image(
 
 #[tauri::command]
 #[specta::specta]
-#[allow(clippy::too_many_arguments)]
-/// Starts image generation as a detached backend task and restores the window on completion.
-pub async fn generate_image_background(
-    app: tauri::AppHandle,
-    _window: Window,
-    request: ai::ImageGenerationRequest,
-    sessions: State<'_, Arc<ChatSessionManager>>,
-    config_service: State<'_, Arc<ConfigService>>,
-    engine_manager: State<'_, Arc<EngineManager>>,
-    image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
-    settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
-    ui_state_service: State<'_, UiStateService>,
-) -> Result<(), AppError> {
-    let context = build_background_image_generation_context(
-        &sessions,
-        &config_service,
-        &engine_manager,
-        &image_generation_state,
-        &settings_service,
-        &ui_state_service,
-    );
-    spawn_background_image_generation(app, request, context);
-
-    Ok(())
-}
-
-#[tauri::command]
-#[specta::specta]
 /// Cancels the current image generation request for the selected provider.
 pub async fn cancel_image_generation(
     provider: String,
     engine_manager: State<'_, Arc<EngineManager>>,
     image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
 ) -> Result<(), AppError> {
-    if provider == "comfyui" {
-        return cancel_comfyui_job(&provider, &image_generation_state).await;
-    }
-    if matches!(provider.as_str(), "sdcpp" | "stable-diffusion") {
-        return cancel_sdcpp_job(&provider, &engine_manager, &image_generation_state).await;
-    }
-
-    engine_manager.stop_slot(Capability::Image).await
+    ai::cancel_image_provider_generation(&provider, &engine_manager, &image_generation_state).await
 }
 
 #[tauri::command]
@@ -724,7 +587,8 @@ pub async fn get_image_generation_preview(
     engine_manager: State<'_, Arc<EngineManager>>,
     image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
 ) -> Result<Option<ImageGenerationPreview>, AppError> {
-    let log_progress = image_generation_state.latest_progress("sdcpp").await;
+    let active_job = image_generation_state.active_job().await;
+    let log_progress = active_job.as_ref().and_then(|job| job.progress.clone());
     let merged_progress = log_progress.as_ref().and_then(|snapshot| snapshot.progress);
     let step = log_progress.as_ref().and_then(|snapshot| snapshot.step);
     let total = log_progress.as_ref().and_then(|snapshot| snapshot.total);
@@ -733,9 +597,10 @@ pub async fn get_image_generation_preview(
         .and_then(|snapshot| snapshot.speed.clone());
     let has_status =
         merged_progress.is_some() || step.is_some() || total.is_some() || speed.is_some();
+    let has_active_job = active_job.as_ref().is_some_and(|job| !job.cancelled);
 
     let Some(path) = engine_manager.active_image_preview_path().await else {
-        return Ok(if has_status {
+        return Ok(if has_status || has_active_job {
             Some(ImageGenerationPreview {
                 data_url: String::new(),
                 updated_at_ms: log_progress
@@ -766,7 +631,7 @@ pub async fn get_image_generation_preview(
         preview.total = total;
         preview.speed.clone_from(&speed);
         preview.eta_relative = None;
-    } else if has_status {
+    } else if has_status || has_active_job {
         preview = Some(ImageGenerationPreview {
             data_url: String::new(),
             updated_at_ms: log_progress
@@ -799,9 +664,9 @@ pub fn save_chat_image_default(
 ) -> Result<SavedChatImage, AppError> {
     let target_dir = chat_image_root_dir()?;
     std::fs::create_dir_all(&target_dir)?;
-    let bytes = decode_chat_image_payload(&base64_data)?;
-    let file_path =
-        build_chat_image_file_path(&target_dir, image_extension_for_mime_type(&mime_type));
+    let extension = image_extension_for_mime_type(&mime_type)?;
+    let bytes = decode_chat_image_payload(&base64_data, &mime_type)?;
+    let file_path = build_chat_image_file_path(&target_dir, extension);
     std::fs::write(&file_path, bytes)?;
 
     Ok(SavedChatImage {
@@ -1010,28 +875,14 @@ fn create_stream_sink(
     })
 }
 
-fn is_local_provider(provider: &str) -> bool {
-    !matches!(
-        provider,
-        "gpt"
-            | "gemini"
-            | "gemini-image"
-            | "gpt-image"
-            | "seedream-image"
-            | "openai"
-            | "openrouter"
-            | "anthropic"
-            | "mistral"
-            | "claude"
-            | "deepseek"
-    )
-}
-
 #[cfg(test)]
 #[allow(clippy::expect_used)]
 mod tests {
-    use super::resolve_existing_path_within_root;
+    use super::{
+        decode_chat_image_payload, image_extension_for_mime_type, resolve_existing_path_within_root,
+    };
     use crate::errors::AppError;
+    use base64::{Engine as _, engine::general_purpose::STANDARD};
 
     #[test]
     fn resolve_existing_path_within_root_allows_file_inside_root() {
@@ -1063,6 +914,35 @@ mod tests {
 
         assert!(
             matches!(error, AppError::Validation(message) if message.contains("outside chat image directory"))
+        );
+    }
+
+    #[test]
+    fn image_extension_for_mime_type_rejects_unsupported_types() {
+        let error = image_extension_for_mime_type("image/svg+xml")
+            .expect_err("svg should not be saved from chat");
+
+        assert!(
+            matches!(error, AppError::Validation(message) if message.contains("Unsupported image type"))
+        );
+    }
+
+    #[test]
+    fn decode_chat_image_payload_accepts_matching_png_signature() {
+        let png = STANDARD.encode(b"\x89PNG\r\n\x1a\npayload");
+        let decoded = decode_chat_image_payload(&png, "image/png").expect("png should decode");
+
+        assert!(decoded.starts_with(b"\x89PNG\r\n\x1a\n"));
+    }
+
+    #[test]
+    fn decode_chat_image_payload_rejects_mismatched_signature() {
+        let fake_png = STANDARD.encode(b"not a png");
+        let error = decode_chat_image_payload(&fake_png, "image/png")
+            .expect_err("invalid image signature must be rejected");
+
+        assert!(
+            matches!(error, AppError::Validation(message) if message.contains("does not match"))
         );
     }
 }

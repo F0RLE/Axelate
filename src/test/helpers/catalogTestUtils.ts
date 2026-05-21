@@ -43,7 +43,8 @@ export function createCatalogHarness(): {
     globalThis.dispatchEvent = vi.fn();
 
     const mockBridge = createMockBridge() as unknown as MockCatalogBridge;
-    const tracer: Pick<LoggerService, 'info' | 'warn' | 'error'> = {
+    const tracer: Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'> = {
+        debug: vi.fn(),
         info: vi.fn(),
         warn: vi.fn(),
         error: vi.fn(),

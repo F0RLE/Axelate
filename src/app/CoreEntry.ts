@@ -2,52 +2,90 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
 type CoreRuntime = {
     init: () => Promise<void>;
-    destroy: () => void;
+    destroy: () => Promise<void> | void;
 };
 
 type CoreFactory = () => CoreRuntime;
-type EntryLogger = Pick<LoggerService, 'warn' | 'error'>;
+type EntryLogger = Pick<LoggerService, 'error'>;
 
-let activeCoreInstance: CoreRuntime | null = null;
-let coreInitializationInFlight = false;
-let coreBootBound = false;
-let coreBeforeUnloadBound = false;
-let bootHandler: (() => void) | null = null;
-let beforeUnloadHandler: (() => void) | null = null;
+type CoreEntryState = {
+    activeCoreInstance: CoreRuntime | null;
+    coreInitializationInFlight: boolean;
+    coreBootBound: boolean;
+    coreBeforeUnloadBound: boolean;
+    bootHandler: (() => void) | null;
+    beforeUnloadHandler: (() => void) | null;
+};
 
-function clearBootState(): void {
-    activeCoreInstance = null;
-    coreInitializationInFlight = false;
+const CORE_ENTRY_STATE_KEY = '__AXELATE_CORE_ENTRY_STATE__';
+
+function getCoreEntryState(): CoreEntryState {
+    const runtime = globalThis as typeof globalThis & {
+        [CORE_ENTRY_STATE_KEY]?: CoreEntryState;
+    };
+
+    runtime[CORE_ENTRY_STATE_KEY] ??= {
+        activeCoreInstance: null,
+        coreInitializationInFlight: false,
+        coreBootBound: false,
+        coreBeforeUnloadBound: false,
+        bootHandler: null,
+        beforeUnloadHandler: null,
+    };
+
+    return runtime[CORE_ENTRY_STATE_KEY];
 }
 
-function destroyActiveCoreInstance(): void {
-    activeCoreInstance?.destroy();
-    clearBootState();
+function clearBootState(): void {
+    const state = getCoreEntryState();
+    state.activeCoreInstance = null;
+    state.coreInitializationInFlight = false;
+}
+
+async function destroyActiveCoreInstance(
+    tracer?: EntryLogger,
+    context = 'Destroy failed',
+): Promise<void> {
+    const state = getCoreEntryState();
+    const coreInstance = state.activeCoreInstance;
+    if (coreInstance === null) {
+        clearBootState();
+        return;
+    }
+
+    try {
+        await coreInstance.destroy();
+    } catch (error: unknown) {
+        tracer?.error(`[Core] ${context}: ${String(error)}`);
+    }
+
+    if (state.activeCoreInstance === coreInstance) {
+        clearBootState();
+    }
 }
 
 function bootCoreOnce(createCore: CoreFactory, tracer: EntryLogger): void {
-    if (activeCoreInstance !== null) {
-        tracer.warn('[Core] Double init blocked (global singleton already active).');
+    const state = getCoreEntryState();
+
+    if (state.activeCoreInstance !== null) {
         return;
     }
 
-    if (coreInitializationInFlight) {
-        tracer.warn('[Core] Double init blocked (initialization already in flight).');
+    if (state.coreInitializationInFlight) {
         return;
     }
 
-    coreInitializationInFlight = true;
+    state.coreInitializationInFlight = true;
 
     try {
         const coreInstance = createCore();
-        activeCoreInstance = coreInstance;
-        coreInitializationInFlight = false;
+        state.activeCoreInstance = coreInstance;
+        state.coreInitializationInFlight = false;
 
-        coreInstance.init().catch((error: unknown) => {
-            if (activeCoreInstance === coreInstance) {
-                clearBootState();
+        coreInstance.init().catch(async (error: unknown) => {
+            if (state.activeCoreInstance === coreInstance) {
+                await destroyActiveCoreInstance(tracer, 'Destroy after boot failure failed');
             }
-            coreInstance.destroy();
             tracer.error(`[Core] Boot failed: ${String(error)}`);
         });
     } catch (error: unknown) {
@@ -58,40 +96,45 @@ function bootCoreOnce(createCore: CoreFactory, tracer: EntryLogger): void {
 }
 
 export function bindCoreEntry(createCore: CoreFactory, tracer: EntryLogger): void {
+    const state = getCoreEntryState();
+
     if (document.readyState === 'loading') {
-        if (!coreBootBound) {
-            coreBootBound = true;
-            bootHandler = () => {
-                bootHandler = null;
+        if (!state.coreBootBound) {
+            state.coreBootBound = true;
+            state.bootHandler = () => {
+                state.bootHandler = null;
                 bootCoreOnce(createCore, tracer);
             };
-            document.addEventListener('DOMContentLoaded', bootHandler, { once: true });
+            document.addEventListener('DOMContentLoaded', state.bootHandler, { once: true });
         }
     } else {
         bootCoreOnce(createCore, tracer);
     }
 
-    if (!coreBeforeUnloadBound) {
-        coreBeforeUnloadBound = true;
-        beforeUnloadHandler = () => {
-            destroyActiveCoreInstance();
+    if (!state.coreBeforeUnloadBound) {
+        state.coreBeforeUnloadBound = true;
+        state.beforeUnloadHandler = () => {
+            void destroyActiveCoreInstance(tracer);
         };
-        globalThis.addEventListener('beforeunload', beforeUnloadHandler);
+        globalThis.addEventListener('beforeunload', state.beforeUnloadHandler);
     }
 
     if (import.meta.hot) {
         import.meta.hot.dispose(() => {
-            destroyActiveCoreInstance();
-            if (bootHandler !== null) {
-                document.removeEventListener('DOMContentLoaded', bootHandler);
-                bootHandler = null;
-            }
-            if (beforeUnloadHandler !== null) {
-                globalThis.removeEventListener('beforeunload', beforeUnloadHandler);
-                beforeUnloadHandler = null;
-            }
-            coreBootBound = false;
-            coreBeforeUnloadBound = false;
+            return destroyActiveCoreInstance(tracer, 'Destroy during HMR dispose failed').finally(
+                () => {
+                    if (state.bootHandler !== null) {
+                        document.removeEventListener('DOMContentLoaded', state.bootHandler);
+                        state.bootHandler = null;
+                    }
+                    if (state.beforeUnloadHandler !== null) {
+                        globalThis.removeEventListener('beforeunload', state.beforeUnloadHandler);
+                        state.beforeUnloadHandler = null;
+                    }
+                    state.coreBootBound = false;
+                    state.coreBeforeUnloadBound = false;
+                },
+            );
         });
     }
 }

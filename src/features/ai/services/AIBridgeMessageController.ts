@@ -13,6 +13,7 @@ import type { IChatTransport } from './AIChatTransport';
 import type { AIProviderManager } from './AIProviderManager';
 import type { AIBridgeEvents } from './AIBridgeEvents';
 import type { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
+import type { IAIBridgeSendMessageOptions } from '../types/IAIBridge';
 import { resolveCustomProviderBackendId } from '@/shared/utils/customProviderSupport';
 
 type AIBridgeMessageLogger = Pick<LoggerService, 'error'>;
@@ -40,6 +41,7 @@ export class AIBridgeMessageController {
         source: MessageSource,
         attachments: { name: string; type: string; data_base64: string }[],
         history: IChatMessage[],
+        options: IAIBridgeSendMessageOptions = {},
     ): Promise<IBridgeResponse> {
         if (this._deps.manager.activeProviderId === null) {
             return this._handleMissingProvider(source);
@@ -58,7 +60,7 @@ export class AIBridgeMessageController {
             const isImageProvider = this._deps.providerPolicy.isImageProvider(providerId);
 
             if (isImageProvider) {
-                return await this._sendImageMessage(providerId, text, source);
+                return await this._sendImageMessage(providerId, text, source, options);
             }
 
             return await this._sendTextMessage(providerId, text, attachments, history, source);
@@ -72,50 +74,99 @@ export class AIBridgeMessageController {
         }
     }
 
+    public async prepareImagePrompt(text: string): Promise<IBridgeResponse> {
+        if (this._deps.manager.activeProviderId === null) {
+            return this._silentMissingProviderResponse();
+        }
+
+        await this._deps.manager.refreshActiveApiKey();
+        if (this._deps.manager.apiKey === null && this._deps.manager.isActive() === false) {
+            return this._silentMissingApiKeyResponse();
+        }
+
+        try {
+            this._deps.onActivity();
+
+            const providerId = this._deps.manager.activeProviderId;
+            const backendProviderId = resolveCustomProviderBackendId(providerId);
+            const requestModel = this._resolveRequestModel(providerId);
+            if (requestModel === null) {
+                return this._handleMissingModel();
+            }
+            const requestOptions = this._deps.providerPolicy.buildRequestOptions({
+                hasApiKey: this._deps.manager.apiKey !== null,
+                maxOutputTokens: Math.min(this._deps.manager.maxOutputTokens ?? 320, 420),
+                thinkingLevel: 'off',
+                webSearchEnabled: false,
+            });
+            const request = constructChatRequest(
+                [],
+                {
+                    role: 'user',
+                    content: text,
+                },
+                [],
+                {
+                    providerId: backendProviderId,
+                    model: requestModel,
+                    apiKey: null,
+                    sessionId: '',
+                    ...requestOptions,
+                },
+            );
+
+            this._deps.onLongActivityStart();
+            const response = await this._deps.transport
+                .sendSilent(request)
+                .finally(this._deps.onLongActivityEnd);
+            return this._withModelContext(response, providerId, request.model);
+        } catch (error: unknown) {
+            const errorMsg =
+                error instanceof Error
+                    ? error.message
+                    : this._deps.translate('ui.ai.communication_failure', 'Communication failure');
+            this._deps.tracer.error('[AIBridge] Silent prompt preparation failed:', error);
+            return { ok: false, error: errorMsg };
+        }
+    }
+
+    private _silentMissingProviderResponse(): IBridgeResponse {
+        return {
+            ok: false,
+            error: this._deps.translate('ui.ai.no_provider', 'No AI provider selected'),
+        };
+    }
+
+    private _silentMissingApiKeyResponse(): IBridgeResponse {
+        return {
+            ok: false,
+            error: this._deps.translate('ui.ai.missing_api_key', 'API key missing'),
+        };
+    }
+
     private async _sendImageMessage(
         providerId: string,
         text: string,
         source: MessageSource,
+        options: IAIBridgeSendMessageOptions,
     ): Promise<IBridgeResponse> {
         const context = this._deps.getContext();
-        const settings = context?.settingsService.getSettings() as
-            | Record<string, unknown>
-            | undefined;
         const selectedImageModule = context?.stateStore.getSelectedModule('ai_image');
         const settingsKey = selectedImageModule?.id ?? providerId;
-        const performanceMode = this._deps.providerPolicy.isImagePerformanceModeEnabled(
-            settings,
-            settingsKey,
-        );
         const backendProviderId = resolveCustomProviderBackendId(providerId);
+        const originalPrompt = options.originalPrompt?.trim();
 
         const request: IImageGenerationRequest = {
             provider: backendProviderId,
             prompt: text,
-            original_prompt: text,
-            model: this._deps.manager.model || 'default',
+            original_prompt:
+                originalPrompt !== undefined && originalPrompt !== '' ? originalPrompt : text,
+            model: this._deps.manager.model,
             settings_key: settingsKey,
             session_id: this._deps.manager.sessionId,
         };
 
         this._deps.events.broadcastReplaceChunk('image status=starting\n');
-
-        if (performanceMode) {
-            const backgroundResponse = await this._deps.transport.generateImageBackground(request);
-            if (!backgroundResponse.ok) {
-                return this._handleTransportResponse(
-                    this._withModelContext(backgroundResponse, providerId, request.model),
-                    source,
-                );
-            }
-
-            this._deps.showToast(
-                this._deps.translate('ui.ai.performance_mode_active', 'Performance mode active'),
-                'success',
-            );
-            await context?.windowService.close();
-            return { ok: true, text: '' };
-        }
 
         this._deps.onLongActivityStart();
         const imageResponse = await this._deps.transport.generateImage(request).finally(() => {
@@ -168,6 +219,10 @@ export class AIBridgeMessageController {
         const backendProviderId = resolveCustomProviderBackendId(providerId);
         const requestHistory = isLocalTextProvider ? this._toTextOnlyMessages(history) : history;
         const requestAttachments = isLocalTextProvider ? [] : attachments;
+        const requestModel = this._resolveRequestModel(providerId);
+        if (requestModel === null) {
+            return this._handleMissingModel();
+        }
         const requestOptions = this._deps.providerPolicy.buildRequestOptions({
             hasApiKey: this._deps.manager.apiKey !== null,
             maxOutputTokens: this._deps.manager.maxOutputTokens,
@@ -176,7 +231,7 @@ export class AIBridgeMessageController {
         });
         const request = constructChatRequest(requestHistory, newMessage, requestAttachments, {
             providerId: backendProviderId,
-            model: this._deps.manager.model || 'default',
+            model: requestModel,
             apiKey: null,
             sessionId: this._deps.manager.sessionId,
             ...requestOptions,
@@ -230,6 +285,15 @@ export class AIBridgeMessageController {
         return part.name !== undefined ? `[File attached: ${part.name}]` : '[File attached]';
     }
 
+    private _resolveRequestModel(providerId: string): string | null {
+        const model = this._deps.manager.model.trim();
+        if (model !== '') {
+            return model;
+        }
+
+        return this._deps.providerPolicy.isLocalTextProvider(providerId) ? 'default' : null;
+    }
+
     private _withModelContext(
         response: IBridgeResponse,
         providerId: string,
@@ -251,16 +315,21 @@ export class AIBridgeMessageController {
         };
     }
 
-    private _handleMissingApiKey(source: MessageSource): IBridgeResponse {
+    private _handleMissingApiKey(_source: MessageSource): IBridgeResponse {
         const msg = this._deps.translate('ui.ai.no_api_key', 'API key missing');
-        this._deps.events.broadcastResponse(`Error: ${msg}`, source);
         this._deps.showToast(msg, 'error');
         return { ok: false, error: msg };
     }
 
-    private _handleMissingProvider(source: MessageSource): IBridgeResponse {
+    private _handleMissingProvider(_source: MessageSource): IBridgeResponse {
         const msg = this._deps.translate('ui.ai.no_provider', 'No engine found');
-        this._deps.events.broadcastResponse(msg, source);
+        this._deps.showToast(msg, 'error');
+        return { ok: false, error: msg };
+    }
+
+    private _handleMissingModel(): IBridgeResponse {
+        const msg = this._deps.translate('ui.ai.no_model_selected', 'No AI model selected');
+        this._deps.showToast(msg, 'error');
         return { ok: false, error: msg };
     }
 

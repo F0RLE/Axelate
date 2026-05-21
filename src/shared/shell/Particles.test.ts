@@ -151,4 +151,21 @@ describe('Particles', () => {
 
         particles.destroy();
     });
+
+    it('reuses the reduced-motion media query across focus restores', () => {
+        const particles = new Particles();
+        const matchMediaSpy = globalThis.matchMedia as unknown as ReturnType<typeof vi.fn>;
+
+        expect(matchMediaSpy).toHaveBeenCalledTimes(1);
+
+        Object.defineProperty(document, 'hidden', { configurable: true, value: true });
+        document.dispatchEvent(new Event('visibilitychange'));
+        Object.defineProperty(document, 'hidden', { configurable: true, value: false });
+        document.dispatchEvent(new Event('visibilitychange'));
+        globalThis.dispatchEvent(new Event('focus'));
+        globalThis.dispatchEvent(new Event('focus'));
+
+        expect(matchMediaSpy).toHaveBeenCalledTimes(1);
+        particles.destroy();
+    });
 });

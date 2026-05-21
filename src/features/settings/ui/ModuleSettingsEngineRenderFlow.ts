@@ -12,7 +12,11 @@ type ModuleSettingsEngineRenderFlowDeps = {
         appId: string,
         config: EngineConfig | null,
     ) => void;
-    renderPerformanceModeFieldRow: (container: HTMLElement, appId: string) => void;
+    renderModelProfiles: (
+        container: HTMLElement,
+        appId: string,
+        config: EngineConfig | null,
+    ) => void;
     renderFieldRow: (
         container: HTMLElement,
         options: EngineFieldDefinition & {
@@ -47,7 +51,10 @@ type ModuleSettingsEngineRenderOptions = {
         modelPlaceholder: string,
         isImage: boolean,
     ) => EngineFieldDefinition;
-    getImageCompanionFields: (translate: TranslateFn, appId: string) => EngineFieldDefinition[];
+    getComputeModeField: (
+        translate: TranslateFn,
+        availableModes?: Array<'gpu' | 'cpu'>,
+    ) => EngineFieldDefinition;
     getImageExtraArgsField: (translate: TranslateFn) => EngineFieldDefinition;
 };
 
@@ -76,8 +83,12 @@ export class ModuleSettingsEngineRenderFlow {
             modelPlaceholder,
             translate: options.translate,
             getCoreModelField: options.getCoreModelField,
-            getImageCompanionFields: options.getImageCompanionFields,
+            getComputeModeField: options.getComputeModeField,
+            ...(app.installedComputeModes !== undefined
+                ? { availableComputeModes: app.installedComputeModes }
+                : {}),
             getImageExtraArgsField: options.getImageExtraArgsField,
+            getTextFields: options.getTextFields,
         });
 
         if (isImage) {
@@ -91,13 +102,7 @@ export class ModuleSettingsEngineRenderFlow {
             return;
         }
 
-        this._renderTextFields({
-            container,
-            appId: app.id,
-            config,
-            translate: options.translate,
-            getTextFields: options.getTextFields,
-        });
+        this._deps.syncPromptTextareaHeights(corePrimary);
     }
 
     private _renderCoreFields(options: {
@@ -107,42 +112,38 @@ export class ModuleSettingsEngineRenderFlow {
         isImage: boolean;
         modelPlaceholder: string;
         translate: TranslateFn;
+        availableComputeModes?: Array<'gpu' | 'cpu'>;
         getCoreModelField: ModuleSettingsEngineRenderOptions['getCoreModelField'];
-        getImageCompanionFields: ModuleSettingsEngineRenderOptions['getImageCompanionFields'];
+        getComputeModeField: ModuleSettingsEngineRenderOptions['getComputeModeField'];
         getImageExtraArgsField: ModuleSettingsEngineRenderOptions['getImageExtraArgsField'];
+        getTextFields: ModuleSettingsEngineRenderOptions['getTextFields'];
     }): void {
         const coreField = options.getCoreModelField(
             options.translate,
             options.modelPlaceholder,
             options.isImage,
         );
+        const computeField = options.getComputeModeField(
+            options.translate,
+            options.availableComputeModes,
+        );
+
+        this._deps.renderFieldRow(options.container, {
+            ...coreField,
+            isFile: true,
+            isImage: options.isImage,
+            appId: options.appId,
+            config: options.config,
+        });
+
+        this._deps.renderFieldRow(options.container, {
+            ...computeField,
+            appId: options.appId,
+            config: options.config,
+        });
 
         if (options.isImage) {
-            const splitRow = document.createElement('div');
-            splitRow.className = 'local-engine-split-row';
-
-            this._deps.renderFieldRow(splitRow, {
-                ...coreField,
-                isFile: true,
-                isImage: true,
-                appId: options.appId,
-                config: options.config,
-            });
-            this._deps.renderPerformanceModeFieldRow(splitRow, options.appId);
-            options.container.appendChild(splitRow);
-
-            const companionFields = options.getImageCompanionFields(
-                options.translate,
-                options.appId,
-            );
-            companionFields.forEach((field) => {
-                this._deps.renderFieldRow(options.container, {
-                    ...field,
-                    isImage: field.fileKind === 'vae',
-                    appId: options.appId,
-                    config: options.config,
-                });
-            });
+            this._deps.renderModelProfiles(options.container, options.appId, options.config);
 
             this._deps.renderFieldRow(options.container, {
                 ...options.getImageExtraArgsField(options.translate),
@@ -152,12 +153,12 @@ export class ModuleSettingsEngineRenderFlow {
             return;
         }
 
-        this._deps.renderFieldRow(options.container, {
-            ...coreField,
-            isFile: true,
-            isImage: false,
-            appId: options.appId,
-            config: options.config,
+        options.getTextFields(options.translate).forEach((field) => {
+            this._deps.renderFieldRow(options.container, {
+                ...field,
+                appId: options.appId,
+                config: options.config,
+            });
         });
     }
 
@@ -211,40 +212,5 @@ export class ModuleSettingsEngineRenderFlow {
             options.appId,
             options.config,
         );
-    }
-
-    private _renderTextFields(options: {
-        container: HTMLElement;
-        appId: string;
-        config: EngineConfig | null;
-        translate: TranslateFn;
-        getTextFields: ModuleSettingsEngineRenderOptions['getTextFields'];
-    }): void {
-        const fieldTargets: Record<string, string> = {
-            compute_mode: `#local-engine-compute-${options.appId}`,
-            context_size: `#local-engine-context-${options.appId}`,
-            llamacpp_system_prompt: `#local-engine-system-prompt-${options.appId}`,
-        };
-
-        options.getTextFields(options.translate).forEach((field) => {
-            const targetSelector = fieldTargets[field.key];
-            if (targetSelector === undefined) {
-                // eslint-disable-next-line no-console
-                console.warn(
-                    `[ModuleSettingsEngineRenderFlow] Missing target for text field "${field.key}" in ${options.appId}`,
-                );
-                return;
-            }
-            const target = options.container.querySelector(targetSelector);
-            if (!(target instanceof HTMLElement)) {
-                return;
-            }
-
-            this._deps.renderFieldRow(target, {
-                ...field,
-                appId: options.appId,
-                config: options.config,
-            });
-        });
     }
 }

@@ -62,7 +62,7 @@
     "descKey": "ui.launcher.engine.comfyui.desc",
     "name": "ComfyUI",
     "desc": "Node-based image workflow engine for maximum quality and control.",
-    "icon": "🧩",
+    "icon": "🕸️",
     "type": "local",
     "dlType": "release",
     "comingSoon": true,

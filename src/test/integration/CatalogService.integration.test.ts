@@ -1,13 +1,12 @@
 /**
  * @module test/integration/CatalogService.integration.test.ts
  * @description Integration tests for CatalogService — verifies full lifecycle
- * from bridge calls through catalog hydration to globalThis sync.
+ * from backend calls through catalog hydration to update events.
  */
 
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { CatalogService } from '@/shared/services/CatalogService';
+import type { CatalogService } from '@/shared/services/CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
-import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import {
     createCatalogHarness,
     createMockAppConfig,
@@ -54,15 +53,15 @@ describe('CatalogService Integration', () => {
         expect(catalog.services.at(0)?.id).toBe('my-worker');
     });
 
-    it('should handle Tauri backend failure and use fallback', async () => {
+    it('should handle Tauri backend failure with an empty catalog', async () => {
         mockBridge.isTauri.mockReturnValue(true);
         mockBridge.invoke.mockResolvedValue(null);
 
         await service.loadCatalog();
 
         const catalog = service.getCatalog();
-        // Fallback config should populate the catalog
-        expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+        expect(catalog.ai).toHaveLength(0);
+        expect(catalog.services).toHaveLength(0);
     });
 
     it('should dispatch catalog-loaded event after successful load', async () => {
@@ -79,7 +78,7 @@ describe('CatalogService Integration', () => {
         );
     });
 
-    it('should handle empty config and keep empty catalog (fallback is also empty)', async () => {
+    it('should handle empty config and keep empty catalog', async () => {
         const mockConfig = createMockAppConfig({
             catalog: { ai: [], services: [] },
         });
@@ -89,7 +88,6 @@ describe('CatalogService Integration', () => {
         await service.loadCatalog();
 
         const catalog = service.getCatalog();
-        // FALLBACK_CONFIG is also empty, so catalog stays empty
         expect(catalog.ai).toHaveLength(0);
         expect(catalog.services).toHaveLength(0);
     });
@@ -117,13 +115,13 @@ describe('CatalogService Integration', () => {
         expect(catalog.ai.at(0)?.installed).toBe(true); // API modules always installed
     });
 
-    it('should use bundled fallback when Tauri bridge is unavailable', async () => {
+    it('should use an empty catalog when Tauri bridge is unavailable', async () => {
         mockBridge.isTauri.mockReturnValue(false);
 
         await service.loadCatalog();
 
         const catalog = service.getCatalog();
-        expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
-        expect(catalog.services.length).toBe(FALLBACK_CONFIG.catalog.services.length);
+        expect(catalog.ai).toHaveLength(0);
+        expect(catalog.services).toHaveLength(0);
     });
 });

@@ -1,6 +1,5 @@
 import type { UiStateStore, ThinkingLevel } from '../state/UiStateStore';
 
-const LOCAL_LOW_THINKING_DEFAULTS = new Set(['llamacpp']);
 const DEFAULT_LOCAL_MAX_OUTPUT_TOKENS = 384;
 
 export class AISettingsService {
@@ -20,7 +19,7 @@ export class AISettingsService {
             return savedLevel;
         }
 
-        return LOCAL_LOW_THINKING_DEFAULTS.has(appId) ? 'low' : 'off';
+        return 'off';
     }
 
     public setThinkingLevel(appId: string, level: ThinkingLevel): void {
@@ -52,13 +51,5 @@ export class AISettingsService {
     public setLocalMaxOutputTokens(appId: string, tokens: number): void {
         const normalized = Math.max(1, Math.min(Math.trunc(tokens), 32768));
         this._store.updateNestedState('local_max_output_tokens', appId, normalized);
-    }
-
-    public getAiSessionId(): string | null {
-        return this._store.getState().ai_session_id;
-    }
-
-    public setAiSessionId(sessionId: string | null): void {
-        this._store.updateState({ ai_session_id: sessionId });
     }
 }

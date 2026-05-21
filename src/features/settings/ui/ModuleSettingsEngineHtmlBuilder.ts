@@ -21,9 +21,7 @@ export class ModuleSettingsEngineHtmlBuilder {
             config === null
                 ? `<p class="local-engine-warning">${this.escapeHtml(this._translate('ui.settings.engine.config_unavailable', 'Engine config unavailable (Tauri not connected)'))}</p>`
                 : '';
-        const generationSection = isImage
-            ? this._buildImageGenerationSection(app.id)
-            : this._buildTextRuntimeSections(app.id);
+        const generationSection = isImage ? this._buildImageGenerationSection(app.id) : '';
 
         return `
             <div class="ai-module-config universal-api-theme local-engine-config" data-provider-id="${this.escapeHtml(app.id)}">
@@ -31,7 +29,7 @@ export class ModuleSettingsEngineHtmlBuilder {
                     <section class="thinking-level-section local-engine-section local-engine-section--core" aria-labelledby="${app.id}-core-title">
                         <div class="ai-content-panel">
                             <div class="local-engine-section-header">
-                                <h3 id="${app.id}-core-title">🧩 ${this.escapeHtml(
+                                <h3 id="${app.id}-core-title">${this.escapeHtml(
                                     this._translate(
                                         'ui.settings.engine.core_config',
                                         'Core Config',
@@ -48,50 +46,15 @@ export class ModuleSettingsEngineHtmlBuilder {
         `;
     }
 
-    private _buildTextRuntimeSections(appId: string): string {
-        return `
-            <section class="thinking-level-section local-engine-section local-engine-section--compute" aria-labelledby="${appId}-compute-title">
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center local-engine-section-header">
-                        <h3 id="${appId}-compute-title">${this.escapeHtml(
-                            this._translate('ui.settings.engine.compute_mode', 'Compute Device'),
-                        )}</h3>
-                    </div>
-                    <div id="local-engine-compute-${appId}" class="local-engine-api-control"></div>
-                </div>
-            </section>
-            <section class="thinking-level-section local-engine-section local-engine-section--context" aria-labelledby="${appId}-context-title">
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center local-engine-section-header">
-                        <h3 id="${appId}-context-title">${this.escapeHtml(
-                            this._translate('ui.settings.engine.context_size', 'Context Window'),
-                        )}</h3>
-                    </div>
-                    <div id="local-engine-context-${appId}" class="local-engine-api-control"></div>
-                </div>
-            </section>
-            <section class="thinking-level-section local-engine-section local-engine-section--system-prompt" aria-labelledby="${appId}-system-prompt-title">
-                <div class="ai-content-panel">
-                    <div class="settings-card-header-center local-engine-section-header">
-                        <h3 id="${appId}-system-prompt-title">${this.escapeHtml(
-                            this._translate('ui.settings.engine.system_prompt', 'System Prompt'),
-                        )}</h3>
-                    </div>
-                    <div id="local-engine-system-prompt-${appId}" class="local-engine-api-control"></div>
-                </div>
-            </section>
-        `;
-    }
-
     private _buildImageGenerationSection(appId: string): string {
         return `
             <section class="thinking-level-section local-engine-section" aria-labelledby="${appId}-generation-title">
                 <div class="ai-content-panel">
                     <div class="local-engine-section-header">
-                        <h3 id="${appId}-generation-title">🎛️ ${this.escapeHtml(
+                        <h3 id="${appId}-generation-title">${this.escapeHtml(
                             this._translate(
-                                'ui.settings.engine.generation_presets',
-                                'Generation Presets',
+                                'ui.settings.engine.generation_settings',
+                                'Generation Settings',
                             ),
                         )}</h3>
                     </div>

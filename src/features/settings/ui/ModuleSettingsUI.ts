@@ -24,7 +24,6 @@ import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import { type NavigationService } from '@/infrastructure/navigation/NavigationService';
 import { EngineConfigService } from '@/features/ai/services/EngineConfigService';
 import { ModuleSettingsModalController } from './ModuleSettingsModalController';
-import { ModuleSettingsBridgeController } from './ModuleSettingsBridgeController';
 import type { ModuleSettingsAutosaveController } from './ModuleSettingsAutosaveController';
 import type { ModuleSettingsCustomUiController } from './ModuleSettingsCustomUiController';
 import type { ModuleSettingsEngineRenderer } from './ModuleSettingsEngineRenderer';
@@ -57,7 +56,6 @@ export class ModuleSettingsUI {
     private _engineRenderer: ModuleSettingsEngineRenderer | null = null;
     private _schemaRenderer: ModuleSettingsSchemaRenderer | null = null;
     private readonly _modalController: ModuleSettingsModalController;
-    private readonly _bridgeController: ModuleSettingsBridgeController;
     private readonly _viewHelper = new ModuleSettingsViewHelper();
     private _autosaveController: ModuleSettingsAutosaveController | null = null;
     private _customUiController: ModuleSettingsCustomUiController | null = null;
@@ -86,7 +84,6 @@ export class ModuleSettingsUI {
         private readonly _deps: ModuleSettingsUIDeps,
     ) {
         this._engineConfigService = new EngineConfigService(_tauri, this._deps.tracer);
-        this._bridgeController = new ModuleSettingsBridgeController(this._deps.tracer);
         this._modalController = new ModuleSettingsModalController(_navigation, {
             closeAppSelection: () => {
                 this._deps.closeAppSelection();
@@ -109,6 +106,9 @@ export class ModuleSettingsUI {
             },
             showSaveIndicator: () => {
                 this._showSaveIndicator();
+            },
+            showSaveErrorIndicator: () => {
+                this._showSaveErrorIndicator();
             },
             hideSaveIndicator: () => {
                 this._hideSaveIndicator();
@@ -143,9 +143,6 @@ export class ModuleSettingsUI {
         this._loadCardWidths();
         this._initCardResizer();
 
-        this._bridgeController.install(
-            async (app: IApp) => await this._openModuleSettingsHelper(app),
-        );
         this._bindGlobalEvents();
     }
 
@@ -215,7 +212,6 @@ export class ModuleSettingsUI {
         this._unbindGlobalEvents();
         this._destroyCardResizer();
         aiSettingsRenderer.destroy();
-        this._bridgeController.uninstall();
         this._deps.tracer.info('[ModuleSettingsUI] Destroyed.');
     }
 
@@ -242,12 +238,12 @@ export class ModuleSettingsUI {
     }
 
     private _bindGlobalEvents(): void {
-        globalThis.addEventListener('lang:changed', this._boundLangChanged);
+        globalThis.addEventListener('language-changed', this._boundLangChanged);
     }
 
     private _unbindGlobalEvents(): void {
         this._unbindDropdownEvents();
-        globalThis.removeEventListener('lang:changed', this._boundLangChanged);
+        globalThis.removeEventListener('language-changed', this._boundLangChanged);
     }
 
     private _initCardResizer(): void {
@@ -469,6 +465,10 @@ export class ModuleSettingsUI {
 
     private _showSaveIndicator(): void {
         this._getAutosaveController().showPending();
+    }
+
+    private _showSaveErrorIndicator(): void {
+        this._getAutosaveController().showError();
     }
 
     private _hideSaveIndicator(): void {

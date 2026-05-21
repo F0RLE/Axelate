@@ -96,6 +96,9 @@ export class ConsoleUI {
             onClearLogs: () => {
                 void this.clearLogs();
             },
+            onClearAllLogs: () => {
+                void this.clearAllLogs();
+            },
             onCopyLogs: () => {
                 void this.copyLogs();
             },
@@ -121,6 +124,7 @@ export class ConsoleUI {
         });
         this._refreshCoordinator = new ConsoleRefreshCoordinator({
             service: this.service,
+            getActiveViewId: () => this._viewState.activeViewId,
             refreshLogViews: async () => await this.refreshLogViews(),
             renderLogs: (clear) => {
                 this.renderLogs(clear);
@@ -144,6 +148,7 @@ export class ConsoleUI {
         this._interactionHelper.bindDropzone();
         this.bindTabs();
         this._bindTabScrollControls();
+        this._bindWorkspaceWheelForwarding();
         this._filterControlHelper.bindControls();
         this._syncPollingForActivePage();
         void this.refreshLogViews();
@@ -244,6 +249,38 @@ export class ConsoleUI {
         });
     }
 
+    private _bindWorkspaceWheelForwarding(): void {
+        const workspace = document.querySelector('.console-workspace');
+        const scrollContainer = document.getElementById('console-container');
+        if (!(workspace instanceof HTMLElement) || !(scrollContainer instanceof HTMLElement)) {
+            return;
+        }
+
+        const handleWheel = (event: WheelEvent) => {
+            const target = event.target;
+            if (
+                target instanceof Element &&
+                target.closest('.console-logs-area') instanceof HTMLElement
+            ) {
+                return;
+            }
+            if (
+                event.deltaY === 0 ||
+                scrollContainer.scrollHeight <= scrollContainer.clientHeight
+            ) {
+                return;
+            }
+
+            scrollContainer.scrollTop += event.deltaY;
+            event.preventDefault();
+        };
+
+        workspace.addEventListener('wheel', handleWheel, { passive: false });
+        this.unsubscribers.push(() => {
+            workspace.removeEventListener('wheel', handleWheel);
+        });
+    }
+
     public setTab(tabId: string, btn?: HTMLElement): void {
         this._activateTab('.debug-tab', '.debug-tab-content', `debug-${tabId}-tab`, btn);
     }
@@ -252,10 +289,44 @@ export class ConsoleUI {
         this._viewState.activeViewId = view;
         this._activateTab('.console-tab', '.logs-pane', `logs-${view}`, btn);
         this.renderLogs(true);
+        const requestedView = view;
+        void this.service
+            .fetchLogs(requestedView)
+            .then(() => {
+                if (this._viewState.activeViewId === requestedView) {
+                    this.renderLogs(true);
+                }
+            })
+            .catch((error: unknown) => {
+                // eslint-disable-next-line no-console
+                console.error('[ConsoleUI] Failed to fetch logs for view:', error);
+            });
     }
 
     public async clearLogs(): Promise<void> {
-        await this.service.clearLogs(this._viewState.activeViewId);
+        const success = await this.service.clearLogs(this._viewState.activeViewId);
+        if (!success) {
+            this._showToast(
+                this._translate('ui.debug.logs_clear_failed', 'Failed to clear logs'),
+                'error',
+            );
+            return;
+        }
+
+        this.renderLogs(true);
+        this._clipboardHelper.showLogsCleared();
+    }
+
+    public async clearAllLogs(): Promise<void> {
+        const success = await this.service.clearAllLogs();
+        if (!success) {
+            this._showToast(
+                this._translate('ui.debug.logs_clear_failed', 'Failed to clear logs'),
+                'error',
+            );
+            return;
+        }
+
         this.renderLogs(true);
         this._clipboardHelper.showLogsCleared();
     }

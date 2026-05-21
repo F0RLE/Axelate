@@ -34,6 +34,7 @@ export class VoiceInputService {
     private _sessionId = 0;
     private _onStateChange: VoiceStateCallback | null = null;
     private _onError: VoiceErrorCallback | null = null;
+    private _nativeRecognitionActive = false;
 
     public constructor(
         private readonly _tracer: VoiceInputLogger,
@@ -46,7 +47,18 @@ export class VoiceInputService {
      * Native voice input is currently available only in the Windows Tauri host.
      */
     public isSupported(): boolean {
-        return this._hostBridge.isTauri() && document.body.dataset['platform'] === 'windows';
+        const capabilityBridge = this._hostBridge as IBridge & {
+            hasCapability?: (capability: string) => boolean;
+        };
+        if (!this._hostBridge.isTauri()) {
+            return false;
+        }
+
+        if (document.body.dataset['platform'] !== 'windows') {
+            return false;
+        }
+
+        return capabilityBridge.hasCapability?.('speechRecognition') ?? true;
     }
 
     /**
@@ -60,7 +72,7 @@ export class VoiceInputService {
      * Starts one native voice recognition request.
      */
     public start(onResult: VoiceResultCallback, callbacks: VoiceSessionCallbacks = {}): boolean {
-        if (this.isActive()) {
+        if (this.isActive() || this._nativeRecognitionActive) {
             this.stop();
             return false;
         }
@@ -72,6 +84,7 @@ export class VoiceInputService {
         const sessionId = ++this._sessionId;
         this._onStateChange = callbacks.onStateChange ?? null;
         this._onError = callbacks.onError ?? null;
+        this._nativeRecognitionActive = true;
         this._setState('starting');
         this._setState('listening');
 
@@ -83,7 +96,7 @@ export class VoiceInputService {
      * Stops the current frontend session and ignores the pending native result.
      */
     public stop(): void {
-        if (!this.isActive()) {
+        if (!this.isActive() && !this._nativeRecognitionActive) {
             return;
         }
 
@@ -93,7 +106,10 @@ export class VoiceInputService {
             );
         });
         this._sessionId += 1;
-        this._setState('stopping');
+        this._nativeRecognitionActive = false;
+        if (this.isActive()) {
+            this._setState('stopping');
+        }
         this._finishSession('user');
     }
 
@@ -114,7 +130,13 @@ export class VoiceInputService {
 
             const text = response.text.trim();
             if (text.length > 0) {
-                onResult(text);
+                try {
+                    onResult(text);
+                } catch (err) {
+                    this._tracer.error(
+                        `[VoiceInputService] onResult handler threw: ${String(err)}`,
+                    );
+                }
             }
             this._finishSession('ended');
         } catch (error) {
@@ -126,6 +148,10 @@ export class VoiceInputService {
             this._tracer.error(`[VoiceInputService] Native recognition error: ${payload.message}`);
             this._onError?.(payload);
             this._finishSession(payload.code === 'startup_failed' ? 'startup_failed' : 'error');
+        } finally {
+            if (this._sessionId === sessionId) {
+                this._nativeRecognitionActive = false;
+            }
         }
     }
 

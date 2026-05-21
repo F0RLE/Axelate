@@ -1,5 +1,5 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import type { ChatController } from '@/features/chat/chat';
+import type { ChatController } from '@/features/chat/ChatController';
 import { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { NavigationUI } from '@/infrastructure/navigation/NavigationUI';
@@ -29,7 +29,7 @@ import type {
     ModuleSettingsUiController,
 } from './CoreUiContracts';
 import { LazyMonitoringUiAdapter } from './LazyUiAdapters';
-import { createModuleSettingsGateway } from './CoreUiBridgeHelpers';
+import { createExternalUrlOpener, createModuleSettingsGateway } from './CoreUiBridgeHelpers';
 import { createConsoleUI, createModuleSettingsUI, createSettingsUI } from './CoreDeferredUiFactory';
 import { createChatController } from './CoreChatFactory';
 
@@ -63,6 +63,7 @@ type CreateAppUIDeps = {
         openModuleSettings: (app: IApp) => Promise<void>;
     };
     aiBridge: AIBridge;
+    tauriProvider: TauriProvider;
 };
 
 type CreateCoreUiBundleDeps = {
@@ -116,6 +117,11 @@ export function createAppUI(deps: CreateAppUIDeps): AppUI {
                 setSelectedModule: (category, moduleData) => {
                     deps.stateStore.setSelectedModule(category, moduleData);
                 },
+                getIntegrationImportLastDirectory: () =>
+                    deps.stateStore.getIntegrationImportLastDirectory(),
+                setIntegrationImportLastDirectory: (path) => {
+                    deps.stateStore.setIntegrationImportLastDirectory(path);
+                },
             },
             launchApp: async (category, app) => {
                 await deps.bridge.launchApp(category, app);
@@ -126,6 +132,10 @@ export function createAppUI(deps: CreateAppUIDeps): AppUI {
             stopAiProvider: () => {
                 deps.aiBridge.stopProvider();
             },
+            reloadCatalog: async () => {
+                await deps.catalog.loadCatalog();
+            },
+            openExternalUrl: createExternalUrlOpener(deps.tauriProvider),
         },
     );
 }
@@ -164,6 +174,7 @@ export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
         bridge: deps.bridge,
         moduleSettingsUI: moduleSettingsGateway,
         aiBridge: deps.aiBridge,
+        tauriProvider: deps.tauriProvider,
     });
     const windowUI = new WindowUI(
         deps.windowService,

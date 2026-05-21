@@ -14,19 +14,20 @@
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
-type StateManagerLogger = Pick<LoggerService, 'info' | 'warn'>;
+type StateManagerLogger = Pick<LoggerService, 'debug' | 'info' | 'warn'>;
 
 export interface StatePersistenceTarget {
     /** Human-readable name for logging */
     name: string;
     /** Async save — used for debounced/visibility saves */
     saveAsync: () => Promise<void>;
-    /** Sync save — used for beforeunload (fire-and-forget ok) */
-    saveImmediate: () => void;
+    /** Immediate save — used for explicit close/destroy and beforeunload best effort */
+    saveImmediate: () => Promise<void> | void;
 }
 
 export class StateManager {
     private readonly _targets = new Map<string, StatePersistenceTarget>();
+    private _isInitialized = false;
     private _isDestroyed = false;
 
     constructor(private readonly _tracer: StateManagerLogger) {}
@@ -38,7 +39,7 @@ export class StateManager {
     };
 
     private readonly _boundBeforeUnload = () => {
-        this.saveAllImmediate();
+        void this.saveAllImmediate();
     };
 
     /**
@@ -47,7 +48,7 @@ export class StateManager {
     register(target: StatePersistenceTarget): void {
         if (this._isDestroyed) return;
         this._targets.set(target.name, target);
-        this._tracer.info(`[StateManager] Registered: ${target.name}`);
+        this._tracer.debug(`[StateManager] Registered: ${target.name}`);
     }
 
     /**
@@ -95,10 +96,10 @@ export class StateManager {
     }
 
     /**
-     * Save ALL registered targets immediately (fire-and-forget).
-     * Called on beforeunload — no await, best effort.
+     * Save ALL registered targets immediately.
+     * Called on beforeunload as best effort and awaited by explicit shutdown paths.
      */
-    saveAllImmediate(): void {
+    async saveAllImmediate(): Promise<void> {
         if (this._isDestroyed) return;
 
         const targets = [...this._targets.values()];
@@ -106,16 +107,19 @@ export class StateManager {
 
         this._tracer.info(`[StateManager] Saving ${String(targets.length)} targets (immediate)...`);
 
-        // Fire all saves — no await, best effort before page unloads
-        for (const target of targets) {
-            try {
-                target.saveImmediate();
-            } catch (e) {
+        const results = await Promise.allSettled(
+            targets.map(async (target) => {
+                await target.saveImmediate();
+            }),
+        );
+
+        results.forEach((result, index) => {
+            if (result.status === 'rejected') {
                 this._tracer.warn(
-                    `[StateManager] Immediate save failed for ${target.name}: ${String(e)}`,
+                    `[StateManager] Immediate save failed for ${targets[index]?.name}: ${String(result.reason)}`,
                 );
             }
-        }
+        });
     }
 
     /**
@@ -123,25 +127,31 @@ export class StateManager {
      * Call once during app bootstrap.
      */
     init(): void {
+        if (this._isDestroyed || this._isInitialized) {
+            return;
+        }
+
+        this._isInitialized = true;
         document.addEventListener('visibilitychange', this._boundVisibilityChange);
         globalThis.addEventListener('beforeunload', this._boundBeforeUnload);
-        this._tracer.info('[StateManager] Global listeners registered');
+        this._tracer.debug('[StateManager] Global listeners registered');
     }
 
     /**
      * Clean up all listeners and targets.
      */
-    destroy(): void {
+    async destroy(): Promise<void> {
         if (this._isDestroyed) return;
-        this._isDestroyed = true;
 
         // Final save before destroy
-        this.saveAllImmediate();
+        await this.saveAllImmediate();
+        this._isDestroyed = true;
 
         document.removeEventListener('visibilitychange', this._boundVisibilityChange);
         globalThis.removeEventListener('beforeunload', this._boundBeforeUnload);
 
         this._targets.clear();
+        this._isInitialized = false;
         this._tracer.info('[StateManager] Destroyed');
     }
 }

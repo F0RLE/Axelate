@@ -8,7 +8,8 @@
 use std::sync::Arc;
 
 use super::ai_dispatch::{
-    LocalEngineAccess, PreparedChatDispatch, persist_successful_response, prepare_chat_dispatch,
+    LocalEngineAccess, PreparedChatDispatch, normalize_session_id, persist_successful_response,
+    prepare_chat_dispatch,
 };
 use super::session::ChatSessionManager;
 use super::streaming::{AiProvider, OpenAiCompatibleProvider, StreamEvent, StreamSink};
@@ -16,13 +17,15 @@ pub use super::types::{
     ChatMessage, ChatReply, ChatRequest, ChatResponse, ChatSession, TokenUsage,
 };
 
-const AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+const CLOUD_AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(90);
+const LOCAL_AI_REQUEST_TIMEOUT: std::time::Duration = std::time::Duration::from_mins(30);
 
 struct PreparedRequestExecution {
     provider: OpenAiCompatibleProvider,
     effective_request: ChatRequest,
     request_id: String,
     message_id: String,
+    timeout: std::time::Duration,
 }
 
 struct ChatStreamExecutionOptions {
@@ -204,7 +207,7 @@ async fn process_chat_request_with_local_engine_access(
     execute_prepared_request(
         execution,
         sessions,
-        session_id.as_deref(),
+        normalize_session_id(session_id.as_deref()),
         move |execution| async move {
             execution
                 .provider
@@ -255,7 +258,7 @@ async fn process_chat_request_non_stream_with_local_engine_access(
     execute_prepared_request(
         execution,
         sessions,
-        session_id.as_deref(),
+        normalize_session_id(session_id.as_deref()),
         |execution| async move {
             execution
                 .provider
@@ -307,6 +310,7 @@ async fn prepare_request_execution(
             }
         })
         .unwrap_or_else(|| uuid::Uuid::new_v4().to_string());
+    let timeout = timeout_for_base_url(&base_url);
     tracing::info!(
         "[AI] Starting request {} (msg {}) for model {}",
         request_id,
@@ -319,7 +323,16 @@ async fn prepare_request_execution(
         effective_request,
         request_id,
         message_id,
+        timeout,
     })
+}
+
+fn timeout_for_base_url(base_url: &str) -> std::time::Duration {
+    if crate::domain::ai::streaming::is_local_base_url(base_url) {
+        LOCAL_AI_REQUEST_TIMEOUT
+    } else {
+        CLOUD_AI_REQUEST_TIMEOUT
+    }
 }
 
 async fn execute_prepared_request<Run, Fut, Timeout>(
@@ -336,26 +349,24 @@ where
 {
     let message_id = execution.message_id.clone();
     let request_id = execution.request_id.clone();
-    let response = tokio::time::timeout(AI_REQUEST_TIMEOUT, run(execution)).await;
+    let timeout = execution.timeout;
+    let response = tokio::time::timeout(timeout, run(execution)).await;
 
     let response = if let Ok(result) = response {
         result
     } else {
         on_timeout(&message_id);
-        Err(timeout_error(request_id))
+        Err(timeout_error(request_id, timeout))
     };
 
-    persist_successful_response(sessions, session_id, message_id, &response).await;
+    persist_successful_response(sessions, session_id, message_id, &response).await?;
     response
 }
 
-fn timeout_error(request_id: String) -> crate::errors::AppError {
+fn timeout_error(request_id: String, timeout: std::time::Duration) -> crate::errors::AppError {
     crate::errors::AppError::Internal {
         request_id: Some(request_id),
-        message: format!(
-            "AI Request timed out after {} seconds.",
-            AI_REQUEST_TIMEOUT.as_secs()
-        ),
+        message: format!("AI Request timed out after {} seconds.", timeout.as_secs()),
     }
 }
 
@@ -449,7 +460,6 @@ pub async fn validate_api_key(
         return Ok(!data.is_empty());
     }
 
-    // Legacy Gemini fallback
     if body.get("models").is_some() {
         return Ok(true);
     }
@@ -514,8 +524,10 @@ pub async fn process_image_request_without_engine_autostart(
 mod tests {
     #![allow(clippy::expect_used, clippy::unwrap_used, clippy::indexing_slicing)]
     use super::*;
-    use crate::domain::ai::image_service::{
+    use crate::domain::ai::image_comfyui::{
         normalize_comfyui_sampler, normalize_comfyui_scheduler, parse_comfyui_checkpoint_list,
+    };
+    use crate::domain::ai::image_settings::{
         resolve_f32_setting, resolve_string_setting, resolve_u32_setting,
     };
     use crate::models::AppSettings;
@@ -563,6 +575,19 @@ mod tests {
             conflicting_local_capability(crate::domain::engine::types::Capability::Vision),
             None
         );
+    }
+
+    #[test]
+    fn local_chat_requests_get_longer_timeout_than_cloud_requests() {
+        assert_eq!(
+            timeout_for_base_url("http://127.0.0.1:8080/v1"),
+            LOCAL_AI_REQUEST_TIMEOUT
+        );
+        assert_eq!(
+            timeout_for_base_url("https://openrouter.ai/api/v1"),
+            CLOUD_AI_REQUEST_TIMEOUT
+        );
+        assert!(LOCAL_AI_REQUEST_TIMEOUT > CLOUD_AI_REQUEST_TIMEOUT);
     }
 
     #[test]
@@ -640,7 +665,7 @@ mod tests {
         extra_settings.insert("custom_sd_steps".to_string(), "30".to_string());
         extra_settings.insert("sdcpp_steps".to_string(), "20".to_string());
         extra_settings.insert(
-            "custom_sd_positiveprompt".to_string(),
+            "custom_sd_positive_prompt".to_string(),
             "portrait".to_string(),
         );
 
@@ -650,17 +675,17 @@ mod tests {
         };
 
         assert_eq!(
-            resolve_u32_setting(&settings, "custom_sd", "sdcpp", "steps"),
+            resolve_u32_setting(&settings, "custom_sd", "steps"),
             Some(30)
         );
         assert_eq!(
-            resolve_string_setting(&settings, "custom_sd", "sdcpp", "positive_prompt"),
+            resolve_string_setting(&settings, "custom_sd", "positive_prompt"),
             Some("portrait".to_string())
         );
     }
 
     #[test]
-    fn test_resolve_image_setting_falls_back_to_provider_id() {
+    fn test_resolve_image_setting_does_not_read_provider_key_when_settings_key_differs() {
         let mut extra_settings = HashMap::new();
         extra_settings.insert("sdcpp_cfg_scale".to_string(), "8.5".to_string());
         extra_settings.insert("sdcpp_negative_prompt".to_string(), "blurry".to_string());
@@ -671,12 +696,12 @@ mod tests {
         };
 
         assert_eq!(
-            resolve_f32_setting(&settings, "custom_sd", "sdcpp", "cfg_scale"),
-            Some(8.5)
+            resolve_f32_setting(&settings, "custom_sd", "cfg_scale"),
+            None
         );
         assert_eq!(
-            resolve_string_setting(&settings, "custom_sd", "sdcpp", "negative_prompt"),
-            Some("blurry".to_string())
+            resolve_string_setting(&settings, "custom_sd", "negative_prompt"),
+            None
         );
     }
 

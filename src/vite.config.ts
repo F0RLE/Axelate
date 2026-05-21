@@ -95,9 +95,14 @@ export default defineConfig({
 
         minify: process.env['TAURI_DEBUG'] ? false : 'terser',
         terserOptions: {
+            module: true,
             compress: {
                 drop_console: true,
                 drop_debugger: true,
+                keep_fargs: false,
+                passes: 3,
+                pure_getters: true,
+                unsafe_arrows: true,
             },
             mangle: {
                 toplevel: true,
@@ -120,13 +125,23 @@ export default defineConfig({
             },
             output: {
                 manualChunks(id) {
+                    const normalizedId = id.replaceAll('\\', '/');
                     if (
-                        id.includes('marked') ||
-                        id.includes('dompurify') ||
-                        id.includes('marked-alert') ||
-                        id.includes('marked-footnote')
+                        normalizedId.includes('marked') ||
+                        normalizedId.includes('dompurify') ||
+                        normalizedId.includes('marked-alert') ||
+                        normalizedId.includes('marked-footnote')
                     ) {
                         return 'vendor-markdown';
+                    }
+                    if (normalizedId.includes('/src/features/chat/')) {
+                        return 'feature-chat';
+                    }
+                    if (normalizedId.includes('/src/features/ai/')) {
+                        return 'feature-ai';
+                    }
+                    if (normalizedId.includes('/src/shared/shell/')) {
+                        return 'app-shell';
                     }
                     return undefined;
                 },
@@ -151,6 +166,10 @@ export default defineConfig({
             exclude: [
                 // Pure TypeScript interface — no executable lines, always 0%
                 '**/shared/types/IBridge.ts',
+                // Generated Specta bindings. Coverage belongs to the generator contract, not app tests.
+                '**/shared/types/bindings.ts',
+                '**/*.d.ts',
+                '**/coverage/**',
             ],
             thresholds: {
                 'src/features/**/services/*.ts': {

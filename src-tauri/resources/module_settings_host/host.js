@@ -1,43 +1,42 @@
-const BRIDGE_CHANNEL = "axelate:module-settings";
-const HOST_CHANNEL = "axelate:module-settings-host";
+const BRIDGE_CHANNEL = 'axelate:module-settings';
+const HOST_CHANNEL = 'axelate:module-settings-host';
 const SETTINGS_LOAD_TIMEOUT_MS = 2500;
 const MODULE_BOOT_TIMEOUT_MS = 5000;
 
 const STRINGS = {
     en: {
-        loading: "Loading module settings…",
-        loadingModule: "Loading module settings…",
-        failed: "Failed to load the module or integration settings UI.",
-        invalidSavePayload: "Settings payload must be a plain object.",
-        moduleBootTimedOut:
-            "The module or integration settings UI did not finish loading.",
+        loading: 'Loading module settings…',
+        loadingModule: 'Loading module settings…',
+        failed: 'Failed to load the module or integration settings UI.',
+        invalidSavePayload: 'Settings payload must be a plain object.',
+        moduleBootTimedOut: 'The module or integration settings UI did not finish loading.',
     },
     ru: {
-        loading: "Загрузка интерфейса настроек модуля…",
-        loadingModule: "Загрузка интерфейса настроек модуля…",
-        failed: "Не удалось загрузить интерфейс настроек этого модуля или интеграции.",
-        invalidSavePayload: "Настройки должны передаваться как обычный объект.",
-        moduleBootTimedOut:
-            "Интерфейс настроек этого модуля или интеграции не завершил загрузку.",
+        loading: 'Загрузка интерфейса настроек модуля…',
+        loadingModule: 'Загрузка интерфейса настроек модуля…',
+        failed: 'Не удалось загрузить интерфейс настроек этого модуля или интеграции.',
+        invalidSavePayload: 'Настройки должны передаваться как обычный объект.',
+        moduleBootTimedOut: 'Интерфейс настроек этого модуля или интеграции не завершил загрузку.',
     },
     zh: {
-        loading: "正在加载模块设置界面…",
-        loadingModule: "正在加载模块设置界面…",
-        failed: "无法加载该模块或集成的设置界面。",
-        invalidSavePayload: "设置载荷必须是普通对象。",
-        moduleBootTimedOut: "该模块或集成的设置界面未能完成加载。",
+        loading: '正在加载模块设置界面…',
+        loadingModule: '正在加载模块设置界面…',
+        failed: '无法加载该模块或集成的设置界面。',
+        invalidSavePayload: '设置载荷必须是普通对象。',
+        moduleBootTimedOut: '该模块或集成的设置界面未能完成加载。',
     },
 };
 
 const params = new URLSearchParams(globalThis.location.search);
-const language = normalizeLanguage(params.get("language"));
+const language = normalizeLanguage(params.get('language'));
 const strings = STRINGS[language] ?? STRINGS.en;
 const sessionPrefix = resolveSessionPrefix(globalThis.location.pathname);
+const hostOrigin = globalThis.location.origin;
 
 const elements = {
-    frame: document.getElementById("module-frame"),
-    overlay: document.getElementById("overlay"),
-    overlayMessage: document.getElementById("overlay-message"),
+    frame: document.getElementById('module-frame'),
+    overlay: document.getElementById('overlay'),
+    overlayMessage: document.getElementById('overlay-message'),
 };
 
 const state = {
@@ -52,7 +51,7 @@ const state = {
 };
 
 document.documentElement.dataset.theme = state.context.launcher.theme;
-setOverlay("loading", strings.loadingModule);
+setOverlay('loading', strings.loadingModule);
 
 void bootstrap().catch((error) => {
     showFatalError(error);
@@ -60,8 +59,8 @@ void bootstrap().catch((error) => {
 
 async function bootstrap() {
     ensureElements();
-    postHostStatus("host-ready");
-    globalThis.addEventListener("message", handleModuleMessage);
+    postHostStatus('host-ready');
+    globalThis.addEventListener('message', handleModuleMessage);
     const settingsLoad = loadSettingsSafe();
     mountModuleFrame();
     await settingsLoad;
@@ -73,7 +72,7 @@ function ensureElements() {
         !(elements.overlay instanceof HTMLElement) ||
         !(elements.overlayMessage instanceof HTMLElement)
     ) {
-        throw new Error("Host UI elements are missing");
+        throw new Error('Host UI elements are missing');
     }
 }
 
@@ -81,52 +80,51 @@ function buildContext(searchParams) {
     return {
         bridgeVersion: 1,
         module: {
-            id: searchParams.get("moduleId") ?? "",
-            name:
-                searchParams.get("name") ?? searchParams.get("moduleId") ?? "",
-            category: searchParams.get("category") ?? "",
-            type: searchParams.get("type") ?? "",
-            settingsUi: searchParams.get("settingsUi"),
+            id: searchParams.get('moduleId') ?? '',
+            name: searchParams.get('name') ?? searchParams.get('moduleId') ?? '',
+            category: searchParams.get('category') ?? '',
+            type: searchParams.get('type') ?? '',
+            settingsUi: searchParams.get('settingsUi'),
         },
         launcher: {
             language,
-            theme: normalizeTheme(searchParams.get("theme")),
+            theme: normalizeTheme(searchParams.get('theme')),
         },
     };
 }
 
 function normalizeLanguage(rawLanguage) {
-    const normalized = String(rawLanguage ?? "en")
+    const normalized = String(rawLanguage ?? 'en')
         .trim()
         .toLowerCase();
-    if (normalized.startsWith("ru")) {
-        return "ru";
+    if (normalized.startsWith('ru')) {
+        return 'ru';
     }
-    if (normalized.startsWith("zh")) {
-        return "zh";
+    if (normalized.startsWith('zh')) {
+        return 'zh';
     }
-    return "en";
+    return 'en';
 }
 
 function normalizeTheme(rawTheme) {
-    return String(rawTheme ?? "dark")
+    return String(rawTheme ?? 'dark')
         .trim()
-        .toLowerCase() === "light"
-        ? "light"
-        : "dark";
+        .toLowerCase() === 'light'
+        ? 'light'
+        : 'dark';
 }
 
 function resolveSessionPrefix(pathname) {
     const match = pathname.match(/^\/session\/([^/]+)/);
-    return match === null ? "" : `/session/${match[1]}`;
+    return match === null ? '' : `/session/${match[1]}`;
 }
 
 async function loadSettingsSafe() {
     try {
         state.settings = await withTimeout(
-            requestJson("/api/settings"),
+            requestJson('/api/settings'),
             SETTINGS_LOAD_TIMEOUT_MS,
-            "Settings load timed out.",
+            'Settings load timed out.',
         );
     } catch {
         state.settings = {};
@@ -142,20 +140,24 @@ function mountModuleFrame() {
         return;
     }
 
-    elements.frame.addEventListener("load", () => {
+    elements.frame.addEventListener('load', () => {
         state.frameLoaded = true;
         applyEmbeddedModuleChrome();
         revealModuleWhenReady();
     });
-    elements.frame.addEventListener("error", () => {
+    elements.frame.addEventListener('error', () => {
         showFatalError(new Error(strings.failed));
     });
     armModuleBootTimeout();
-    elements.frame.src = buildUrl("/module/");
+    elements.frame.src = buildUrl('/module/');
 }
 
 function handleModuleMessage(event) {
     if (!(elements.frame instanceof HTMLIFrameElement)) {
+        return;
+    }
+
+    if (event.origin !== hostOrigin || event.source !== elements.frame.contentWindow) {
         return;
     }
 
@@ -164,14 +166,14 @@ function handleModuleMessage(event) {
         return;
     }
 
-    if (payload.type === "module-ready") {
+    if (payload.type === 'module-ready') {
         state.moduleReady = true;
         postHostReadyWhenPossible();
         revealModuleWhenReady();
         return;
     }
 
-    if (payload.type === "module-rendered") {
+    if (payload.type === 'module-rendered') {
         state.moduleReady = true;
         state.moduleRendered = true;
         postHostReadyWhenPossible();
@@ -179,10 +181,7 @@ function handleModuleMessage(event) {
         return;
     }
 
-    if (
-        typeof payload.requestId !== "string" ||
-        typeof payload.method !== "string"
-    ) {
+    if (typeof payload.requestId !== 'string' || typeof payload.method !== 'string') {
         return;
     }
 
@@ -190,29 +189,22 @@ function handleModuleMessage(event) {
 }
 
 function isBridgePayload(payload) {
-    return (
-        typeof payload === "object" &&
-        payload !== null &&
-        payload.channel === BRIDGE_CHANNEL
-    );
+    return typeof payload === 'object' && payload !== null && payload.channel === BRIDGE_CHANNEL;
 }
 
 function postHostReady() {
-    if (
-        !(elements.frame instanceof HTMLIFrameElement) ||
-        elements.frame.contentWindow === null
-    ) {
+    if (!(elements.frame instanceof HTMLIFrameElement) || elements.frame.contentWindow === null) {
         return;
     }
 
     elements.frame.contentWindow.postMessage(
         {
             channel: BRIDGE_CHANNEL,
-            type: "host-ready",
+            type: 'host-ready',
             context: state.context,
             settings: state.settings,
         },
-        "*",
+        hostOrigin,
     );
 }
 
@@ -275,30 +267,28 @@ async function processModuleRequest(request) {
 
 async function resolveRequest(request) {
     switch (request.method) {
-        case "getContext":
+        case 'getContext':
             return state.context;
-        case "getSettings":
+        case 'getSettings':
             return state.settings;
-        case "saveSettings":
+        case 'saveSettings':
             return await saveSettings(request.payload);
         // Keep optional bridge hooks compatible without letting the host own module UX.
-        case "markDirty":
+        case 'markDirty':
             return { dirty: true };
-        case "notify":
+        case 'notify':
             return { shown: true };
         default:
-            throw new Error(
-                `Unsupported custom settings method: ${request.method}`,
-            );
+            throw new Error(`Unsupported custom settings method: ${request.method}`);
     }
 }
 
 async function saveSettings(payload) {
     const normalizedSettings = normalizeSettingsPayload(payload);
-    const savedSettings = await requestJson("/api/settings", {
-        method: "POST",
+    const savedSettings = await requestJson('/api/settings', {
+        method: 'POST',
         headers: {
-            "content-type": "application/json",
+            'content-type': 'application/json',
         },
         body: JSON.stringify(normalizedSettings),
     });
@@ -316,18 +306,15 @@ function normalizeSettingsPayload(payload) {
 }
 
 function isPlainObject(value) {
-    return typeof value === "object" && value !== null && !Array.isArray(value);
+    return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
 function postBridgeResponse(message) {
-    if (
-        !(elements.frame instanceof HTMLIFrameElement) ||
-        elements.frame.contentWindow === null
-    ) {
+    if (!(elements.frame instanceof HTMLIFrameElement) || elements.frame.contentWindow === null) {
         return;
     }
 
-    elements.frame.contentWindow.postMessage(message, "*");
+    elements.frame.contentWindow.postMessage(message, hostOrigin);
 }
 
 function setOverlay(stateName, message) {
@@ -349,7 +336,7 @@ function hideOverlay() {
     }
 
     elements.overlay.hidden = true;
-    postHostStatus("module-rendered");
+    postHostStatus('module-rendered');
 }
 
 function applyEmbeddedModuleChrome() {
@@ -368,12 +355,12 @@ function applyEmbeddedModuleChrome() {
         return;
     }
 
-    const styleId = "axelate-embedded-module-settings-style";
+    const styleId = 'axelate-embedded-module-settings-style';
     if (frameDocument.getElementById(styleId) !== null) {
         return;
     }
 
-    const style = frameDocument.createElement("style");
+    const style = frameDocument.createElement('style');
     style.id = styleId;
     style.textContent = `
         :root {
@@ -434,10 +421,10 @@ function applyEmbeddedModuleChrome() {
 
     styleHost.appendChild(style);
     frameDocument.documentElement?.dataset &&
-        (frameDocument.documentElement.dataset.axelateEmbedded = "true");
+        (frameDocument.documentElement.dataset.axelateEmbedded = 'true');
 }
 
-function postHostStatus(type, message = "") {
+function postHostStatus(type, message = '') {
     if (globalThis.parent === globalThis) {
         return;
     }
@@ -448,22 +435,22 @@ function postHostStatus(type, message = "") {
             type,
             message,
         },
-        "*",
+        hostOrigin,
     );
 }
 
 async function requestJson(path, init = {}) {
     const response = await fetch(buildUrl(path), {
-        cache: "no-store",
+        cache: 'no-store',
         ...init,
     });
 
     const bodyText = await response.text();
-    const parsedBody = bodyText === "" ? {} : safeParseJson(bodyText);
+    const parsedBody = bodyText === '' ? {} : safeParseJson(bodyText);
 
     if (!response.ok) {
         const errorMessage =
-            isPlainObject(parsedBody) && typeof parsedBody.message === "string"
+            isPlainObject(parsedBody) && typeof parsedBody.message === 'string'
                 ? parsedBody.message
                 : strings.failed;
         throw new Error(errorMessage);
@@ -500,19 +487,13 @@ function safeParseJson(input) {
 }
 
 function buildUrl(path) {
-    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
-    const scopedPath =
-        sessionPrefix === ""
-            ? normalizedPath
-            : `${sessionPrefix}${normalizedPath}`;
+    const normalizedPath = path.startsWith('/') ? path : `/${path}`;
+    const scopedPath = sessionPrefix === '' ? normalizedPath : `${sessionPrefix}${normalizedPath}`;
 
-    const url = new URL(
-        scopedPath,
-        `${globalThis.location.protocol}//${globalThis.location.host}`,
-    );
-    if (normalizedPath === "/module/") {
-        url.searchParams.set("embedded", "1");
-        url.searchParams.set("host", "axelate");
+    const url = new URL(scopedPath, `${globalThis.location.protocol}//${globalThis.location.host}`);
+    if (normalizedPath === '/module/') {
+        url.searchParams.set('embedded', '1');
+        url.searchParams.set('host', 'axelate');
     }
 
     return url.toString();
@@ -521,9 +502,7 @@ function buildUrl(path) {
 function showFatalError(error) {
     clearModuleBootTimeout();
     const message =
-        error instanceof Error && error.message.trim() !== ""
-            ? error.message
-            : strings.failed;
-    setOverlay("error", message);
-    postHostStatus("host-error", message);
+        error instanceof Error && error.message.trim() !== '' ? error.message : strings.failed;
+    setOverlay('error', message);
+    postHostStatus('host-error', message);
 }

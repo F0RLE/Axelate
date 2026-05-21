@@ -77,7 +77,7 @@ export class WindowUI {
                 await this._service.persistZoom();
             },
             setMonitoringPaused: async (paused) => {
-                await this._service.setMonitoringPaused(paused);
+                await this._service.setMonitoringPauseReason('window-inactive', paused);
             },
             hasOpenDialog: () => this._hasOpenDialog(),
             isInGracePeriod: () => this._isInGracePeriod,

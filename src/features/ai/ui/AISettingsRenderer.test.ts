@@ -21,6 +21,7 @@ describe('AISettingsRenderer', () => {
         getSecureKeyMeta: vi.fn(),
         getSecureKey: vi.fn(),
         saveSecureKey: vi.fn(),
+        removeSecureKey: vi.fn(),
         hasSecureKey: vi.fn(),
         validateApiKey: vi.fn(),
         validateStoredApiKey: vi.fn(),
@@ -65,7 +66,7 @@ describe('AISettingsRenderer', () => {
             name: 'Reasoner',
             desc: 'Reasoning model',
             descKey: 'model.reasoner',
-            pricing: { input_per_1m: 1, output_per_1m: 2, currency: 'USD' },
+            pricing: { input: 1, output: 2, currency: 'USD' },
             contextWindow: 128000,
             capabilities: { reasoning: true },
             stats: { speed: 8, logic: 10, creative: 6 },
@@ -74,7 +75,7 @@ describe('AISettingsRenderer', () => {
             id: 'fast',
             name: 'Fast',
             desc: 'Fast model',
-            pricing: [{ tier: 'free', note: '0 / 0' }],
+            pricing: { input: 0, output: 0, currency: 'USD' },
             contextWindow: 8000,
             capabilities: { reasoning: false },
         },
@@ -86,6 +87,7 @@ describe('AISettingsRenderer', () => {
         settingsService.getSecureKeyMeta.mockResolvedValue({ exists: true, length: 16 });
         settingsService.getSecureKey.mockResolvedValue('stored-secret');
         settingsService.saveSecureKey.mockResolvedValue(undefined);
+        settingsService.removeSecureKey.mockResolvedValue(undefined);
         settingsService.hasSecureKey.mockResolvedValue(true);
         settingsService.validateApiKey.mockResolvedValue(true);
         settingsService.validateStoredApiKey.mockResolvedValue(true);
@@ -273,6 +275,22 @@ describe('AISettingsRenderer', () => {
         vi.advanceTimersByTime(3000);
         expect(button.disabled).toBe(false);
 
+        button.classList.add('success');
+        button.innerHTML = '<check>';
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_removed:API key removed',
+            'success',
+        );
+        expect(input.value).toBe('');
+        expect(input.dataset['storedMasked']).toBeUndefined();
+        expect(button.classList.contains('success')).toBe(false);
+        expect(button.textContent).toBe('ui.gpt.key_check_btn:Check');
+
         input.value = 'bad-key';
         input.dispatchEvent(new Event('input', { bubbles: true }));
         settingsService.validateApiKey.mockRejectedValueOnce(new Error('boom'));
@@ -294,6 +312,33 @@ describe('AISettingsRenderer', () => {
         expect(settingsService.validateStoredApiKey).not.toHaveBeenCalled();
         expect(showToast).toHaveBeenCalledWith(
             'ui.settings.key_invalid_check:Key is invalid or missing',
+            'error',
+        );
+    });
+
+    it('does not reset a success check state when secure key removal fails', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+        await aiSettingsRenderer.render(container, {
+            id: 'gpt',
+            name: 'GPT',
+            apiProviderData: { models },
+        } as never);
+
+        const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
+        const button = document.getElementById('gpt-key-check-btn') as HTMLButtonElement;
+        button.classList.add('success');
+        button.innerHTML = '<check>';
+        settingsService.removeSecureKey.mockRejectedValueOnce(new Error('secure storage failed'));
+
+        input.value = '';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+        await Promise.resolve();
+        await Promise.resolve();
+
+        expect(button.classList.contains('success')).toBe(true);
+        expect(button.innerHTML).toContain('check');
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.key_remove_error:Key remove error',
             'error',
         );
     });

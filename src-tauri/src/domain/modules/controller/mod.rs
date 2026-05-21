@@ -366,16 +366,22 @@ pub async fn control(
     if action == ModuleAction::Uninstall {
         let executor = LifecycleExecutor::new(&controller, module_id.to_string(), &module_path);
         if let Ok(manifest) = module_lifecycle::ManifestLoader::load(&module_path) {
-            let _ = executor.stop(&manifest).await;
+            executor.stop(&manifest).await?;
         } else {
             let pid_file = module_path.join("module.pid");
             if let Ok(pid_str) = std::fs::read_to_string(&pid_file)
                 && let Ok(pid) = pid_str.trim().parse::<usize>()
             {
-                let _ = process::kill_orphan(pid);
+                process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                    request_id: None,
+                    message: format!(
+                        "Failed to stop module {module_id} from PID file before uninstall: {error}"
+                    ),
+                })?;
             }
         }
         downloader::delete_module(module_id).await?;
+        crate::domain::integration_api::revoke_module_api_token(module_id);
         return Ok(ControlResponse {
             success: true,
             message: format!("Module {module_id} uninstalled successfully"),
@@ -392,10 +398,10 @@ pub async fn control(
 
     match action {
         ModuleAction::Start => executor.start(&manifest).await,
-        ModuleAction::Stop => Ok(executor.stop(&manifest).await),
+        ModuleAction::Stop => executor.stop(&manifest).await,
         ModuleAction::Restart => {
             tracing::info!("Restarting module: {module_id}");
-            let _ = executor.stop(&manifest).await;
+            executor.stop(&manifest).await?;
 
             // Wait for it to actually die (up to 5s) with survival check
             let mut terminated = false;
@@ -424,5 +430,220 @@ pub async fn control(
             message: "Not implemented".to_string(),
             status: None,
         }),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::{
+        ModuleAction, apply_localized_module_preview, load_preview_translations,
+        preview_image_mime, read_module_preview_image, resolve_module_preview,
+    };
+    use crate::models::modules::ModulePreview;
+    use std::str::FromStr;
+
+    #[test]
+    fn module_action_parses_supported_actions_case_insensitively() {
+        assert_eq!(
+            ModuleAction::from_str("start").unwrap(),
+            ModuleAction::Start
+        );
+        assert_eq!(ModuleAction::from_str("STOP").unwrap(), ModuleAction::Stop);
+        assert_eq!(
+            ModuleAction::from_str("Restart").unwrap(),
+            ModuleAction::Restart
+        );
+        assert_eq!(
+            ModuleAction::from_str("install").unwrap(),
+            ModuleAction::Install
+        );
+        assert_eq!(
+            ModuleAction::from_str("uninstall").unwrap(),
+            ModuleAction::Uninstall
+        );
+        assert_eq!(
+            ModuleAction::from_str("update").unwrap(),
+            ModuleAction::Update
+        );
+        assert!(ModuleAction::from_str("delete").is_err());
+    }
+
+    #[test]
+    fn preview_image_mime_accepts_supported_extensions() {
+        assert_eq!(
+            preview_image_mime(std::path::Path::new("card.PNG")).unwrap(),
+            "image/png"
+        );
+        assert_eq!(
+            preview_image_mime(std::path::Path::new("card.jpg")).unwrap(),
+            "image/jpeg"
+        );
+        assert_eq!(
+            preview_image_mime(std::path::Path::new("card.jpeg")).unwrap(),
+            "image/jpeg"
+        );
+        assert_eq!(
+            preview_image_mime(std::path::Path::new("card.webp")).unwrap(),
+            "image/webp"
+        );
+        assert_eq!(
+            preview_image_mime(std::path::Path::new("card.gif")).unwrap(),
+            "image/gif"
+        );
+        assert_eq!(
+            preview_image_mime(std::path::Path::new("card.svg")).unwrap(),
+            "image/svg+xml"
+        );
+        assert!(preview_image_mime(std::path::Path::new("card.txt")).is_err());
+    }
+
+    #[tokio::test]
+    async fn read_module_preview_image_returns_data_url_and_rejects_unsafe_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let image_path = temp.path().join("preview.png");
+        tokio::fs::write(&image_path, b"png-bytes").await.unwrap();
+
+        let data_url = read_module_preview_image(temp.path(), "preview.png")
+            .await
+            .unwrap();
+
+        assert_eq!(data_url, "data:image/png;base64,cG5nLWJ5dGVz");
+        assert!(
+            read_module_preview_image(temp.path(), "../preview.png")
+                .await
+                .is_err()
+        );
+        assert!(
+            read_module_preview_image(temp.path(), "missing.png")
+                .await
+                .is_err()
+        );
+        assert!(
+            read_module_preview_image(temp.path(), "preview.txt")
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn read_module_preview_image_rejects_large_files_and_directories() {
+        let temp = tempfile::tempdir().unwrap();
+        let large_path = temp.path().join("large.png");
+        let dir_path = temp.path().join("dir.png");
+        tokio::fs::write(&large_path, vec![0_u8; 2 * 1024 * 1024 + 1])
+            .await
+            .unwrap();
+        tokio::fs::create_dir(&dir_path).await.unwrap();
+
+        assert!(
+            read_module_preview_image(temp.path(), "large.png")
+                .await
+                .is_err()
+        );
+        assert!(
+            read_module_preview_image(temp.path(), "dir.png")
+                .await
+                .is_err()
+        );
+    }
+
+    #[test]
+    fn load_preview_translations_accepts_supported_language_prefixes() {
+        let temp = tempfile::tempdir().unwrap();
+        let i18n = temp.path().join("i18n");
+        std::fs::create_dir(&i18n).unwrap();
+        std::fs::write(
+            i18n.join("ru.json"),
+            r#"{"preview.title":"Ru title","preview.description":"Ru description"}"#,
+        )
+        .unwrap();
+
+        let translations =
+            load_preview_translations(temp.path(), std::path::Path::new("i18n"), "ru-BY").unwrap();
+
+        assert_eq!(
+            translations
+                .get("preview.title")
+                .and_then(serde_json::Value::as_str),
+            Some("Ru title")
+        );
+        assert!(
+            load_preview_translations(temp.path(), std::path::Path::new("i18n"), "fr").is_none()
+        );
+    }
+
+    #[test]
+    fn apply_localized_module_preview_ignores_unsafe_i18n_paths() {
+        let temp = tempfile::tempdir().unwrap();
+        let mut traversal = ModulePreview {
+            title: Some("Original".to_string()),
+            i18n: Some("../i18n".to_string()),
+            ..ModulePreview::default()
+        };
+        let mut absolute = ModulePreview {
+            title: Some("Original".to_string()),
+            i18n: Some(temp.path().to_string_lossy().to_string()),
+            ..ModulePreview::default()
+        };
+
+        apply_localized_module_preview(temp.path(), &mut traversal);
+        apply_localized_module_preview(temp.path(), &mut absolute);
+
+        assert_eq!(traversal.title.as_deref(), Some("Original"));
+        assert_eq!(absolute.title.as_deref(), Some("Original"));
+    }
+
+    #[tokio::test]
+    async fn resolve_module_preview_keeps_external_images_and_embeds_local_images() {
+        let temp = tempfile::tempdir().unwrap();
+        let i18n = temp.path().join("i18n");
+        std::fs::create_dir(&i18n).unwrap();
+        std::fs::write(
+            i18n.join("en.json"),
+            r#"{"preview.title":"Localized","preview.description":"Localized description"}"#,
+        )
+        .unwrap();
+        tokio::fs::write(temp.path().join("preview.svg"), b"<svg/>")
+            .await
+            .unwrap();
+
+        let embedded = resolve_module_preview(
+            temp.path(),
+            Some(ModulePreview {
+                title: Some("Original".to_string()),
+                description: None,
+                image: Some("preview.svg".to_string()),
+                i18n: Some("i18n".to_string()),
+                ..ModulePreview::default()
+            }),
+        )
+        .await
+        .unwrap();
+        let external = resolve_module_preview(
+            temp.path(),
+            Some(ModulePreview {
+                image: Some("https://example.test/card.png".to_string()),
+                ..ModulePreview::default()
+            }),
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(embedded.title.as_deref(), Some("Localized"));
+        assert_eq!(
+            embedded.description.as_deref(),
+            Some("Localized description")
+        );
+        assert_eq!(
+            embedded.image.as_deref(),
+            Some("data:image/svg+xml;base64,PHN2Zy8+")
+        );
+        assert_eq!(
+            external.image.as_deref(),
+            Some("https://example.test/card.png")
+        );
+        assert!(resolve_module_preview(temp.path(), None).await.is_none());
     }
 }

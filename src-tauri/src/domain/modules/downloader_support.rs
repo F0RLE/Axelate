@@ -6,6 +6,7 @@ const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE: u64 = 3 * 1024 * 1024 * 1024;
 const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE: u64 = 12 * 1024 * 1024 * 1024;
 const MAX_ARCHIVE_FILE_COUNT: usize = 10000;
 const MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE: usize = 100_000;
+const LARGE_ARCHIVE_MODULE_IDS: [&str; 1] = ["comfyui"];
 
 pub(super) fn is_engine_package(package_id: &str) -> bool {
     serde_json::from_str::<Vec<crate::models::config::ModuleItem>>(include_str!(
@@ -101,10 +102,23 @@ fn partial_metadata_path(dest_path: &Path) -> PathBuf {
     PathBuf::from(format!("{}.resume.json", dest_path.to_string_lossy()))
 }
 
-pub(super) async fn load_partial_metadata(dest_path: &Path) -> Option<PartialDownloadMetadata> {
+pub(super) async fn load_partial_metadata(
+    dest_path: &Path,
+) -> Result<Option<PartialDownloadMetadata>, AppError> {
     let metadata_path = partial_metadata_path(dest_path);
-    let raw = tokio::fs::read_to_string(metadata_path).await.ok()?;
-    serde_json::from_str(&raw).ok()
+    match tokio::fs::read_to_string(&metadata_path).await {
+        Ok(raw) => serde_json::from_str(&raw).map(Some).map_err(|error| {
+            AppError::Serialization(format!(
+                "Failed to parse partial download metadata '{}': {error}",
+                metadata_path.display()
+            ))
+        }),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(None),
+        Err(error) => Err(AppError::Io(format!(
+            "Failed to read partial download metadata '{}': {error}",
+            metadata_path.display()
+        ))),
+    }
 }
 
 pub(super) async fn store_partial_metadata(
@@ -121,10 +135,15 @@ pub(super) async fn store_partial_metadata(
         .map_err(|e| AppError::Io(e.to_string()))
 }
 
-pub(super) async fn remove_partial_metadata(dest_path: &Path) {
+pub(super) async fn remove_partial_metadata(dest_path: &Path) -> Result<(), AppError> {
     let metadata_path = partial_metadata_path(dest_path);
-    if tokio::fs::try_exists(&metadata_path).await.unwrap_or(false) {
-        let _ = tokio::fs::remove_file(metadata_path).await;
+    match tokio::fs::remove_file(&metadata_path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::Io(format!(
+            "Failed to remove partial download metadata '{}': {error}",
+            metadata_path.display()
+        ))),
     }
 }
 
@@ -210,7 +229,7 @@ pub(super) fn strip_archive_root(path: &Path, root_to_skip: Option<&str>) -> Pat
 }
 
 pub(super) fn archive_file_count_limit(module_id: &str) -> usize {
-    if module_id == "comfyui" {
+    if uses_large_archive_limits(module_id) {
         return MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE;
     }
 
@@ -218,9 +237,13 @@ pub(super) fn archive_file_count_limit(module_id: &str) -> usize {
 }
 
 pub(super) fn archive_total_uncompressed_size_limit(module_id: &str) -> u64 {
-    if module_id == "comfyui" {
+    if uses_large_archive_limits(module_id) {
         return MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE;
     }
 
     MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE
+}
+
+fn uses_large_archive_limits(module_id: &str) -> bool {
+    LARGE_ARCHIVE_MODULE_IDS.contains(&module_id)
 }

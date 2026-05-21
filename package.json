@@ -23,17 +23,22 @@
         "bindings:check": "npm --prefix src run bindings:check",
         "test": "node .github/scripts/workflow.mjs test",
         "test:coverage": "node .github/scripts/workflow.mjs test:coverage",
+        "test:coverage:all": "node .github/scripts/workflow.mjs test:coverage:all",
+        "rust:test:coverage": "node .github/scripts/workflow.mjs rust:test:coverage",
+        "rust:test:coverage:lcov": "node .github/scripts/workflow.mjs rust:test:coverage:lcov",
         "test:watch": "node .github/scripts/workflow.mjs test:watch",
         "typecheck": "node .github/scripts/workflow.mjs typecheck",
         "doctor": "node .github/scripts/workflow.mjs doctor",
         "setup": "node .github/scripts/workflow.mjs setup",
         "verify": "node .github/scripts/workflow.mjs verify",
         "install-deps": "node .github/scripts/workflow.mjs install-deps",
+        "integration:doctor": "node .github/scripts/workflow.mjs integration:doctor",
+        "integration:new": "node .github/scripts/workflow.mjs integration:new",
         "update": "node .github/scripts/workflow.mjs update",
         "prepare": "node .github/scripts/workflow.mjs prepare",
         "check-size": "node .github/scripts/workflow.mjs check-size"
     },
     "engines": {
-        "node": ">=20.0.0"
+        "node": ">=26.1.0"
     }
 }

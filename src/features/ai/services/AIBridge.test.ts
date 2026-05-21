@@ -17,14 +17,6 @@ const mockListen = vi.fn().mockResolvedValue(() => {
 });
 const mockEmit = vi.fn();
 
-const tauriMock = {
-    core: { invoke: mockInvoke },
-    event: { listen: mockListen, emit: mockEmit },
-};
-
-// Set before import
-(globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
-
 // Mock Core dependency
 const mockCore = {
     tauriProvider: {
@@ -44,7 +36,6 @@ const mockCore = {
         }),
     },
     aiSettings: {
-        setAiSessionId: vi.fn(),
         setSelectedAIModel: vi.fn(),
         getSelectedAIModel: vi.fn(),
         getThinkingLevel: vi.fn().mockReturnValue('high'),
@@ -68,6 +59,19 @@ const mockCore = {
     },
     stateStore: {
         getSelectedModule: vi.fn().mockReturnValue(undefined),
+    },
+    catalog: {
+        getCatalog: vi.fn().mockReturnValue({
+            ai: [
+                { id: 'gpt', capability: 'text' },
+                { id: 'gemini', capability: 'text' },
+                { id: 'llamacpp', capability: 'text' },
+                { id: 'sdcpp', capability: 'image' },
+                { id: 'gpt-image', capability: 'image' },
+                { id: 'seedream-image', capability: 'image' },
+            ],
+            services: [],
+        }),
     },
     state: {
         get: vi.fn((key: string) => {
@@ -129,7 +133,7 @@ describe('AIBridge', () => {
         mockCore.tauriProvider.isTauri.mockReset();
         mockCore.tauriProvider.isTauri.mockReturnValue(true);
         mockCore.aiSettings.getSelectedAIModel.mockReset();
-        mockCore.aiSettings.getSelectedAIModel.mockReturnValue(undefined);
+        mockCore.aiSettings.getSelectedAIModel.mockReturnValue('gpt-4');
         mockCore.aiSettings.getThinkingLevel.mockReset();
         mockCore.aiSettings.getThinkingLevel.mockReturnValue('high');
         mockCore.aiSettings.getInternetAccessEnabled.mockReset();
@@ -143,10 +147,10 @@ describe('AIBridge', () => {
         mockCore.settingsService.getSettings.mockReturnValue({});
         mockCore.stateStore.getSelectedModule.mockClear();
         mockCore.stateStore.getSelectedModule.mockReturnValue(undefined);
-        (globalThis as unknown as Record<string, unknown>)['__TAURI__'] = tauriMock;
+        mockCore.catalog.getCatalog.mockClear();
         localStorage.clear();
         aiBridge = new AIBridge(mockTracer);
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         aiBridge.setCore(mockCore as any);
 
         // Mock session ID for init
@@ -187,7 +191,7 @@ describe('AIBridge', () => {
 
         it('should clean up transport state when initialization fails', async () => {
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const transportDestroySpy = vi.spyOn((bridge2 as any)._transport, 'destroy');
@@ -203,7 +207,7 @@ describe('AIBridge', () => {
 
         it('should broadcast chunks and thoughts via transport callbacks', async () => {
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
 
@@ -284,7 +288,7 @@ describe('AIBridge', () => {
             expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine', expect.any(Object));
         });
 
-        it('should stop conflicting local engine slots only for local providers', async () => {
+        it('should not stop engine slots when selecting a local provider', async () => {
             mockInvoke.mockImplementation(async (cmd: string) => {
                 await Promise.resolve();
                 if (cmd === 'get_engine_config') return { context_size: 4096 };
@@ -293,9 +297,8 @@ describe('AIBridge', () => {
 
             await aiBridge.startProvider('llamacpp');
 
-            expect(mockInvoke).toHaveBeenCalledWith('stop_engine_slot', {
-                capability: 'image',
-            });
+            expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine_slot', expect.any(Object));
+            expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine', expect.any(Object));
         });
 
         it('should NOT fallback to localStorage when backend returns null', async () => {
@@ -617,11 +620,10 @@ describe('AIBridge', () => {
             expect(mockInvoke).toHaveBeenCalledWith('get_chat_history', expect.any(Object));
         });
 
-        it('should return empty array on error', async () => {
+        it('should surface history load errors', async () => {
             mockInvoke.mockRejectedValueOnce(new Error('History failed'));
 
-            const history = await aiBridge.getHistory();
-            expect(history).toEqual([]);
+            await expect(aiBridge.getHistory()).rejects.toThrow('History failed');
         });
 
         it('should return empty array in web mode', async () => {
@@ -738,6 +740,27 @@ describe('AIBridge', () => {
             expect(fn).toHaveBeenCalled();
         });
 
+        it('should continue cleanup when an unlistener throws', () => {
+            const throwingUnlistener = vi.fn(() => {
+                throw new Error('cleanup failed');
+            });
+            const healthyUnlistener = vi.fn();
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const transportDestroySpy = vi.spyOn((aiBridge as any)._transport, 'destroy');
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            (aiBridge as any)._unlisteners.push(throwingUnlistener, healthyUnlistener);
+
+            expect(() => aiBridge.destroy()).not.toThrow();
+
+            expect(throwingUnlistener).toHaveBeenCalledOnce();
+            expect(healthyUnlistener).toHaveBeenCalledOnce();
+            expect(transportDestroySpy).toHaveBeenCalledOnce();
+            expect(mockTracer.warn).toHaveBeenCalledWith(
+                '[AIBridge] Stream cleanup listener failed:',
+                expect.any(Error),
+            );
+        });
+
         it('should be safe to call multiple times', () => {
             aiBridge.destroy();
             aiBridge.destroy();
@@ -783,10 +806,10 @@ describe('AIBridge', () => {
             mockCore.tauriProvider.isTauri.mockReturnValue(false);
 
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
-            await bridge2.init(); // should not throw, logs web mode active (line 81)
+            await bridge2.init(); // should not throw when IPC streaming is unavailable
 
             bridge2.stopProvider();
             mockCore.tauriProvider.isTauri.mockReturnValue(true);
@@ -795,7 +818,7 @@ describe('AIBridge', () => {
         it('should handle IPC initialization failure gracefully (line 86)', async () => {
             // Make onStream throw to trigger the catch block
             const bridge2 = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             bridge2.setCore(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((bridge2 as any)._transport, 'onStream').mockImplementation(() => {
@@ -925,7 +948,7 @@ describe('AIBridge', () => {
             const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             (tempBridge as any)._transport = { setCore: vi.fn() };
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             tempBridge.setCore(mockCore as any);
             // Should not throw and Should not call setCore on the plain object since it fails instanceof
         });
@@ -936,7 +959,7 @@ describe('AIBridge', () => {
             (import.meta.env as any).DEV = false;
 
             const tempBridge = new AIBridge(mockTracer);
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-argument
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             tempBridge.setCore(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session');
             await tempBridge.init();
@@ -945,11 +968,11 @@ describe('AIBridge', () => {
             (import.meta.env as any).DEV = orgDev;
         });
 
-        it('should handle sendMessage when _core is null (Line 175)', async () => {
+        it('should reject sendMessage when _core is null and no model can be resolved', async () => {
             const tempBridge = new AIBridge(mockTracer);
             // Do NOT call setCore here to leave _core as null
 
-            // Bypass API key checks logic just to test the core check
+            // Bypass API key checks logic just to test missing core/model resolution.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             Object.defineProperty((tempBridge as any)._manager, 'activeProviderId', {
                 get: () => 'gemini',
@@ -967,8 +990,9 @@ describe('AIBridge', () => {
                 text: 'hi',
             });
 
-            const res = await tempBridge.sendMessage('test message');
-            expect(res.ok).toBe(true);
+            const result = await tempBridge.sendMessage('test message');
+            expect(result.ok).toBe(false);
+            expect(result.error).toBe('No AI model selected');
         });
 
         it('should handle an empty error string in backend mismatch logic (Line 218)', async () => {

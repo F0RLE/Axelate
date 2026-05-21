@@ -1,6 +1,7 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { buildImageGenerationProgressChunk, isActiveEngineLog } from './AIBridgeRuntime';
+import { AIBridgeRuntime } from './AIBridgeRuntime';
 
 describe('AIBridgeRuntime', () => {
     it('normalizes image progress logs into machine-readable chunks', () => {
@@ -33,10 +34,49 @@ describe('AIBridgeRuntime', () => {
         expect(buildImageGenerationProgressChunk('server ready')).toBeNull();
     });
 
-    it('accepts local image engine logs even when active provider alias differs', () => {
-        expect(isActiveEngineLog('custom_sd', 'sdcpp')).toBe(true);
-        expect(isActiveEngineLog(null, 'sdcpp')).toBe(true);
+    it('accepts selected image engine logs for image progress regardless of active text provider', () => {
+        expect(isActiveEngineLog('custom_text', 'local-image-engine', 'local-image-engine')).toBe(
+            true,
+        );
+        expect(isActiveEngineLog(null, 'local-image-engine', 'local-image-engine')).toBe(true);
+        expect(isActiveEngineLog(null, 'local-image-engine', null)).toBe(false);
         expect(isActiveEngineLog('llamacpp', 'llamacpp')).toBe(true);
         expect(isActiveEngineLog('llamacpp', 'other')).toBe(false);
+    });
+
+    it('cleans up partial stream subscriptions when initialization fails', async () => {
+        const cleanupLog = vi.fn();
+        const runtime = new AIBridgeRuntime({
+            info: vi.fn(),
+            warn: vi.fn(),
+            error: vi.fn(),
+            debug: vi.fn(),
+        });
+        const failure = new Error('stream subscription failed');
+
+        await expect(
+            runtime.initializeStreaming({
+                context: {
+                    tauriProvider: {
+                        isTauri: () => true,
+                        listen: vi.fn().mockResolvedValue(cleanupLog),
+                    },
+                },
+                transport: {
+                    onStream: vi.fn(() => {
+                        throw failure;
+                    }),
+                    onThought: vi.fn(),
+                },
+                events: {
+                    broadcastReplaceChunk: vi.fn(),
+                },
+                getActiveProviderId: () => null,
+                broadcastChunk: vi.fn(),
+                broadcastThought: vi.fn(),
+            } as never),
+        ).rejects.toBe(failure);
+
+        expect(cleanupLog).toHaveBeenCalledTimes(1);
     });
 });

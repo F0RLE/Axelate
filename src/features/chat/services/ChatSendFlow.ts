@@ -3,14 +3,10 @@ import { createMultimodalContent } from '@/features/ai/utils/chatRequestUtils';
 import type { ChatFileHandler } from './ChatFileHandler';
 import type { IChatAttachment, IChatMessage } from '../types/chatTypes';
 
-const estimateTextTokens = (text: string): number => {
-    const normalized = text.trim();
-    return normalized === '' ? 0 : Math.max(1, Math.ceil(normalized.length / 4));
-};
-
 type ChatSendFlowDeps = {
     fileHandler: Pick<ChatFileHandler, 'processForSend'>;
     getHistory: () => IChatMessage[];
+    estimateTokens: (text: string) => Promise<number>;
 };
 
 export type PreparedChatSend = {
@@ -27,18 +23,35 @@ export class ChatSendFlow {
     public async prepare(text: string): Promise<PreparedChatSend> {
         const { attachments, combinedText } = await this._deps.fileHandler.processForSend(text);
         const historyHead = this._deps.getHistory().slice(-40);
-        const attachmentTokens = attachments.reduce((total, attachment) => {
+        const imageTokens = attachments.reduce((total, attachment) => {
+            if (!attachment.type.startsWith('image/')) {
+                return total;
+            }
             const tokens = attachment.tokens;
             return total + (typeof tokens === 'number' && Number.isFinite(tokens) ? tokens : 0);
         }, 0);
-        const textTokens = estimateTextTokens(text);
+        const textTokens = await this._resolveTextTokens(combinedText);
 
         return {
-            tokenCount: textTokens + attachmentTokens,
+            tokenCount: textTokens + imageTokens,
             attachments,
             combinedText,
             historyHead,
             userContent: createMultimodalContent(combinedText, attachments),
         };
+    }
+
+    private async _resolveTextTokens(text: string): Promise<number> {
+        const trimmed = text.trim();
+        if (trimmed === '') {
+            return 0;
+        }
+
+        try {
+            const tokens = await this._deps.estimateTokens(trimmed);
+            return Number.isFinite(tokens) ? Math.max(0, Math.trunc(tokens)) : 0;
+        } catch {
+            return 0;
+        }
     }
 }

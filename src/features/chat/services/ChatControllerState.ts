@@ -7,6 +7,7 @@ export class ChatControllerState {
     private _eventsBound = false;
     private _isInitialized = false;
     private _isDestroyed = false;
+    private _currentGenerationProviderId: string | null = null;
 
     public get history(): IChatMessage[] {
         return this._history;
@@ -62,5 +63,13 @@ export class ChatControllerState {
 
     public set isDestroyed(value: boolean) {
         this._isDestroyed = value;
+    }
+
+    public get currentGenerationProviderId(): string | null {
+        return this._currentGenerationProviderId;
+    }
+
+    public set currentGenerationProviderId(value: string | null) {
+        this._currentGenerationProviderId = value;
     }
 }

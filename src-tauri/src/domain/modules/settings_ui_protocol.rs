@@ -20,7 +20,7 @@ type ModuleSettingsPayload = HashMap<String, Value>;
 
 const MODULE_SETTINGS_SCHEME: &str = "module-settings";
 const MODULE_SETTINGS_LABEL_PREFIX: &str = "module-settings";
-const MODULE_SETTINGS_SESSION_TTL: Duration = Duration::from_secs(60 * 60);
+const MODULE_SETTINGS_SESSION_TTL: Duration = Duration::from_hours(1);
 const MODULE_SETTINGS_MAX_SESSIONS: usize = 128;
 const HOST_INDEX_HTML: &str = include_str!("../../../resources/module_settings_host/index.html");
 const HOST_SCRIPT: &str = include_str!("../../../resources/module_settings_host/host.js");
@@ -344,13 +344,16 @@ fn parse_module_id_from_label(label: &str) -> Result<String, AppError> {
     let module_id = parts.next();
     let nonce = parts.next();
 
-    if prefix != Some(MODULE_SETTINGS_LABEL_PREFIX) || module_id.is_none() || nonce.is_none() {
+    let Some(module_id) = module_id.filter(|value| !value.trim().is_empty()) else {
+        return Err(AppError::PermissionDenied(
+            "Module settings route is only available to owned settings webviews".to_string(),
+        ));
+    };
+    if prefix != Some(MODULE_SETTINGS_LABEL_PREFIX) || nonce.is_none() {
         return Err(AppError::PermissionDenied(
             "Module settings route is only available to owned settings webviews".to_string(),
         ));
     }
-
-    let module_id = module_id.unwrap_or_default();
     crate::domain::modules::downloader::validate_module_id(module_id)?;
     Ok(module_id.to_string())
 }
@@ -481,7 +484,9 @@ const fn status_for_error(error: &AppError) -> StatusCode {
     match error {
         AppError::Validation(_) => StatusCode::BAD_REQUEST,
         AppError::NotFound(_) => StatusCode::NOT_FOUND,
-        AppError::PermissionDenied(_) => StatusCode::FORBIDDEN,
+        AppError::PermissionDenied(_) | AppError::FrontendSecretForbidden(_) => {
+            StatusCode::FORBIDDEN
+        }
         AppError::Io(_)
         | AppError::Serialization(_)
         | AppError::Config(_)

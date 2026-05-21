@@ -8,7 +8,7 @@ import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { EventBus } from '@/shared/services/EventBus';
-import type { PendingChatRevealStore } from '../chat';
+import type { PendingChatRevealStore } from '../ChatController';
 import type { ChatContent } from '@/features/ai/types/aiTypes';
 import type { IApp } from '@/shared/types/coreTypes';
 import type { IChatAttachment, IChatMessage, IChatResponse } from '../types/chatTypes';
@@ -32,7 +32,6 @@ type ChatUiFactoryDeps = ChatFactoryDeps & {
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
-    readClipboardText: () => Promise<string | null>;
 };
 
 type ChatLifecycleFactoryDeps = {
@@ -84,6 +83,7 @@ type ChatGenerationFactoryDeps = {
     handleError: (errorMsg: unknown, model?: string) => void;
     isDestroyed: () => boolean;
     isSending: () => boolean;
+    isImageProvider: (providerId: string | null) => boolean;
     tracer: ChatTracer;
 };
 
@@ -92,6 +92,7 @@ type ChatSendFactoryDeps = {
     fileHandler: ChatFileHandler;
     service: ChatService;
     getHistory: () => IChatMessage[];
+    estimateTokens: (text: string) => Promise<number>;
     pushUserMessage: (content: IChatMessage['content']) => void;
     createStreamingHandle: (typingId: string) => {
         setStatus: (text: string) => void;
@@ -122,8 +123,11 @@ type ChatSendFactoryDeps = {
     clearInput: () => void;
     addContextTokens: (count: number) => void;
     appendUserMessage: (text: string, attachments: IChatAttachment[], tokens: number) => void;
+    rollbackOptimisticSend: (historySnapshot: IChatMessage[], inputText: string) => void;
     getSelectedModule: (category: 'ai_text' | 'ai_image') => Partial<IApp> | undefined;
     getPreferredAiCategory: () => 'ai_text' | 'ai_image';
+    isForceImageGeneration: () => boolean;
+    clearForceImageGeneration: () => void;
     handleResponse: (
         response: IChatResponse,
         streamingHandle?: ReturnType<ChatSendFactoryDeps['createStreamingHandle']> | null,
@@ -134,7 +138,7 @@ type ChatSendFactoryDeps = {
     startImagePreviewPolling: (
         handle: ReturnType<ChatSendFactoryDeps['createImageHandle']>,
     ) => void;
-    cancelTextGeneration: () => Promise<boolean>;
+    cancelTextGeneration: (providerId: string | null) => Promise<boolean>;
     isImageProvider: (providerId: string | null) => boolean;
     lockUi: (input: HTMLTextAreaElement | null) => {
         input: HTMLTextAreaElement | null;
@@ -166,7 +170,6 @@ export class ChatControllerFactory {
             isTauriRuntime: () => deps.isTauriRuntime(),
             openExternalUrl: async (url) => await deps.openExternalUrl(url),
             copyText: async (text) => await deps.copyText(text),
-            readClipboardText: async () => await deps.readClipboardText(),
             tracer: deps.tracer,
         });
     }
@@ -253,6 +256,7 @@ export class ChatControllerFactory {
             },
             isDestroyed: () => deps.isDestroyed(),
             isSending: () => deps.isSending(),
+            isImageProvider: (providerId) => deps.isImageProvider(providerId),
             tracer: deps.tracer,
         });
     }
@@ -263,6 +267,7 @@ export class ChatControllerFactory {
             fileHandler: deps.fileHandler,
             service: deps.service,
             getHistory: () => deps.getHistory(),
+            estimateTokens: async (text) => await deps.estimateTokens(text),
             pushUserMessage: (content) => {
                 deps.pushUserMessage(content);
             },
@@ -284,8 +289,15 @@ export class ChatControllerFactory {
             appendUserMessage: (text, attachments, tokens) => {
                 deps.appendUserMessage(text, attachments, tokens);
             },
+            rollbackOptimisticSend: (historySnapshot, inputText) => {
+                deps.rollbackOptimisticSend(historySnapshot, inputText);
+            },
             getSelectedModule: (category) => deps.getSelectedModule(category),
             getPreferredAiCategory: () => deps.getPreferredAiCategory(),
+            isForceImageGeneration: () => deps.isForceImageGeneration(),
+            clearForceImageGeneration: () => {
+                deps.clearForceImageGeneration();
+            },
             handleResponse: async (response, streamingHandle, imageHandle) =>
                 await deps.handleResponse(response, streamingHandle, imageHandle),
             cleanupStreamingState: (listenerId, typingId) => {
@@ -297,7 +309,7 @@ export class ChatControllerFactory {
             startImagePreviewPolling: (handle) => {
                 deps.startImagePreviewPolling(handle);
             },
-            cancelTextGeneration: async () => await deps.cancelTextGeneration(),
+            cancelTextGeneration: async (providerId) => await deps.cancelTextGeneration(providerId),
             isImageProvider: (providerId) => deps.isImageProvider(providerId),
             lockUi: (input) => deps.lockUi(input),
             unlockUi: (els) => {

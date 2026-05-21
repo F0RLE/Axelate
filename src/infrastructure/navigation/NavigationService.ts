@@ -38,7 +38,7 @@ export class NavigationService {
             this._historyStack.push(lastPage);
             this._currentIndex = this._historyStack.length - 1;
             this._trimHistoryStack();
-            this._tracer.info(`[NavigationService] Restored last page: ${lastPage}`);
+            this._tracer.debug(`[NavigationService] Restored last page: ${lastPage}`);
         }
     }
 
@@ -148,7 +148,6 @@ export class NavigationService {
     public popBackAction(): boolean {
         if (this._actionStack.length > 0) {
             const actionInfo = this._actionStack.pop();
-            // eslint-disable-next-line @typescript-eslint/no-unnecessary-condition
             if (actionInfo) {
                 this._tracer.debug(`[NavigationService] Executing back action: ${actionInfo.id}`);
 

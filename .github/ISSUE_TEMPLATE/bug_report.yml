@@ -1,0 +1,46 @@
+name: Bug Report
+description: Report a reproducible problem in Axelate.
+title: "[Bug]: "
+labels: ["bug"]
+body:
+    - type: markdown
+      attributes:
+          value: |
+              Use this for reproducible problems in the current application.
+    - type: textarea
+      id: description
+      attributes:
+          label: What happened?
+          description: Describe the problem and what you expected instead.
+      validations:
+          required: true
+    - type: textarea
+      id: steps
+      attributes:
+          label: Reproduction steps
+          description: List the smallest set of steps that reproduces the issue.
+          placeholder: |
+              1. Open ...
+              2. Click ...
+              3. See ...
+      validations:
+          required: true
+    - type: input
+      id: version
+      attributes:
+          label: Axelate version or commit
+          placeholder: v0.1.5 or commit SHA
+      validations:
+          required: true
+    - type: input
+      id: windows
+      attributes:
+          label: Windows version
+          placeholder: Windows 11 24H2
+      validations:
+          required: true
+    - type: textarea
+      id: logs
+      attributes:
+          label: Relevant logs or screenshots
+          render: text

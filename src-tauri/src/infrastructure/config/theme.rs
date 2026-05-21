@@ -34,12 +34,5 @@ pub fn get_theme_colors() -> HashMap<String, String> {
     colors.insert("text_muted".to_string(), "#6c757d".to_string());
     colors.insert("secondary".to_string(), "#a0a0a0".to_string());
 
-    // Legacy aliases
-    colors.insert("bg".to_string(), "#111015".to_string());
-    colors.insert("sidebar".to_string(), "#1a1920".to_string());
-    colors.insert("input_bg".to_string(), "#26252d".to_string());
-    colors.insert("hover".to_string(), "#31303a".to_string());
-    colors.insert("card_bg".to_string(), "#1a1920".to_string());
-
     colors
 }

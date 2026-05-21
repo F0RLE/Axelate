@@ -1,5 +1,5 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import { ChatController } from '@/features/chat/chat';
+import { ChatController } from '@/features/chat/ChatController';
 import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
@@ -7,7 +7,6 @@ import type { EventBus } from '@/shared/services/EventBus';
 import type { UiStateStore } from '@/shared/services/state/UiStateStore';
 import type { AppUI } from '@/shared/shell/AppUI';
 import {
-    createClipboardReader,
     createClipboardWriter,
     createExternalUrlOpener,
     createToastBridge,
@@ -29,7 +28,6 @@ export function createChatController(deps: CreateChatControllerDeps): ChatContro
     const isTauriRuntime = (): boolean => deps.tauriProvider.isTauri();
     const showToast = createToastBridge(deps.appUI);
     const copyText = createClipboardWriter(deps.tauriProvider);
-    const readClipboardText = createClipboardReader(deps.tauriProvider);
     const openExternalUrl = createExternalUrlOpener(deps.tauriProvider);
     const estimateTokens = createTokenEstimator({
         tauriProvider: deps.tauriProvider,
@@ -42,7 +40,6 @@ export function createChatController(deps: CreateChatControllerDeps): ChatContro
         isTauriRuntime,
         openExternalUrl,
         copyText,
-        readClipboardText,
         getPendingChatRevealStore: () => ({
             getState: () => deps.stateStore.getState(),
             updateState: (updates) => deps.stateStore.updateState(updates),

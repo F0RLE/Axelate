@@ -15,7 +15,7 @@ import {
     type WindowZoomSettingsStore,
 } from './WindowServiceZoom';
 
-type WindowServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
+type WindowServiceLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 
 export interface IWindowBreakpoints {
     compact: number;
@@ -49,7 +49,6 @@ const PAGE_ZOOM_PROFILES: Record<string, PageZoomProfile> = {
     home: { minWidth: 800, minHeight: 600 },
     chat: { minWidth: 920, minHeight: 640 },
     modules: { minWidth: 1024, minHeight: 650 },
-    marketplace: { minWidth: 1024, minHeight: 650 },
     downloads: { minWidth: 900, minHeight: 600 },
     console: { minWidth: 1080, minHeight: 650 },
     settings: { minWidth: 980, minHeight: 680 },
@@ -58,19 +57,17 @@ const PAGE_ZOOM_PROFILES: Record<string, PageZoomProfile> = {
 type WindowRuntime = {
     addEventListener: typeof globalThis.addEventListener;
     removeEventListener: typeof globalThis.removeEventListener;
-    close: () => void;
     getScreenSize: () => { width: number; height: number };
     getInnerSize: () => { width: number; height: number };
     setAppZoomCss: (zoom: string) => void;
 };
 
+type MonitoringPauseReason = 'window-inactive' | 'monitor-hidden' | 'manual';
+
 function createDefaultWindowRuntime(): WindowRuntime {
     return {
         addEventListener: globalThis.addEventListener.bind(globalThis),
         removeEventListener: globalThis.removeEventListener.bind(globalThis),
-        close: () => {
-            globalThis.close();
-        },
         getScreenSize: () => ({
             width: globalThis.screen.width,
             height: globalThis.screen.height,
@@ -115,6 +112,8 @@ export class WindowService {
     private readonly _policyService: WindowServicePolicy;
     private readonly _zoomService: WindowServiceZoom;
     private _activePageId = 'home';
+    private readonly _monitoringPauseReasons = new Map<MonitoringPauseReason, boolean>();
+    private _lastAppliedMonitoringPaused: boolean | null = null;
     private readonly _boundWindowResize = () => {
         this._persistence.scheduleSave();
     };
@@ -127,7 +126,6 @@ export class WindowService {
         this._nativeHelper = new WindowNativeBridgeHelper(_bridge);
         this._actions = new WindowServiceActions({
             bridge: _bridge,
-            runtime: _runtime,
             tracer: this._tracer,
             beforeClose: () => this._beforeClose,
         });
@@ -177,7 +175,9 @@ export class WindowService {
                     (await this._bridge.invoke<IWindowConfig>('get_window_config'));
 
                 // Update breakpoints from backend (placeholder/not used in UI yet)
-                this._tracer.info(`[WindowService] Loaded config: ${JSON.stringify(this._config)}`);
+                this._tracer.debug(
+                    `[WindowService] Loaded config: ${JSON.stringify(this._config)}`,
+                );
 
                 // Use pre-loaded initialZoom or determine it
                 const zoom =
@@ -194,7 +194,7 @@ export class WindowService {
             // Initialize persistence listeners
             this._persistence.initWindowListeners();
         } else {
-            // Web Fallback: Load from localStorage or default to 1
+            // Non-native test/runtime path: apply the injected/default zoom without persistence.
             this._currentZoom = fallbackZoom;
             this._runtime.setAppZoomCss(this._currentZoom.toFixed(3));
         }
@@ -222,7 +222,7 @@ export class WindowService {
     }
 
     /**
-     * Closes the application window or browser tab.
+     * Closes the native application window.
      */
     public async close(): Promise<void> {
         await this._actions.close();
@@ -336,7 +336,27 @@ export class WindowService {
      * Notifies the backend of a change in system monitoring state.
      */
     public async setMonitoringPaused(paused: boolean): Promise<void> {
-        await this._actions.setMonitoringPaused(paused);
+        await this.setMonitoringPauseReason('manual', paused);
+    }
+
+    public async setMonitoringPauseReason(
+        reason: MonitoringPauseReason,
+        paused: boolean,
+    ): Promise<void> {
+        const previousReasonPaused = this._monitoringPauseReasons.get(reason);
+        if (previousReasonPaused !== paused) {
+            this._monitoringPauseReasons.set(reason, paused);
+        }
+
+        const aggregatePaused = Array.from(this._monitoringPauseReasons.values()).some(Boolean);
+        if (this._lastAppliedMonitoringPaused === aggregatePaused) {
+            return;
+        }
+
+        const applied = await this._actions.setMonitoringPaused(aggregatePaused);
+        if (applied) {
+            this._lastAppliedMonitoringPaused = aggregatePaused;
+        }
     }
 
     // --- Small Screen Helpers ---
@@ -413,10 +433,10 @@ export class WindowService {
     }
 
     /**
-     * Immediate window state save (fire-and-forget).
+     * Immediate window state save.
      * Exposed for StateManager registration.
      */
-    public saveImmediate(): void {
-        void this._persistence.saveWindowState();
+    public async saveImmediate(): Promise<void> {
+        await this._persistence.saveWindowState();
     }
 }

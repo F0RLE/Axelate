@@ -278,13 +278,6 @@ export const svgIcons = `
                 <path d="M3 9h4l5-4v14l-5-4H3V9Z"></path>
                 <path d="M16.2 8.8a1 1 0 0 1 1.4 0L19 10.2l1.4-1.4a1 1 0 1 1 1.4 1.4L20.4 11.6l1.4 1.4a1 1 0 1 1-1.4 1.4L19 13l-1.4 1.4a1 1 0 1 1-1.4-1.4l1.4-1.4-1.4-1.4a1 1 0 0 1 0-1.4Z"></path>
             </symbol>
-            <symbol
-                id="icon-marketplace"
-                viewBox="0 0 24 24"
-                fill="currentColor"
-            >
-                <path d="M5 2h14v2H5zM3 4h2v2H3zm16 0h2v2h-2zM1 6h22v2H1zm2 2h2v12H3zm16 0h2v12h-2zM5 20h14v2H5zm2-8h10v8H7zm4-4h2v2h-2zm-4 0h2v2H7zm8 0h2v2h-2z"></path>
-            </symbol>
         </svg>
 `;
 

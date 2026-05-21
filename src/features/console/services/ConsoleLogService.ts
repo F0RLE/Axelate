@@ -46,82 +46,37 @@ type ConsoleOverviewPayload = {
     }>;
 };
 
-type EngineEventPayloadMap = {
-    'ai:engine:log': { engine_id: string; line: string };
-    'ai:engine:starting': { engine_id: string };
-    'ai:engine:ready': { engine_id: string; endpoint: string };
-    'ai:engine:error': { engine_id: string; message: string };
-};
-
-type EngineEventName = keyof EngineEventPayloadMap;
 type ConsoleLogServiceLogger = Pick<LoggerService, 'warn' | 'error'>;
 
 export class ConsoleLogService {
-    private static readonly _MAX_LOG_COUNT = 1000;
-    private static readonly _TRIM_THRESHOLD = 2000;
-    private static readonly _NOISE_PATTERNS = [
-        /\[AIBridge\] Stream chunk received/i,
-        /\[AIBridge\] Thought chunk received/i,
-        /\bCritical services hydrated\b/i,
-        /\bCore Ready\b/i,
-        /\bReady\.\s*$/i,
-        /\bLoading\s+[a-z-]+\.{3}$/i,
-        /\bLanguage changed to\b.*\bnotifications dispatched\b/i,
-        /\bSettings container found\b.*\bInitializing renderers\b/i,
-        /\bGeneralSettingsRenderer\b.*\bInitializing\b/i,
-        /\bInitializing taskbar toggles\b/i,
-        /\bInitializing monitor toggles\b/i,
-        /\bStarted listening to system_stats\b/i,
-        /\bNavigation initialized\b/i,
-        /\bPage\s+[a-z0-9._-]+\b/i,
-        /\bRestore page\s+[a-z0-9._-]+\b/i,
-        /\bNavigating to:\s*[a-z0-9._-]+\b/i,
-        /\bResolution changed:\b/i,
-        /\bFetched\s+\d+\s+modules\b/i,
-        /\bMapping config\b/i,
-        /\bAfter mapping\b/i,
-        /\b_ensureValidConfig passed\b/i,
-        /\bCatalog hydrated successfully\b/i,
-        /\bCatalog initialized\b/i,
-        /\bTransport initialized\b/i,
-        /\bListening for engine events\b/i,
-        /^\s*\|?[=>\s]+\|?\s*\d+\s*\/\s*\d+\s*-\s*\d+(?:\.\d+)?\s*(?:it\/s|s\/it)\s*$/i,
-    ];
+    private static readonly _MAX_LOG_COUNT_PER_VIEW = 1200;
 
-    private logs: ILogEntry[] = [];
-    private lastTimestamp = 0;
-    private readonly _engineUnlisteners: Array<() => void> = [];
+    private readonly _logsByView = new Map<string, ILogEntry[]>();
+    private readonly _lastTimestampByView = new Map<string, number>();
     private readonly _modulePathCache = new Map<string, string | null>();
-    private readonly _knownEngineIds = new Set<string>();
-    private readonly _knownModuleIds = new Set<string>();
     private readonly _normalizer = new ConsoleLogNormalizer();
-    private _initialized = false;
 
     constructor(
         private readonly bridge: IBridge,
         private readonly _tracer: ConsoleLogServiceLogger,
     ) {}
 
-    public async init(): Promise<void> {
-        if (this._initialized || !this.bridge.isTauri()) {
-            return;
-        }
-
-        this._initialized = true;
-        await this._registerEngineListeners();
+    public init(): Promise<void> {
+        return Promise.resolve();
     }
 
     public destroy(): void {
-        this._engineUnlisteners.splice(0).forEach((unlisten) => {
-            unlisten();
-        });
-        this._initialized = false;
+        this._logsByView.clear();
+        this._lastTimestampByView.clear();
     }
 
-    public async fetchLogs(): Promise<ILogEntry[]> {
+    public async fetchLogs(viewId = 'general'): Promise<ILogEntry[]> {
+        const normalizedViewId = this._canonicalViewId(viewId);
+        const since = this._lastTimestampByView.get(normalizedViewId) ?? 0;
+
         try {
-            const logs = await this._fetchTauriLogs();
-            return this._processLogs(logs);
+            const logs = await this._fetchTauriLogs(normalizedViewId, since);
+            return this._appendLogs(normalizedViewId, logs);
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Fetch logs failed:', error);
             return [];
@@ -130,10 +85,11 @@ export class ConsoleLogService {
 
     public async clearLogs(viewId = 'general'): Promise<boolean> {
         const normalizedViewId = this._canonicalViewId(viewId);
-        this.logs = this.logs.filter((entry) => !this._isLogInView(entry, normalizedViewId));
 
         try {
             await this.bridge.invoke('clear_console_logs', { viewId: normalizedViewId });
+            this._logsByView.set(normalizedViewId, []);
+            this._lastTimestampByView.set(normalizedViewId, 0);
             return true;
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Clear logs failed:', error);
@@ -141,24 +97,35 @@ export class ConsoleLogService {
         }
     }
 
+    public async clearAllLogs(): Promise<boolean> {
+        try {
+            await this.bridge.invoke('clear_logs');
+            this._logsByView.clear();
+            this._lastTimestampByView.clear();
+            return true;
+        } catch (error) {
+            this._tracer.error('[ConsoleLogService] Clear all logs failed:', error);
+            return false;
+        }
+    }
+
     public getLogs(): ILogEntry[] {
-        return this.logs;
+        return [...this._logsByView.values()].flat();
+    }
+
+    public getLogsForView(viewId: string): ILogEntry[] {
+        return [...(this._logsByView.get(this._canonicalViewId(viewId)) ?? [])];
     }
 
     public async getAvailableViews(): Promise<IConsoleLogView[]> {
         if (!this.bridge.isTauri()) {
-            const views: IConsoleLogView[] = [{ id: 'general', label: 'General' }];
-            const moduleLabels = new Map<string, string>();
-            this._hydrateModuleMetadata(moduleLabels);
-            return [...views, ...this._buildModuleViews(moduleLabels)];
+            return [{ id: 'general', label: 'Platform' }];
         }
 
         try {
             const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
-                const views = this._normalizeViews(result.data.views);
-                this._hydrateKnownRuntimeIds(views);
-                return views;
+                return this._normalizeViews(result.data.views);
             }
         } catch (error) {
             this._tracer.warn(
@@ -166,103 +133,7 @@ export class ConsoleLogService {
             );
         }
 
-        const views: IConsoleLogView[] = [{ id: 'general', label: 'General' }];
-        const moduleLabels = new Map<string, string>();
-        this._hydrateModuleMetadata(moduleLabels);
-        return [...views, ...this._buildModuleViews(moduleLabels)];
-    }
-
-    private _hydrateModuleMetadata(moduleLabels: Map<string, string>): void {
-        for (const log of this.logs) {
-            const moduleId = this._getModuleId(log);
-            if (moduleId === null) {
-                continue;
-            }
-
-            if (!moduleLabels.has(moduleId)) {
-                moduleLabels.set(moduleId, this._getModuleLabel(moduleId));
-            }
-        }
-    }
-
-    private _buildModuleViews(moduleLabels: ReadonlyMap<string, string>): IConsoleLogView[] {
-        this._knownModuleIds.clear();
-
-        return [...moduleLabels.entries()].map(([moduleId, label]) => {
-            this._knownModuleIds.add(moduleId);
-            return {
-                id: `module:${moduleId}`,
-                label,
-            };
-        });
-    }
-
-    private _normalizeViews(views: readonly IConsoleLogView[]): IConsoleLogView[] {
-        const seenIds = new Set<string>();
-        const seenLabels = new Set<string>();
-        const normalizedViews: IConsoleLogView[] = [];
-
-        for (const view of views) {
-            const id = this._canonicalViewId(view.id);
-            const labelKey = this._normalizeViewLabel(view.label);
-            if (seenIds.has(id) || seenLabels.has(labelKey)) {
-                continue;
-            }
-
-            seenIds.add(id);
-            seenLabels.add(labelKey);
-            normalizedViews.push({ ...view, id });
-        }
-
-        return normalizedViews;
-    }
-
-    private _canonicalViewId(viewId: string): string {
-        const engineView = viewId.match(/^engine:(.+)$/);
-        if (engineView !== null) {
-            return `engine:${this._canonicalEngineId(engineView[1] ?? '')}`;
-        }
-
-        return viewId;
-    }
-
-    private _normalizeViewLabel(label: string): string {
-        return label.trim().toLowerCase().replaceAll(/\s+/gu, ' ');
-    }
-
-    private _getModuleLabel(moduleId: string): string {
-        return moduleId
-            .replace(/^axelate-/, '')
-            .split('-')
-            .filter(Boolean)
-            .map((part) => part[0]?.toUpperCase() + part.slice(1))
-            .join(' ');
-    }
-
-    public getLogsForView(viewId: string): ILogEntry[] {
-        if (viewId === 'general') {
-            return this.logs.filter(
-                (entry) => this._getModuleId(entry) === null && !this._isKnownEngineLog(entry),
-            );
-        }
-
-        const moduleView = viewId.match(/^module:(.+)$/);
-        if (moduleView !== null) {
-            const moduleId = moduleView[1] ?? '';
-            return this.logs.filter((entry) => this._getModuleId(entry) === moduleId);
-        }
-
-        const engineView = viewId.match(/^engine:(.+)$/);
-        if (engineView !== null) {
-            const engineId = this._canonicalEngineId(engineView[1] ?? '');
-            return this.logs.filter(
-                (entry) =>
-                    this._getModuleId(entry) === null &&
-                    this._canonicalEngineId(entry.source) === engineId,
-            );
-        }
-
-        return this.logs.filter((entry) => this._getModuleId(entry) === viewId);
+        return [{ id: 'general', label: 'Platform' }];
     }
 
     public async getStatusItems(): Promise<IConsoleStatusItem[]> {
@@ -273,11 +144,17 @@ export class ConsoleLogService {
         try {
             const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
-                return this._mapOverviewStatusItems(result.data);
+                return result.data.status_items.map((item) => ({
+                    id: this._canonicalViewId(item.id),
+                    label: item.label,
+                    kind: item.kind === 'module' ? 'module' : 'engine',
+                    status: this._toRuntimeStatus(item.status),
+                    detail: item.detail,
+                }));
             }
         } catch (error) {
             this._tracer.warn(
-                `[ConsoleLogService] Failed to resolve engine status: ${String(error)}`,
+                `[ConsoleLogService] Failed to resolve runtime status: ${String(error)}`,
             );
         }
 
@@ -341,218 +218,86 @@ export class ConsoleLogService {
         }
     }
 
-    private async _registerEngineListeners(): Promise<void> {
-        await this._listenToEngineEvent('ai:engine:log', (payload) => {
-            this._pushLog(payload.line, this._canonicalEngineId(payload.engine_id), 'info');
-        });
-        await this._listenToEngineEvent('ai:engine:starting', (payload) => {
-            this._pushLog(
-                'Engine is starting...',
-                this._canonicalEngineId(payload.engine_id),
-                'info',
-            );
-        });
-        await this._listenToEngineEvent('ai:engine:ready', (payload) => {
-            this._pushLog(
-                `Engine is ready at ${payload.endpoint}`,
-                this._canonicalEngineId(payload.engine_id),
-                'info',
-            );
-        });
-        await this._listenToEngineEvent('ai:engine:error', (payload) => {
-            this._pushLog(payload.message, this._canonicalEngineId(payload.engine_id), 'error');
-        });
+    private async _fetchTauriLogs(viewId: string, since: number): Promise<ILogEntry[]> {
+        if (!this.bridge.isTauri()) {
+            return await this.bridge.invoke<ILogEntry[]>('get_logs', { since });
+        }
+
+        return await this.bridge.invoke<ILogEntry[]>('get_console_logs', { viewId, since });
     }
 
-    private async _listenToEngineEvent<TEvent extends EngineEventName>(
-        eventName: TEvent,
-        handler: (payload: EngineEventPayloadMap[TEvent]) => void,
-    ): Promise<void> {
-        const unlisten = await this.bridge.listen<EngineEventPayloadMap[TEvent]>(
-            eventName,
-            handler,
-        );
-        this._engineUnlisteners.push(unlisten);
-    }
-
-    private async _fetchTauriLogs(): Promise<ILogEntry[]> {
-        return await this.bridge.invoke<ILogEntry[]>('get_logs', {
-            since: this.lastTimestamp,
-        });
-    }
-
-    private _processLogs(newLogs: ILogEntry[]): ILogEntry[] {
+    private _appendLogs(viewId: string, newLogs: ILogEntry[]): ILogEntry[] {
         if (!Array.isArray(newLogs) || newLogs.length === 0) {
             return [];
         }
 
-        this.lastTimestamp = newLogs.at(-1)?.timestamp ?? this.lastTimestamp;
-        const seenBatchKeys = new Set<string>();
-        const visibleLogs = newLogs
-            .filter((entry) => !this._isNoise(entry))
-            .map((entry) =>
-                this._normalizer.normalize({
-                    ...entry,
-                    source: this._canonicalRuntimeSource(entry.source),
-                }),
-            )
-            .filter((entry) => {
-                if (this._isNoise(entry)) {
-                    return false;
-                }
-                const key = this._dedupeKey(entry);
-                if (seenBatchKeys.has(key) || this._hasDuplicateLog(entry)) {
-                    return false;
-                }
-                seenBatchKeys.add(key);
-                return true;
-            });
-        if (visibleLogs.length === 0) {
+        const normalizedLogs = newLogs.map((entry) => this._normalizer.normalize(entry));
+        const previousLogs = this._logsByView.get(viewId) ?? [];
+        const existingKeys = new Set(previousLogs.map((entry) => this._dedupeKey(entry)));
+        const appendedLogs = normalizedLogs.filter((entry) => {
+            const key = this._dedupeKey(entry);
+            if (existingKeys.has(key)) {
+                return false;
+            }
+            existingKeys.add(key);
+            return true;
+        });
+
+        if (appendedLogs.length === 0) {
+            this._lastTimestampByView.set(
+                viewId,
+                newLogs.at(-1)?.timestamp ?? this._lastTimestampByView.get(viewId) ?? 0,
+            );
             return [];
         }
 
-        this.logs.push(...visibleLogs);
-        this._trimLogs();
-        return visibleLogs;
-    }
-
-    private _isNoise(entry: ILogEntry): boolean {
-        const levelSource = entry.normalized_level ?? entry.level;
-        const level = levelSource.toUpperCase();
-        if (level === 'ERROR' || level === 'WARN' || level === 'WARNING') {
-            return false;
-        }
-
-        return ConsoleLogService._NOISE_PATTERNS.some((pattern) =>
-            pattern.test(String(entry.message)),
+        const nextLogs = [...previousLogs, ...appendedLogs].slice(
+            -ConsoleLogService._MAX_LOG_COUNT_PER_VIEW,
         );
+        this._logsByView.set(viewId, nextLogs);
+        this._lastTimestampByView.set(
+            viewId,
+            newLogs.at(-1)?.timestamp ?? this._lastTimestampByView.get(viewId) ?? 0,
+        );
+        return appendedLogs;
     }
 
-    private _pushLog(message: string, source: string, level: string): void {
-        const normalizedSource = this._canonicalRuntimeSource(source);
-        this._knownEngineIds.add(normalizedSource);
-        const entry: ILogEntry = {
-            timestamp: Date.now() / 1000,
-            source: normalizedSource,
-            level,
-            message,
-        };
-
-        if (this._isNoise(entry)) {
-            return;
-        }
-
-        const normalized = this._normalizer.normalize(entry);
-        if (this._hasDuplicateLog(normalized)) {
-            return;
-        }
-
-        this.logs.push(normalized);
-        this._trimLogs();
-    }
-
-    private _trimLogs(): void {
-        if (this.logs.length > ConsoleLogService._TRIM_THRESHOLD) {
-            this.logs = this.logs.slice(-ConsoleLogService._MAX_LOG_COUNT);
-        }
-    }
-
-    private _mapOverviewStatusItems(payload: ConsoleOverviewPayload): IConsoleStatusItem[] {
-        return payload.status_items.map((item) => ({
-            id: item.id,
-            label: item.label,
-            kind: item.kind === 'module' ? 'module' : 'engine',
-            status: this._toRuntimeStatus(item.status),
-            detail: item.detail,
-        }));
-    }
-
-    private _hydrateKnownRuntimeIds(views: readonly IConsoleLogView[]): void {
+    private _normalizeViews(views: readonly IConsoleLogView[]): IConsoleLogView[] {
+        const byId = new Map<string, IConsoleLogView>();
         for (const view of views) {
-            const engineId = view.id.match(/^engine:(.+)$/)?.[1]?.trim();
-            if (engineId !== undefined && engineId !== '') {
-                this._knownEngineIds.add(this._canonicalEngineId(engineId));
+            const id = this._canonicalViewId(view.id);
+            if (id === '') {
+                continue;
             }
-
-            const moduleId = view.id.match(/^module:(.+)$/)?.[1]?.trim();
-            if (moduleId !== undefined && moduleId !== '') {
-                this._knownModuleIds.add(moduleId);
-            }
+            byId.set(id, { ...view, id });
         }
+        return [...byId.values()];
     }
 
-    private _isKnownEngineLog(entry: ILogEntry): boolean {
-        return this._knownEngineIds.has(this._canonicalEngineId(entry.source));
-    }
-
-    private _isLogInView(entry: ILogEntry, viewId: string): boolean {
-        if (viewId === 'general') {
-            return this._getModuleId(entry) === null && !this._isKnownEngineLog(entry);
-        }
-
-        const moduleView = viewId.match(/^module:(.+)$/);
-        if (moduleView !== null) {
-            return this._getModuleId(entry) === (moduleView[1] ?? '');
-        }
-
-        const engineView = viewId.match(/^engine:(.+)$/);
+    private _canonicalViewId(viewId: string): string {
+        const trimmed = viewId.trim();
+        const engineView = trimmed.match(/^engine:(.+)$/);
         if (engineView !== null) {
-            const engineId = this._canonicalEngineId(engineView[1] ?? '');
-            return (
-                this._getModuleId(entry) === null &&
-                this._canonicalEngineId(entry.source) === engineId
-            );
+            return `engine:${this._canonicalEngineId(engineView[1] ?? '')}`;
         }
-
-        return this._getModuleId(entry) === viewId;
+        return trimmed;
     }
 
-    private _getModuleId(entry: ILogEntry): string | null {
-        const moduleId = entry.module_id?.trim();
-        if (moduleId !== undefined && moduleId !== '') {
-            this._knownModuleIds.add(moduleId);
-            return moduleId;
-        }
-
-        const source = this._canonicalEngineId(entry.source);
-        if (this._knownEngineIds.has(source)) {
-            return null;
-        }
-
-        if (source !== '' && this._knownModuleIds.has(source)) {
-            return source;
-        }
-
-        return null;
-    }
-
-    private _canonicalRuntimeSource(source: unknown): string {
-        const trimmed = typeof source === 'string' ? source.trim() : '';
-        if (trimmed.startsWith('module:')) {
-            return trimmed;
-        }
-
-        return this._canonicalEngineId(trimmed);
-    }
-
-    private _canonicalEngineId(engineId: unknown): string {
-        const normalized = typeof engineId === 'string' ? engineId.trim() : '';
-        return normalized === 'stable-diffusion' ? 'sdcpp' : normalized;
-    }
-
-    private _hasDuplicateLog(candidate: ILogEntry): boolean {
-        const candidateKey = this._dedupeKey(candidate);
-        return this.logs.some((entry) => {
-            return this._dedupeKey(entry) === candidateKey;
-        });
+    private _canonicalEngineId(engineId: string): string {
+        const key = engineId
+            .trim()
+            .toLowerCase()
+            .replaceAll(/[\s_]+/gu, '-');
+        return key;
     }
 
     private _dedupeKey(entry: ILogEntry): string {
         return [
-            this._canonicalRuntimeSource(entry.source),
+            entry.timestamp,
+            entry.source,
             entry.module_id ?? '',
             entry.normalized_level ?? entry.level,
-            typeof entry.message === 'string' ? entry.message : '',
+            entry.message,
         ].join('\u0000');
     }
 

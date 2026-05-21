@@ -1,6 +1,7 @@
 use super::session::ChatSessionManager;
 use super::types::{ChatMessage, ChatRequest, ChatResponse};
 use crate::domain::engine::config::{build_default_engine_config, merge_user_engine_config};
+use crate::domain::engine::manager::canonical_engine_id;
 use crate::infrastructure::config::engine_settings::load_engine_config_map;
 
 #[derive(Clone, Copy)]
@@ -20,6 +21,18 @@ struct LocalEngineResolution {
     messages_context: Vec<ChatMessage>,
 }
 
+struct CloudProviderResolution {
+    base_url: String,
+    effective_model: String,
+    model_max_tokens: Option<u32>,
+}
+
+pub(super) fn normalize_session_id(value: Option<&str>) -> Option<&str> {
+    value
+        .map(str::trim)
+        .filter(|session_id| !session_id.is_empty())
+}
+
 pub(super) async fn prepare_chat_dispatch(
     request: &ChatRequest,
     sessions: &ChatSessionManager,
@@ -29,8 +42,16 @@ pub(super) async fn prepare_chat_dispatch(
     local_engine_access: LocalEngineAccess,
 ) -> Result<PreparedChatDispatch, crate::errors::AppError> {
     let mut messages_context = request.messages.clone();
-    if let Some(session_id) = &request.session_id {
+    if let Some(session_id) = normalize_session_id(request.session_id.as_deref()) {
         messages_context = sessions.merge_request_messages(session_id, &request.messages);
+        if !request.messages.is_empty() {
+            if let Err(error) = sessions.force_save().await {
+                tracing::warn!(
+                    session_id,
+                    "Failed to persist incoming chat messages before dispatch: {error}"
+                );
+            }
+        }
     }
 
     let mut base_url = "https://openrouter.ai/api/v1".to_string();
@@ -44,6 +65,7 @@ pub(super) async fn prepare_chat_dispatch(
         engine_manager,
         settings_service,
         local_engine_access,
+        &messages_context,
     )
     .await?
     {
@@ -81,11 +103,11 @@ pub(super) async fn persist_successful_response(
     session_id: Option<&str>,
     message_id: String,
     response: &Result<ChatResponse, crate::errors::AppError>,
-) {
+) -> Result<(), crate::errors::AppError> {
     if let Ok(response) = response
         && response.ok
         && let Some(reply) = &response.reply
-        && let Some(session_id) = session_id
+        && let Some(session_id) = normalize_session_id(session_id)
     {
         sessions.append_response(
             session_id,
@@ -93,7 +115,15 @@ pub(super) async fn persist_successful_response(
             reply,
             response.thought_signature.clone(),
         );
+        if let Err(error) = sessions.force_save().await {
+            tracing::warn!(
+                session_id,
+                "Failed to persist successful chat response: {error}"
+            );
+        }
     }
+
+    Ok(())
 }
 
 pub(super) async fn active_local_engine_status(
@@ -105,7 +135,9 @@ pub(super) async fn active_local_engine_status(
         crate::domain::engine::types::EngineState::Ready { slots } => slots
             .into_iter()
             .find(|slot| {
-                slot.capability == capability && slot.engine.id == provider && slot.engine.healthy
+                slot.capability == capability
+                    && canonical_engine_id(&slot.engine.id) == canonical_engine_id(provider)
+                    && slot.engine.healthy
             })
             .map(|slot| slot.engine)
             .ok_or_else(|| {
@@ -123,17 +155,14 @@ pub(super) async fn build_engine_config(
     definition: &crate::domain::engine::types::EngineDefinition,
 ) -> Result<crate::domain::engine::types::EngineConfig, crate::errors::AppError> {
     let saved = load_engine_config_map().await?;
-    Ok(saved.get(&definition.id).map_or_else(
+    let canonical_id = canonical_engine_id(&definition.id);
+    Ok(saved.get(&canonical_id).map_or_else(
         || build_default_engine_config(definition),
         |config| merge_user_engine_config(definition, config),
     ))
 }
 
-pub(super) fn resolve_local_text_model_id(
-    request_model: &str,
-    model_path: Option<&str>,
-    provider: &str,
-) -> String {
+pub(super) fn resolve_local_text_model_id(request_model: &str, model_path: Option<&str>) -> String {
     let requested = request_model.trim();
     if !requested.is_empty() && requested != "default" {
         return requested.to_string();
@@ -146,7 +175,7 @@ pub(super) fn resolve_local_text_model_id(
         }
     }
 
-    provider.to_string()
+    "default".to_string()
 }
 
 async fn resolve_local_engine_request(
@@ -155,6 +184,7 @@ async fn resolve_local_engine_request(
     engine_manager: &crate::domain::engine::manager::EngineManager,
     settings_service: &crate::infrastructure::config::settings::SettingsService,
     local_engine_access: LocalEngineAccess,
+    prepared_messages_context: &[ChatMessage],
 ) -> Result<Option<LocalEngineResolution>, crate::errors::AppError> {
     let Some(definition) = engine_manager.get_definition(&request.provider).await else {
         return Ok(None);
@@ -178,15 +208,9 @@ async fn resolve_local_engine_request(
             }
 
             let local_context_size = usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
-            let local_model_for_context = config
-                .model_path
-                .clone()
-                .unwrap_or_else(|| request.model.clone());
-            let effective_model = resolve_local_text_model_id(
-                &request.model,
-                config.model_path.as_deref(),
-                &request.provider,
-            );
+            let effective_model =
+                resolve_local_text_model_id(&request.model, config.model_path.as_deref());
+            let local_model_for_context = effective_model.clone();
 
             super::ai_service::stop_conflicting_local_engine(
                 engine_manager,
@@ -195,9 +219,9 @@ async fn resolve_local_engine_request(
             .await?;
 
             let status = engine_manager.start(config).await?;
-            let mut messages_context = request.messages.clone();
+            let mut messages_context = prepared_messages_context.to_vec();
 
-            if let Some(session_id) = &request.session_id {
+            if let Some(session_id) = normalize_session_id(request.session_id.as_deref()) {
                 messages_context = sessions.build_local_context(
                     session_id,
                     local_context_size,
@@ -228,17 +252,14 @@ async fn resolve_local_engine_request(
             )
             .await?;
             let base_url = format!("{}/v1", status.endpoint);
-            let effective_model =
-                resolve_local_text_model_id(&request.model, None, &request.provider);
             let config = build_engine_config(&definition).await?;
+            let effective_model =
+                resolve_local_text_model_id(&request.model, config.model_path.as_deref());
             let local_context_size = usize::try_from(config.context_size.max(4096)).unwrap_or(4096);
-            let local_model_for_context = config
-                .model_path
-                .clone()
-                .unwrap_or_else(|| request.model.clone());
-            let mut messages_context = request.messages.clone();
+            let local_model_for_context = effective_model.clone();
+            let mut messages_context = prepared_messages_context.to_vec();
 
-            if let Some(session_id) = &request.session_id {
+            if let Some(session_id) = normalize_session_id(request.session_id.as_deref()) {
                 messages_context = sessions.build_local_context(
                     session_id,
                     local_context_size,
@@ -285,10 +306,11 @@ async fn prepend_local_system_prompt(
             return Ok(());
         }
     };
-    let key = format!("{provider}_system_prompt");
+    let canonical_provider = canonical_engine_id(provider);
+    let canonical_key = format!("{canonical_provider}_system_prompt");
     let prompt = settings
         .extra_settings
-        .get(&key)
+        .get(&canonical_key)
         .map(String::as_str)
         .unwrap_or_default()
         .trim();
@@ -322,46 +344,75 @@ fn resolve_cloud_provider_request(
             .iter()
             .find(|provider| provider.id == request.provider)
     {
-        if let Some(url) = &provider.base_url {
-            base_url.clone_from(url);
-        }
+        let custom_models = config_service.load_custom_models().ok();
+        let resolution = resolve_cloud_provider_values(
+            &request.provider,
+            &request.model,
+            "https://openrouter.ai/api/v1",
+            provider,
+            custom_models.as_ref(),
+        );
+        base_url.clone_from(&resolution.base_url);
+        effective_model.clone_from(&resolution.effective_model);
+        *model_max_tokens = resolution.model_max_tokens;
+    }
+}
 
-        if let Some(target) = provider
-            .model_aliases
+fn resolve_cloud_provider_values(
+    provider_id: &str,
+    request_model: &str,
+    default_base_url: &str,
+    provider: &crate::models::config::ApiProvider,
+    custom_models: Option<&crate::models::custom_models::CustomModelConfig>,
+) -> CloudProviderResolution {
+    let base_url = provider
+        .base_url
+        .clone()
+        .unwrap_or_else(|| default_base_url.to_string());
+    let mut effective_model = request_model.to_string();
+    let mut model_max_tokens = None;
+
+    if let Some(target) = provider
+        .model_aliases
+        .as_ref()
+        .and_then(|aliases| aliases.get(request_model))
+    {
+        tracing::info!("Resolved model alias: {request_model} -> {target}");
+        effective_model.clone_from(target);
+    }
+
+    if let Some(models) = &provider.models
+        && let Some(definition) = models.iter().find(|model| model.id == effective_model)
+    {
+        model_max_tokens = definition.max_output_tokens;
+        if let Some(api_model) = definition
+            .api_models
             .as_ref()
-            .and_then(|aliases| aliases.get(&request.model))
+            .and_then(|models| models.text.as_ref())
         {
-            tracing::info!("Resolved model alias: {} -> {}", request.model, target);
-            effective_model.clone_from(target);
-        }
-
-        if let Some(models) = &provider.models
-            && let Some(definition) = models.iter().find(|model| model.id == *effective_model)
-        {
-            *model_max_tokens = definition.max_output_tokens;
-            if let Some(api_model) = definition
-                .api_models
-                .as_ref()
-                .and_then(|models| models.text.as_ref())
-            {
-                tracing::info!("Resolved API model ID: {effective_model} -> {api_model}");
-                *effective_model = api_model.clone();
-            }
+            tracing::info!("Resolved API model ID: {effective_model} -> {api_model}");
+            effective_model = api_model.clone();
         }
     }
 
-    if let Ok(custom_models) = config_service.load_custom_models()
+    if let Some(custom_models) = custom_models
         && let Some(custom) = custom_models
             .models
             .iter()
-            .find(|model| model.id == *effective_model && model.provider_id == request.provider)
+            .find(|model| model.id == effective_model && model.provider_id == provider_id)
     {
         tracing::info!(
             "Resolved Custom Model: {} -> {}",
             effective_model,
             custom.base_model_id
         );
-        *effective_model = custom.base_model_id.clone();
+        effective_model = custom.base_model_id.clone();
+    }
+
+    CloudProviderResolution {
+        base_url,
+        effective_model,
+        model_max_tokens,
     }
 }
 
@@ -370,5 +421,160 @@ fn clamp_max_tokens(request_limit: Option<u32>, model_limit: Option<u32>) -> Opt
         (Some(request_limit), Some(model_limit)) => Some(std::cmp::min(request_limit, model_limit)),
         (None, Some(model_limit)) => Some(model_limit),
         (request_limit, None) => request_limit,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    #![allow(clippy::unwrap_used)]
+
+    use super::{
+        clamp_max_tokens, normalize_session_id, resolve_cloud_provider_values,
+        resolve_local_text_model_id,
+    };
+    use crate::models::config::{
+        AiModel, ApiModelConfig, ApiProvider, ModelStats, ModelTier, ProviderType,
+    };
+    use crate::models::custom_models::{CustomModel, CustomModelConfig};
+    use std::collections::HashMap;
+
+    fn provider() -> ApiProvider {
+        ApiProvider {
+            id: "gpt".to_string(),
+            name: "GPT".to_string(),
+            desc_key: None,
+            description: None,
+            icon: None,
+            provider_type: Some(ProviderType::Openai),
+            base_url: Some("https://api.example.test/v1".to_string()),
+            api_key_env: None,
+            models: Some(vec![AiModel {
+                id: "catalog-model".to_string(),
+                desc_key: String::new(),
+                name: "Catalog Model".to_string(),
+                desc: String::new(),
+                tier: ModelTier::Strong,
+                model_size: None,
+                release_date: None,
+                context_window: Some(128_000),
+                max_output_tokens: Some(16_384),
+                pricing: None,
+                stats: ModelStats {
+                    speed: 8,
+                    logic: 9,
+                    creative: 7,
+                },
+                capabilities: None,
+                api_models: Some(ApiModelConfig {
+                    text: Some("provider-text-model".to_string()),
+                    image: None,
+                }),
+            }]),
+            capabilities: Some(vec!["text".to_string()]),
+            model_aliases: Some(HashMap::from([(
+                "ui-model".to_string(),
+                "catalog-model".to_string(),
+            )])),
+        }
+    }
+
+    #[test]
+    fn normalize_session_id_rejects_blank_values() {
+        assert_eq!(normalize_session_id(None), None);
+        assert_eq!(normalize_session_id(Some("")), None);
+        assert_eq!(normalize_session_id(Some("   ")), None);
+    }
+
+    #[test]
+    fn normalize_session_id_trims_valid_values() {
+        assert_eq!(normalize_session_id(Some(" session-1 ")), Some("session-1"));
+    }
+
+    #[test]
+    fn resolve_local_text_model_id_prefers_explicit_model() {
+        assert_eq!(
+            resolve_local_text_model_id("custom-model.gguf", Some("C:/models/default.gguf")),
+            "custom-model.gguf"
+        );
+    }
+
+    #[test]
+    fn resolve_local_text_model_id_uses_model_file_name_for_default_request() {
+        assert_eq!(
+            resolve_local_text_model_id("default", Some("C:/models/chat-model.gguf")),
+            "chat-model.gguf"
+        );
+    }
+
+    #[test]
+    fn resolve_local_text_model_id_uses_default_when_model_is_not_known() {
+        assert_eq!(resolve_local_text_model_id("default", None), "default");
+        assert_eq!(resolve_local_text_model_id("   ", None), "default");
+    }
+
+    #[test]
+    fn clamp_max_tokens_respects_model_limit() {
+        assert_eq!(clamp_max_tokens(Some(4_000), Some(2_000)), Some(2_000));
+        assert_eq!(clamp_max_tokens(Some(1_000), Some(2_000)), Some(1_000));
+        assert_eq!(clamp_max_tokens(None, Some(2_000)), Some(2_000));
+        assert_eq!(clamp_max_tokens(Some(1_000), None), Some(1_000));
+        assert_eq!(clamp_max_tokens(None, None), None);
+    }
+
+    #[test]
+    fn resolve_cloud_provider_values_applies_alias_api_model_and_limit() {
+        let resolution = resolve_cloud_provider_values(
+            "gpt",
+            "ui-model",
+            "https://fallback.test/v1",
+            &provider(),
+            None,
+        );
+
+        assert_eq!(resolution.base_url, "https://api.example.test/v1");
+        assert_eq!(resolution.effective_model, "provider-text-model");
+        assert_eq!(resolution.model_max_tokens, Some(16_384));
+    }
+
+    #[test]
+    fn resolve_cloud_provider_values_keeps_default_base_url_without_provider_url() {
+        let mut provider = provider();
+        provider.base_url = None;
+
+        let resolution = resolve_cloud_provider_values(
+            "gpt",
+            "raw-model",
+            "https://fallback.test/v1",
+            &provider,
+            None,
+        );
+
+        assert_eq!(resolution.base_url, "https://fallback.test/v1");
+        assert_eq!(resolution.effective_model, "raw-model");
+        assert_eq!(resolution.model_max_tokens, None);
+    }
+
+    #[test]
+    fn resolve_cloud_provider_values_applies_custom_model_after_catalog_mapping() {
+        let custom_models = CustomModelConfig {
+            models: vec![CustomModel {
+                id: "provider-text-model".to_string(),
+                name: "Custom".to_string(),
+                provider_id: "gpt".to_string(),
+                base_model_id: "ft:gpt:custom".to_string(),
+                created_at: 1.0,
+            }],
+        };
+
+        let resolution = resolve_cloud_provider_values(
+            "gpt",
+            "ui-model",
+            "https://fallback.test/v1",
+            &provider(),
+            Some(&custom_models),
+        );
+
+        assert_eq!(resolution.effective_model, "ft:gpt:custom");
+        assert_eq!(resolution.model_max_tokens, Some(16_384));
     }
 }

@@ -22,8 +22,8 @@ describe('AISettingsService', () => {
         expect(service.getThinkingLevel('gemini')).toBe('off');
     });
 
-    it('should default llamacpp thinking level to low', () => {
-        expect(service.getThinkingLevel('llamacpp')).toBe('low');
+    it('should not infer thinking defaults from provider ids', () => {
+        expect(service.getThinkingLevel('llamacpp')).toBe('off');
     });
 
     it('should set thinking level', () => {
@@ -55,17 +55,5 @@ describe('AISettingsService', () => {
 
         service.setLocalMaxOutputTokens('llamacpp', 999999);
         expect(service.getLocalMaxOutputTokens('llamacpp')).toBe(32768);
-    });
-
-    it('should get and set AI session ID', () => {
-        expect(service.getAiSessionId()).toBeNull();
-        service.setAiSessionId('sess-123');
-        expect(service.getAiSessionId()).toBe('sess-123');
-    });
-
-    it('should set AI session ID to null', () => {
-        service.setAiSessionId('sess-123');
-        service.setAiSessionId(null);
-        expect(service.getAiSessionId()).toBeNull();
     });
 });

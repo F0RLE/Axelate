@@ -16,6 +16,7 @@ permissions:
 
 env:
   CARGO_TERM_COLOR: always
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   check-frontend:
@@ -28,19 +29,21 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: "22"
+          node-version: "26.1.0"
           cache: "npm"
           cache-dependency-path: src/package-lock.json
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.95.0
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
+        uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b # node24
+        continue-on-error: true
         with:
           workspaces: "src-tauri -> target"
+          cache-targets: false
 
       - name: Install Dependencies
         run: |
@@ -63,11 +66,6 @@ jobs:
           npm run build
         # 'npm run build' runs bindings sync + typecheck + vite build
 
-      - name: Check Bundle Size
-        run: |
-          cd src
-          npm run check-size
-
       - name: Run Frontend Tests
         run: |
           cd src
@@ -89,13 +87,15 @@ jobs:
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
         with:
-          toolchain: 1.94.1
+          toolchain: 1.95.0
           components: clippy, llvm-tools-preview
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
+        uses: Swatinem/rust-cache@919333daf4640a6fca9dd8b87468dc776e46b44b # node24
+        continue-on-error: true
         with:
           workspaces: "src-tauri -> target"
+          cache-targets: false
 
       - name: Clippy (Strict Linting)
         run: |

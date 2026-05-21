@@ -26,9 +26,7 @@ export function prependPathEntries(env, entries) {
     const existing = String(env[pathKey] ?? '')
         .split(path.delimiter)
         .filter(Boolean);
-    const normalized = new Set(
-        existing.map((entry) => (isWindows ? entry.toLowerCase() : entry)),
-    );
+    const normalized = new Set(existing.map((entry) => (isWindows ? entry.toLowerCase() : entry)));
 
     for (const entry of entries) {
         if (!entry || !existsSync(entry)) {
@@ -178,12 +176,7 @@ function findVsDevCmd() {
     const vswhere =
         programFilesX86 === undefined
             ? null
-            : path.join(
-                  programFilesX86,
-                  'Microsoft Visual Studio',
-                  'Installer',
-                  'vswhere.exe',
-              );
+            : path.join(programFilesX86, 'Microsoft Visual Studio', 'Installer', 'vswhere.exe');
 
     if (vswhere && existsSync(vswhere)) {
         const result = spawnSync(

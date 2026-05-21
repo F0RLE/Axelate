@@ -38,11 +38,12 @@ function makeRequest(overrides: Partial<IChatRequest> = {}): IChatRequest {
 describe('AIChatTransport', () => {
     let transport: AIChatTransport;
     let mockCore: ReturnType<typeof createMockCore>;
-    let tracer: Pick<LoggerService, 'info' | 'warn' | 'error'>;
+    let tracer: Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 
     beforeEach(() => {
         vi.useFakeTimers();
         tracer = {
+            debug: vi.fn(),
             info: vi.fn(),
             warn: vi.fn(),
             error: vi.fn(),
@@ -143,9 +144,17 @@ describe('AIChatTransport', () => {
             expect(result).toEqual({ ok: false, error: 'string error' });
         });
 
-        it('should timeout after 90 seconds', async () => {
-            // Invoke never resolves
-            mockCore.tauriProvider.invoke.mockReturnValue(new Promise(() => {}));
+        it('should timeout cloud requests after 90 seconds', async () => {
+            let requestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+                    requestId = (args['request'] as { request_id: string }).request_id;
+                    return new Promise(() => {});
+                },
+            );
 
             const sendPromise = transport.send(makeRequest());
 
@@ -154,6 +163,38 @@ describe('AIChatTransport', () => {
 
             const result = await sendPromise;
             expect(result).toEqual({ ok: false, error: 'AI request timed out' });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId,
+            });
+        });
+
+        it('should keep local text requests alive past the cloud timeout', async () => {
+            let resolveInvoke: (
+                response: Awaited<ReturnType<typeof mockCore.tauriProvider.invoke>>,
+            ) => void = () => {
+                throw new Error('invoke promise was not started');
+            };
+            mockCore.tauriProvider.invoke.mockImplementation((command: string) =>
+                command === 'send_chat_message'
+                    ? new Promise((resolve) => {
+                          resolveInvoke = resolve;
+                      })
+                    : Promise.resolve(true),
+            );
+
+            const sendPromise = transport.send(
+                makeRequest({ provider: 'llamacpp', model: 'model.gguf' }),
+            );
+            vi.advanceTimersByTime(90_001);
+            await Promise.resolve();
+
+            expect(mockCore.tauriProvider.invoke).not.toHaveBeenCalledWith(
+                'cancel_chat_generation',
+                expect.anything(),
+            );
+
+            resolveInvoke({ ok: true, reply: { text: 'local done' } });
+            await expect(sendPromise).resolves.toEqual({ ok: true, text: 'local done' });
         });
 
         it('should extract message from plain error objects', async () => {
@@ -206,6 +247,125 @@ describe('AIChatTransport', () => {
 
             vi.advanceTimersByTime(90_001);
             await firstSend;
+        });
+
+        it('should keep timed-out requests cancellable before clearing active state', async () => {
+            let requestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+
+                    requestId = (args['request'] as { request_id: string }).request_id;
+                    return new Promise(() => {});
+                },
+            );
+
+            const sendPromise = transport.send(makeRequest());
+            vi.advanceTimersByTime(90_001);
+
+            await expect(sendPromise).resolves.toEqual({
+                ok: false,
+                error: 'AI request timed out',
+            });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId,
+            });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((transport as any)._activeChatRequestId).toBeNull();
+        });
+    });
+
+    describe('sendSilent', () => {
+        it('should register its request and cancel stale active work before sending', async () => {
+            let sendCalls = 0;
+            let firstRequestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+
+                    sendCalls += 1;
+                    const request = args['request'] as { request_id: string };
+                    if (sendCalls === 1) {
+                        firstRequestId = request.request_id;
+                        return new Promise(() => {});
+                    }
+                    return Promise.resolve({ ok: true, reply: { text: 'silent' } });
+                },
+            );
+
+            const firstSend = transport.send(makeRequest());
+            await Promise.resolve();
+
+            await expect(transport.sendSilent(makeRequest())).resolves.toEqual({
+                ok: true,
+                text: 'silent',
+            });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId: firstRequestId,
+            });
+
+            vi.advanceTimersByTime(90_001);
+            await firstSend;
+        });
+
+        it('should cancel a timed-out silent cloud request before clearing active state', async () => {
+            let requestId = '';
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (command: string, args: Record<string, unknown>) => {
+                    if (command === 'cancel_chat_generation') {
+                        return Promise.resolve(true);
+                    }
+
+                    requestId = (args['request'] as { request_id: string }).request_id;
+                    return new Promise(() => {});
+                },
+            );
+
+            const sendPromise = transport.sendSilent(makeRequest());
+            vi.advanceTimersByTime(90_001);
+
+            await expect(sendPromise).resolves.toEqual({
+                ok: false,
+                error: 'AI request timed out',
+            });
+            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith('cancel_chat_generation', {
+                requestId,
+            });
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            expect((transport as any)._activeChatRequestId).toBeNull();
+        });
+
+        it('should use the local timeout for silent local prompt preparation', async () => {
+            let resolveInvoke: (
+                response: Awaited<ReturnType<typeof mockCore.tauriProvider.invoke>>,
+            ) => void = () => {
+                throw new Error('invoke promise was not started');
+            };
+            mockCore.tauriProvider.invoke.mockImplementation((command: string) =>
+                command === 'send_chat_message'
+                    ? new Promise((resolve) => {
+                          resolveInvoke = resolve;
+                      })
+                    : Promise.resolve(true),
+            );
+
+            const sendPromise = transport.sendSilent(
+                makeRequest({ provider: 'llamacpp', model: 'model.gguf' }),
+            );
+            vi.advanceTimersByTime(90_001);
+            await Promise.resolve();
+
+            expect(mockCore.tauriProvider.invoke).not.toHaveBeenCalledWith(
+                'cancel_chat_generation',
+                expect.anything(),
+            );
+
+            resolveInvoke({ ok: true, reply: { text: 'prepared' } });
+            await expect(sendPromise).resolves.toEqual({ ok: true, text: 'prepared' });
         });
     });
 
@@ -269,35 +429,6 @@ describe('AIChatTransport', () => {
             await expect(promise).resolves.toEqual({
                 ok: true,
                 images: ['file:///late.png'],
-            });
-        });
-    });
-
-    describe('generateImageBackground', () => {
-        const request = { provider: 'sdcpp', prompt: 'city', model: 'default' } as Parameters<
-            AIChatTransport['generateImageBackground']
-        >[0];
-
-        it('should reject in web mode', async () => {
-            mockCore.tauriProvider.isTauri.mockReturnValue(false);
-            await expect(transport.generateImageBackground(request)).resolves.toEqual({
-                ok: false,
-                error: 'IPC host unavailable',
-            });
-        });
-
-        it('should invoke background generation and normalize errors', async () => {
-            mockCore.tauriProvider.invoke.mockResolvedValueOnce(undefined);
-            await expect(transport.generateImageBackground(request)).resolves.toEqual({ ok: true });
-            expect(mockCore.tauriProvider.invoke).toHaveBeenCalledWith(
-                'generate_image_background',
-                { request },
-            );
-
-            mockCore.tauriProvider.invoke.mockRejectedValueOnce('bg failed');
-            await expect(transport.generateImageBackground(request)).resolves.toEqual({
-                ok: false,
-                error: 'bg failed',
             });
         });
     });
@@ -432,6 +563,62 @@ describe('AIChatTransport', () => {
             expect(listener).toHaveBeenCalledWith('current');
         });
 
+        it('should keep notifying listeners when one stream listener throws', async () => {
+            const failingListener = vi.fn(() => {
+                throw new Error('listener failed');
+            });
+            const healthyListener = vi.fn();
+            invokeMethod(failingListener);
+            invokeMethod(healthyListener);
+            mockCore.tauriProvider.invoke.mockImplementation(
+                (_cmd: string, args: Record<string, unknown>) => {
+                    const chatChannel = args['chatChannel'] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    const channel = args[channelName] as {
+                        onmessage?:
+                            | ((payload: {
+                                  request_id: string;
+                                  message_id: string;
+                                  kind: 'chat_chunk' | 'thought_chunk' | 'done';
+                                  content: string;
+                              }) => void)
+                            | null;
+                    };
+                    const requestId = (args['request'] as { request_id: string }).request_id;
+                    channel.onmessage?.({
+                        request_id: requestId,
+                        message_id: 'msg-1',
+                        kind: channelName === 'chatChannel' ? 'chat_chunk' : 'thought_chunk',
+                        content: 'current',
+                    });
+                    chatChannel.onmessage?.({
+                        request_id: requestId,
+                        message_id: 'msg-1',
+                        kind: 'done',
+                        content: '',
+                    });
+                    return Promise.resolve({ ok: true, reply: { text: 'done' } });
+                },
+            );
+
+            await transport.send(makeRequest());
+
+            expect(failingListener).toHaveBeenCalledWith('current');
+            expect(healthyListener).toHaveBeenCalledWith('current');
+            expect(tracer.error).toHaveBeenCalledWith(
+                '[AIChatTransport] Stream listener failed:',
+                expect.any(Error),
+            );
+        });
+
         it('should NOT forward payload after unsubscribe', async () => {
             const listener = vi.fn();
             const unsub = invokeMethod(listener);
@@ -476,9 +663,11 @@ describe('AIChatTransport', () => {
     // ---------------------------------------------------------- missing branches
     describe('Missing branch cases', () => {
         it('should hit timeout error line (Line 45)', async () => {
-            // Need the timeout to actually reject
-            mockCore.tauriProvider.invoke.mockImplementation(() => {
-                return new Promise(() => {}); // never resolves
+            mockCore.tauriProvider.invoke.mockImplementation((command: string) => {
+                if (command === 'cancel_chat_generation') {
+                    return Promise.resolve(true);
+                }
+                return new Promise(() => {});
             });
 
             // Start send

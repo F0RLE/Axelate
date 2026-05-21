@@ -20,15 +20,11 @@ export async function invokeSafe<T, E = unknown>(
             if (result.status === 'ok') {
                 return { status: 'ok', data: result.data };
             } else {
-                const err = result.error as Record<string, unknown>;
                 return {
                     status: 'error',
                     error: {
-                        code: typeof err['code'] === 'string' ? err['code'] : 'UNKNOWN',
-                        message:
-                            typeof err['message'] === 'string'
-                                ? err['message']
-                                : String(result.error),
+                        code: getInvokeErrorCode(result.error),
+                        message: getInvokeErrorMessage(result.error),
                         details: result.error,
                     },
                 };
@@ -38,8 +34,57 @@ export async function invokeSafe<T, E = unknown>(
         // Handle unexpected errors (e.g. transport)
         return {
             status: 'error',
-            error: { code: 'INVOKE_EXCEPTION', message: String(err), details: err },
+            error: {
+                code: 'INVOKE_EXCEPTION',
+                message: getInvokeErrorMessage(err),
+                details: err,
+            },
         };
+    }
+}
+
+function getInvokeErrorCode(error: unknown): string {
+    if (typeof error === 'object' && error !== null) {
+        const code = (error as Record<string, unknown>)['code'];
+        if (typeof code === 'string') {
+            return code;
+        }
+    }
+
+    return 'UNKNOWN';
+}
+
+function getInvokeErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+
+    if (typeof error === 'string') {
+        return error;
+    }
+
+    if (typeof error === 'object' && error !== null) {
+        const obj = error as Record<string, unknown>;
+        if (typeof obj['message'] === 'string') {
+            return obj['message'];
+        }
+        if ('payload' in obj) {
+            return stringifyInvokeError(obj['payload']);
+        }
+    }
+
+    return stringifyInvokeError(error);
+}
+
+function stringifyInvokeError(error: unknown): string {
+    if (typeof error === 'string') {
+        return error;
+    }
+
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return String(error);
     }
 }
 

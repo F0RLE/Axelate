@@ -63,6 +63,22 @@ export class ConsoleLogNormalizer {
             };
         }
 
+        const plainRuntimeLevelMatch = rawMessage.match(
+            /^(?:(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+)?(TRACE|DEBUG|INFO|WARN|WARNING|ERROR)\s+(?:\[([^\]]+)\]\s+)?([\s\S]+)$/i,
+        );
+        if (plainRuntimeLevelMatch !== null) {
+            const rawTime = plainRuntimeLevelMatch[1] ?? null;
+            const rawLevel = plainRuntimeLevelMatch[2] ?? log.level;
+            const rawScope = plainRuntimeLevelMatch[3]?.trim() ?? null;
+            const rawBody = plainRuntimeLevelMatch[4] ?? rawMessage;
+            return {
+                time: rawTime !== null && rawTime.trim() !== '' ? rawTime.slice(11) : null,
+                level: this._normalizeLevel(rawLevel),
+                scope: rawScope,
+                message: rawBody.trim(),
+            };
+        }
+
         const scopedMatch = rawMessage.match(/^\[([^\]]+)\]\s+([\s\S]+)$/);
         if (scopedMatch !== null) {
             return {

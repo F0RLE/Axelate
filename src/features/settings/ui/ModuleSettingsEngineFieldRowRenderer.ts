@@ -16,7 +16,7 @@ type EngineFieldRowOptions = {
     max?: number;
     isFile?: boolean;
     isImage?: boolean;
-    fileKind?: 'model' | 'vae' | 'llm';
+    fileKind?: 'model';
     description?: string;
     fullWidth?: boolean;
     showInfoButton?: boolean;
@@ -45,7 +45,7 @@ type EngineFieldRowRendererDeps = {
         container: HTMLElement,
         input: HTMLInputElement,
         isImage: boolean,
-        fileKind: 'model' | 'vae' | 'llm',
+        fileKind: 'model',
     ) => void;
     getExtraArgsInfoText: () => string;
     toggleInfoPopover: (
@@ -146,10 +146,7 @@ export class ModuleSettingsEngineFieldRowRenderer {
             extraArgsControl.root.style.cursor = 'pointer';
             extraArgsControl.root.addEventListener('click', (event) => {
                 const target = event.target as Node;
-                if (
-                    target === extraArgsControl.root ||
-                    target === extraArgsControl.root.firstChild
-                ) {
+                if (target === extraArgsControl.root) {
                     event.preventDefault();
                     event.stopPropagation();
                     this._deps.toggleInfoPopover(infoButton, options.appId, options.config);

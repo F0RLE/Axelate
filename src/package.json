@@ -8,7 +8,8 @@
         "bindings:sync": "cargo run --quiet --manifest-path ../src-tauri/Cargo.toml --bin exporter",
         "bindings:check": "cargo run --quiet --manifest-path ../src-tauri/Cargo.toml --bin exporter -- --check",
         "build": "npm run typecheck && npm run build:bundle",
-        "build:bundle": "vite build",
+        "build:bundle": "npm run fonts:subset && vite build",
+        "fonts:subset": "node scripts/subset-cubic11-zh.js",
         "preview": "vite preview",
         "clean": "node --input-type=module -e \"import { rmSync } from 'fs'; rmSync('dist', { recursive: true, force: true });\" && echo Cleaned",
         "check-size": "node scripts/check-size.js",
@@ -27,22 +28,24 @@
         "@commitlint/config-conventional": "^21.0.1",
         "@eslint/js": "^10.0.1",
         "@tauri-apps/cli": "~2.11.1",
-        "@types/node": "^25.7.0",
+        "@types/node": "^25.8.0",
         "@typescript-eslint/eslint-plugin": "^8.59.3",
         "@typescript-eslint/parser": "^8.59.3",
         "@typescript-eslint/utils": "^8.59.3",
         "@vitest/coverage-v8": "^4.1.6",
-        "@vitest/ui": "^4.1.5",
+        "@vitest/ui": "^4.1.6",
         "eslint": "^10.3.0",
         "eslint-config-prettier": "^10.1.8",
+        "fonteditor-core": "^2.6.3",
         "globals": "^17.6.0",
         "jsdom": "^29.1.1",
         "prettier": "^3.8.3",
+        "smol-toml": "^1.6.1",
         "terser": "^5.47.1",
         "typescript": "^6.0.3",
         "typescript-eslint": "^8.59.3",
-        "vite": "^8.0.12",
-        "vitest": "^4.1.5"
+        "vite": "^8.0.13",
+        "vitest": "^4.1.6"
     },
     "dependencies": {
         "@tauri-apps/api": "~2.11.0",
@@ -55,6 +58,6 @@
         "wawoff2": "^2.0.1"
     },
     "engines": {
-        "node": ">=20.0.0"
+        "node": ">=26.1.0"
     }
 }

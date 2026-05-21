@@ -155,6 +155,16 @@ export class WindowUiInteractionController {
     }
 
     private _handleKeydown(e: KeyboardEvent): void {
+        if (e.key === 'Tab') {
+            e.preventDefault();
+            e.stopPropagation();
+            e.stopImmediatePropagation();
+            if (document.activeElement instanceof HTMLElement) {
+                document.activeElement.blur();
+            }
+            return;
+        }
+
         if (
             e.key === 'F12' ||
             (e.ctrlKey &&
@@ -163,6 +173,12 @@ export class WindowUiInteractionController {
         ) {
             e.preventDefault();
             e.stopPropagation();
+            return;
+        }
+
+        if (this._isReloadShortcut(e)) {
+            e.preventDefault();
+            this._deps.runtime.reload();
             return;
         }
 
@@ -177,12 +193,6 @@ export class WindowUiInteractionController {
             this._deps.toggleMaximize().catch(() => {
                 /* ignore */
             });
-            return;
-        }
-
-        if (this._isReloadShortcut(e)) {
-            e.preventDefault();
-            this._deps.runtime.reload();
             return;
         }
 

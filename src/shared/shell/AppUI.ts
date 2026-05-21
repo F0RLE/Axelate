@@ -14,6 +14,7 @@ import { AppUiLifecycleBindings } from './ui/AppUiLifecycleBindings';
 import { AppUiModuleFlow } from './ui/AppUiModuleFlow';
 import { AppUiModuleLifecycle } from './ui/AppUiModuleLifecycle';
 import { AppUiSelectionFlow } from './ui/AppUiSelectionFlow';
+import { closeIntegrationImportDialogs } from './ui/IntegrationImportDialog';
 import { ModalManager } from './ui/ModalManager';
 import { ModuleCardRenderer } from './ui/ModuleCardRenderer';
 import { SkeletonManager } from './ui/SkeletonManager';
@@ -24,6 +25,8 @@ import { type NavigationService } from '@/infrastructure/navigation/NavigationSe
 type AppUIStateDeps = {
     removeSelectedModule: (category: string) => void;
     setSelectedModule: (category: string, moduleData: Partial<IApp>) => void;
+    getIntegrationImportLastDirectory: () => string | null;
+    setIntegrationImportLastDirectory: (path: string | null) => void;
 };
 
 type AppUIDeps = {
@@ -32,6 +35,8 @@ type AppUIDeps = {
     launchApp: (category: string, app: IApp) => Promise<void>;
     openModuleSettings: (app: IApp) => void;
     stopAiProvider: () => void;
+    reloadCatalog: () => Promise<void>;
+    openExternalUrl: (url: string) => Promise<void>;
 };
 
 /**
@@ -42,6 +47,8 @@ type AppUIDeps = {
 // Note: Window interface extensions are defined in core.ts
 
 export class AppUI {
+    private static readonly _urlPattern = /https?:\/\/[^\s<>"')\]]+/iu;
+
     private readonly _chrome: AppUiChrome;
     private readonly _toastManager: ToastManager;
     private readonly _modalManager: ModalManager;
@@ -74,8 +81,6 @@ export class AppUI {
         this._chrome = new AppUiChrome(this._translate, this._deps.tracer);
         this._toastManager = new ToastManager();
         this._cardRenderer = new ModuleCardRenderer({
-            checkInstalled: async (moduleId) =>
-                await this._platformService.checkInstalled(moduleId),
             translate: this._translate,
             tracer: this._deps.tracer,
             openModuleSettings: (app) => {
@@ -96,6 +101,7 @@ export class AppUI {
             removeSelectedModule: (category) => {
                 this._deps.uiState.removeSelectedModule(category);
             },
+            stopSelectedApp: (app, category) => this._platformService.stop(app, category),
             openAppSelection: (category) => this.openAppSelection(category),
             updateMultiSlotBadge: () => this._updateMultiSlotBadge(),
             activateAiSlot: (category, app) => {
@@ -108,7 +114,8 @@ export class AppUI {
             this._cardRenderer,
             async (e, app, category) => await this._handleAppCardClick(e, app, category),
             (capability) => this._selectionState.get(`ai_${capability}`)?.id ?? null,
-            async (app) => await this._platformService.download(app),
+            async (app, category, btn) =>
+                await this._moduleFlow.handleDownloadModule(app, category, btn),
             async (app) => {
                 await this._platformService.cancelDownload(app.id);
             },
@@ -121,6 +128,9 @@ export class AppUI {
             async (app) => {
                 await this._platformService.resumeDownload(app.id);
             },
+            (action) => {
+                void this._moduleFlow.handleIntegrationImport(action);
+            },
         );
         this._moduleFlow = new AppUiModuleFlow({
             platformService: this._platformService,
@@ -128,12 +138,21 @@ export class AppUI {
             modalManager: this._modalManager,
             getCatalogApps: (category) => this._getCatalogApps(category),
             getSelectedAppId: (category) => this._selectionState.get(category)?.id ?? null,
+            getIntegrationImportLastDirectory: () =>
+                this._deps.uiState.getIntegrationImportLastDirectory(),
+            setIntegrationImportLastDirectory: (path) =>
+                this._deps.uiState.setIntegrationImportLastDirectory(path),
             clearModuleCard: (category) => this.clearModuleCard(category),
-            openAppSelection: (category, apps) => this.openAppSelection(category, apps),
             markSlotCardAsInstalled: (card, app) =>
                 this._dashboardSupport.markSlotCardAsInstalled(card, app),
             showToast: (message, type = 'info') => this.showToast(message, type),
             translate: this._translate,
+            reloadCatalog: async () => {
+                await this._deps.reloadCatalog();
+            },
+            openExternalUrl: async (url) => {
+                await this._deps.openExternalUrl(url);
+            },
         });
         this._cardActionFlow = new AppUiCardActionFlow({
             platformService: this._platformService,
@@ -173,7 +192,7 @@ export class AppUI {
             updateModalSelection: (appId) => this._modalManager.updateSelection(appId),
             bumpLaunchSelectionVersion: (category) =>
                 this._moduleLifecycle.bumpLaunchSelectionVersion(category),
-            stopSelectedApp: (app) => this._platformService.stop(app),
+            stopSelectedApp: (app, category) => this._platformService.stop(app, category),
             launchSelectedApp: (category, app, launchSelectionVersion, launchApp) =>
                 this._moduleLifecycle.launchSelectedApp(
                     category,
@@ -191,11 +210,16 @@ export class AppUI {
         });
         this._lifecycleBindings = new AppUiLifecycleBindings({
             eventBus: this._eventBus,
+            onCatalogLoaded: () => {
+                this._reconcileSelectionsWithCatalog();
+                this._refreshOpenServicesSelection();
+            },
             onLanguageChanged: () => {
                 this._modalManager.refreshCurrentSelection();
             },
             onPageChange: ({ pageId }) => {
                 if (pageId !== 'modules' && pageId !== 'page-modules') {
+                    closeIntegrationImportDialogs();
                     this.closeAppSelection();
                 }
             },
@@ -242,7 +266,32 @@ export class AppUI {
         id: string | null = null,
         onClick: (() => void) | null = null,
     ): void {
-        this._toastManager.show(message, type, duration, title, id, onClick);
+        this._toastManager.show(
+            message,
+            type,
+            duration,
+            title,
+            id,
+            onClick ?? this._createLinkToastAction(message),
+        );
+    }
+
+    private _createLinkToastAction(message: string): (() => void) | null {
+        const url = AppUI._extractFirstUrl(message);
+        if (url === null) {
+            return null;
+        }
+
+        return () => {
+            void this._deps.openExternalUrl(url).catch((error: unknown) => {
+                this._deps.tracer.warn(`[AppUI] Failed to open toast link: ${String(error)}`);
+            });
+        };
+    }
+
+    private static _extractFirstUrl(message: string): string | null {
+        const match = AppUI._urlPattern.exec(message);
+        return match?.[0].replace(/[.,!?;:]+$/u, '') ?? null;
     }
 
     // --- Action Feedback ---
@@ -308,7 +357,6 @@ export class AppUI {
         }
 
         this._dashboardSupport.cancelPendingSwitch();
-        this._moduleLifecycle.stopPreviousModule(card, app, category);
         this._dashboardSupport.applySelectedCardState(card, app, category);
         this._selectionState.set(category, app);
         this._updateMultiSlotBadge();
@@ -356,7 +404,7 @@ export class AppUI {
             return;
         }
 
-        void this._platformService.stop(app).catch((err: unknown) => {
+        void this._platformService.stop(app, category).catch((err: unknown) => {
             this._deps.tracer.warn(
                 `[AppUI] Failed to stop removed module ${app.id}: ${String(err)}`,
             );
@@ -404,14 +452,6 @@ export class AppUI {
         await this._moduleFlow.handleDeleteModule(app, category);
     }
 
-    public _onModalDownloadSuccess(btn: HTMLElement | null, app: IApp, category: string): void {
-        this._moduleFlow.onModalDownloadSuccess(btn, app, category);
-    }
-
-    public _onModalDownloadError(btn: HTMLElement | null, err: unknown): void {
-        this._moduleFlow.onModalDownloadError(btn, err);
-    }
-
     private _resolveAppById(appId: string): IApp | undefined {
         for (const selectedApp of this._selectionState.values()) {
             if (selectedApp.id === appId) {
@@ -431,13 +471,51 @@ export class AppUI {
         return this._getCatalogApps(this._dashboardSupport.resolveCatalogCategory(category));
     }
 
-    public _resolveCategoryFromCard(card: HTMLElement): string {
-        const currentCapability = card.dataset['currentCapability'];
-        if (typeof currentCapability === 'string' && currentCapability !== '') {
-            return currentCapability;
+    private _refreshOpenServicesSelection(): void {
+        if (!this._modalManager.isViewingCategory('services')) {
+            return;
         }
 
-        return card.id === 'ai-module-card' ? CategoryKey.AI_TEXT : CategoryKey.SERVICES;
+        this._modalManager.refreshCurrentSelection(
+            this._getCatalogApps('services'),
+            this._selectionState.get('services')?.id ?? null,
+        );
+    }
+
+    private _reconcileSelectionsWithCatalog(): void {
+        this._clearMissingSelection(CategoryKey.AI_TEXT);
+        this._clearMissingSelection(CategoryKey.AI_IMAGE);
+        this._clearMissingSelection(CategoryKey.SERVICES);
+    }
+
+    private _clearMissingSelection(category: string): void {
+        const selectedApp = this._selectionState.get(category);
+        if (selectedApp === undefined) {
+            return;
+        }
+
+        const catalogCategory = this._dashboardSupport.resolveCatalogCategory(category);
+        const stillExists = this._getCatalogApps(catalogCategory).some((app) => {
+            return app.id === selectedApp.id;
+        });
+        if (stillExists) {
+            return;
+        }
+
+        this._deps.tracer.warn(
+            `[AppUI] Selected module disappeared from catalog, clearing ${category}: ${selectedApp.id}`,
+        );
+        const card = this._dashboardSupport.getDashboardCard(category);
+        this._dashboardSupport.cancelPendingSwitch();
+        this._moduleLifecycle.bumpLaunchSelectionVersion(category);
+        this._selectionState.delete(category);
+        if (card instanceof HTMLElement) {
+            this._dashboardSupport.resetCardToEmpty(card);
+        }
+        this._deps.uiState.removeSelectedModule(category);
+        if (this._modalManager.isViewingCategory(catalogCategory)) {
+            this._modalManager.updateSelection(null);
+        }
     }
 
     public getPreferredAiCategory(): 'ai_text' | 'ai_image' {

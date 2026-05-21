@@ -48,7 +48,6 @@ describe('GeneralSettingsRenderer', () => {
                 <button class="nav-btn" data-page="home"></button>
                 <button class="nav-btn" data-page="chat"></button>
                 <button class="nav-btn" data-page="modules"></button>
-                <button class="nav-btn" data-page="marketplace"></button>
                 <button class="nav-btn" data-page="console"></button>
                 <button class="nav-btn" data-page="downloads"></button>
             </div>
@@ -123,6 +122,12 @@ describe('GeneralSettingsRenderer', () => {
         expect(
             document.querySelector('#sidebar .nav-btn[data-page="chat"]')?.getAttribute('tabindex'),
         ).toBe('-1');
+        expect(chatButton.querySelector<HTMLElement>('.toggle-label')?.dataset['i18n']).toBe(
+            'ui.launcher.web.chat',
+        );
+        expect(chatButton.querySelector<HTMLElement>('.toggle-label')?.textContent).toBe(
+            't:ui.launcher.web.chat:Chat',
+        );
 
         const gpuMonitor = document.querySelector(
             '#monitor-toggles .monitor-toggle-btn[data-monitor-id="gpu"]',
@@ -236,7 +241,7 @@ describe('GeneralSettingsRenderer', () => {
             t: (_key: string, fallback: string) => `ignored:${fallback}`,
         } as never);
 
-        expect(document.querySelectorAll('#taskbar-toggles .monitor-toggle-btn')).toHaveLength(6);
+        expect(document.querySelectorAll('#taskbar-toggles .monitor-toggle-btn')).toHaveLength(5);
         expect(ResizeObserverMock.instances).toHaveLength(2);
 
         const taskbar = document.getElementById('taskbar-toggles') as HTMLElement;

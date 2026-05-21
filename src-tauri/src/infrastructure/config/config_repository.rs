@@ -1,6 +1,7 @@
 use crate::domain::system::config_repository::ConfigRepository;
 use crate::errors::AppError;
 use crate::models::config::{AiModel, ApiProvider, AppMeta, ModuleItem};
+use crate::models::custom_models::CustomModelConfig;
 use std::path::{Path, PathBuf};
 use tauri::AppHandle;
 
@@ -71,21 +72,26 @@ impl FileConfigRepository {
             .map_err(|e| AppError::Config(format!("Failed to parse {filename}: {e}")))
     }
 
-    fn parse_api_providers(content: &str) -> Result<Vec<ApiProvider>, AppError> {
-        let raw: serde_json::Value = serde_json::from_str(content)
-            .map_err(|e| AppError::Config(format!("Failed to parse api_providers.json: {e}")))?;
-        let providers = raw.as_array().ok_or_else(|| {
-            AppError::Config("Failed to parse api_providers.json: expected array".to_string())
-        })?;
-
-        let mut parsed_providers = Vec::with_capacity(providers.len());
-        for (index, provider) in providers.iter().cloned().enumerate() {
-            if let Some(parsed) = Self::parse_api_provider(provider, index) {
-                parsed_providers.push(parsed);
+    fn load_custom_models_from_path(path: &Path) -> Result<CustomModelConfig, AppError> {
+        let content = match std::fs::read_to_string(path) {
+            Ok(content) => content,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                return Ok(CustomModelConfig::default());
             }
-        }
+            Err(error) => {
+                return Err(AppError::Io(format!(
+                    "Failed to read custom models config at {}: {error}",
+                    path.display()
+                )));
+            }
+        };
 
-        Ok(parsed_providers)
+        serde_json::from_str(&content).map_err(|error| {
+            AppError::Serialization(format!(
+                "Failed to parse custom models config at {}: {error}",
+                path.display()
+            ))
+        })
     }
 
     fn load_api_provider_directory(root: &Path) -> Result<Vec<ApiProvider>, AppError> {
@@ -213,15 +219,15 @@ impl ConfigRepository for FileConfigRepository {
                 return Ok(providers);
             }
 
-            tracing::warn!(
-                "No API providers loaded from {}, trying legacy api_providers.json",
+            return Err(AppError::Config(format!(
+                "No API providers loaded from {}",
                 root.display()
-            );
+            )));
         }
 
-        let content = Self::load_file_content("api_providers.json", "[]");
-
-        Self::parse_api_providers(&content)
+        Err(AppError::Config(
+            "API provider directory not found".to_string(),
+        ))
     }
 
     fn load_local_modules(&self) -> Result<Vec<ModuleItem>, AppError> {
@@ -231,18 +237,9 @@ impl ConfigRepository for FileConfigRepository {
         )
     }
 
-    fn load_custom_models(
-        &self,
-    ) -> Result<crate::models::custom_models::CustomModelConfig, AppError> {
+    fn load_custom_models(&self) -> Result<CustomModelConfig, AppError> {
         let custom_path = crate::utils::paths::CONFIG_DIR.join("custom_models.json");
-        if custom_path.exists() {
-            if let Ok(content) = std::fs::read_to_string(&custom_path) {
-                if let Ok(config) = serde_json::from_str(&content) {
-                    return Ok(config);
-                }
-            }
-        }
-        Ok(crate::models::custom_models::CustomModelConfig::default())
+        Self::load_custom_models_from_path(&custom_path)
     }
 }
 
@@ -251,63 +248,93 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::FileConfigRepository;
+    use crate::errors::AppError;
     use std::path::PathBuf;
 
     #[test]
     fn api_provider_parser_skips_invalid_models_without_dropping_catalog() -> Result<(), String> {
-        let providers = FileConfigRepository::parse_api_providers(
+        let provider = FileConfigRepository::parse_api_provider_file(
             r#"
-            [
-                {
-                    "id": "broken-provider",
-                    "name": "Broken Provider",
-                    "type": "api",
-                    "models": [
-                        {
-                            "id": "good-model",
-                            "name": "Good Model",
-                            "desc": "Valid model",
-                            "tier": "medium",
-                            "stats": { "speed": 8, "logic": 8, "creative": 6 }
-                        },
-                        {
-                            "id": "bad-model",
-                            "name": "Bad Model",
-                            "desc": "Invalid tier should not break the catalog",
-                            "tier": "invalid",
-                            "stats": { "speed": 8, "logic": 8, "creative": 6 }
-                        }
-                    ]
-                },
-                {
-                    "id": "healthy-provider",
-                    "name": "Healthy Provider",
-                    "type": "api",
-                    "models": []
-                }
-            ]
+            {
+                "id": "broken-provider",
+                "name": "Broken Provider",
+                "type": "api",
+                "models": [
+                    {
+                        "id": "good-model",
+                        "name": "Good Model",
+                        "desc": "Valid model",
+                        "tier": "medium",
+                        "stats": { "speed": 8, "logic": 8, "creative": 6 }
+                    },
+                    {
+                        "id": "bad-model",
+                        "name": "Bad Model",
+                        "desc": "Invalid tier should not break the catalog",
+                        "tier": "invalid",
+                        "stats": { "speed": 8, "logic": 8, "creative": 6 }
+                    }
+                ]
+            }
             "#,
+            PathBuf::from("broken-provider.json").as_path(),
         )
-        .expect("provider list should parse");
+        .ok_or_else(|| "provider should parse".to_string())?;
 
-        assert_eq!(providers.len(), 2);
-        let broken_provider = providers
-            .first()
-            .ok_or_else(|| "broken provider".to_string())?;
-        assert_eq!(broken_provider.id, "broken-provider");
-        let models = broken_provider
+        assert_eq!(provider.id, "broken-provider");
+        let models = provider
             .models
             .as_ref()
             .ok_or_else(|| "models".to_string())?;
         assert_eq!(models.len(), 1);
         let model = models.first().ok_or_else(|| "model".to_string())?;
         assert_eq!(model.id, "good-model");
-
-        let healthy_provider = providers
-            .get(1)
-            .ok_or_else(|| "healthy provider".to_string())?;
-        assert_eq!(healthy_provider.id, "healthy-provider");
         Ok(())
+    }
+
+    #[test]
+    fn api_provider_directory_loads_multiple_provider_files() {
+        let temp = tempfile::tempdir().expect("temp dir");
+        let text_dir = temp.path().join("text");
+        let image_dir = temp.path().join("image");
+        std::fs::create_dir_all(&text_dir).expect("text dir");
+        std::fs::create_dir_all(&image_dir).expect("image dir");
+
+        std::fs::write(
+            text_dir.join("first.json"),
+            r#"{
+                "id": "first-provider",
+                "name": "First Provider",
+                "type": "api",
+                "models": []
+            }"#,
+        )
+        .expect("first provider");
+        std::fs::write(
+            image_dir.join("second.json"),
+            r#"{
+                "id": "second-provider",
+                "name": "Second Provider",
+                "type": "api",
+                "models": []
+            }"#,
+        )
+        .expect("second provider");
+
+        let providers =
+            FileConfigRepository::load_api_provider_directory(temp.path()).expect("providers");
+
+        assert_eq!(providers.len(), 2);
+        assert!(
+            providers
+                .iter()
+                .any(|provider| provider.id == "first-provider")
+        );
+        assert!(
+            providers
+                .iter()
+                .any(|provider| provider.id == "second-provider")
+        );
     }
 
     #[test]
@@ -385,5 +412,53 @@ mod tests {
                 capabilities.iter().any(|capability| capability == "image")
             })
         }));
+    }
+
+    #[test]
+    fn custom_models_loader_defaults_only_when_file_is_missing() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let missing_path = temp_dir.path().join("custom_models.json");
+
+        let config = FileConfigRepository::load_custom_models_from_path(&missing_path)
+            .expect("missing custom models should default");
+
+        assert!(config.models.is_empty());
+    }
+
+    #[test]
+    fn custom_models_loader_parses_valid_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let path = temp_dir.path().join("custom_models.json");
+        std::fs::write(
+            &path,
+            r#"{"models":[{"id":"custom-1","name":"Custom One","provider_id":"gpt","base_model_id":"gpt-4.1","created_at":1712345678.0}]}"#,
+        )
+        .expect("valid custom models fixture");
+
+        let config = FileConfigRepository::load_custom_models_from_path(&path)
+            .expect("valid custom models should parse");
+
+        let model = config.models.first().expect("written custom model");
+        assert_eq!(config.models.len(), 1);
+        assert_eq!(model.id, "custom-1");
+        assert_eq!(model.name, "Custom One");
+        assert_eq!(model.provider_id, "gpt");
+        assert_eq!(model.base_model_id, "gpt-4.1");
+        assert!((model.created_at - 1_712_345_678.0).abs() < f64::EPSILON);
+    }
+
+    #[test]
+    fn custom_models_loader_reports_invalid_json() {
+        let temp_dir = tempfile::tempdir().expect("temp dir");
+        let path = temp_dir.path().join("custom_models.json");
+        std::fs::write(&path, "{broken").expect("broken custom models fixture");
+
+        let error = FileConfigRepository::load_custom_models_from_path(&path)
+            .expect_err("invalid custom models should not default");
+
+        assert!(matches!(
+            error,
+            AppError::Serialization(message) if message.contains("custom_models.json")
+        ));
     }
 }

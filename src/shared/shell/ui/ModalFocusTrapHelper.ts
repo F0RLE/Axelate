@@ -16,37 +16,13 @@ export class ModalFocusTrapHelper {
     };
 
     public readonly handleModalKeydown = (event: KeyboardEvent): void => {
-        if (event.key !== 'Tab' || this._modal === null) {
+        if (event.key !== 'Tab') {
             return;
         }
 
-        const focusable = this.getFocusableElements(this._modal);
-        if (focusable.length === 0) {
-            event.preventDefault();
-            this._modal.focus();
-            return;
-        }
-
-        const first = focusable[0];
-        const last = focusable[focusable.length - 1];
-        if (first === undefined || last === undefined) {
-            event.preventDefault();
-            this._modal.focus();
-            return;
-        }
-
-        const active = document.activeElement;
-        if (event.shiftKey) {
-            if (active === first || active === this._modal) {
-                event.preventDefault();
-                last.focus();
-            }
-            return;
-        }
-
-        if (active === last) {
-            event.preventDefault();
-            first.focus();
+        event.preventDefault();
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
         }
     };
 
@@ -60,7 +36,9 @@ export class ModalFocusTrapHelper {
             return;
         }
 
-        this.focusFirstElement(this._modal);
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
     };
 
     public attach(modal: HTMLDialogElement): void {
@@ -88,15 +66,11 @@ export class ModalFocusTrapHelper {
     }
 
     public focusFirstElement(modal: HTMLDialogElement): void {
-        const focusable = this.getFocusableElements(modal);
-        const preferred = focusable.find((element) => !element.classList.contains('app-close-btn'));
-        const target = preferred ?? focusable[0];
-        if (target !== undefined) {
-            target.focus();
-            return;
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
         }
 
-        modal.focus();
+        modal.blur();
     }
 
     public getFocusableElements(root: HTMLElement): HTMLElement[] {

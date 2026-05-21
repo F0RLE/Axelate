@@ -1,69 +1,17 @@
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
-use crate::errors::AppError;
-
+use super::engine_profile::minimum_context_size;
 use super::types::{EngineComputeMode, EngineConfig};
 
-fn is_qwen_model(model_path: Option<&str>) -> bool {
-    model_path.is_some_and(|path| path.to_ascii_lowercase().contains("qwen"))
-}
-
-fn is_qwen_image_model(model_path: Option<&str>) -> bool {
-    model_path.is_some_and(|path| {
-        let normalized = path.replace('\\', "/").to_ascii_lowercase();
-        normalized.contains("qwen-image") || normalized.contains("qwen_image")
-    })
-}
-
-fn has_arg(args: &[String], candidates: &[&str]) -> bool {
-    args.iter().any(|arg| {
-        candidates.iter().any(|candidate| {
-            arg == candidate
-                || arg
-                    .strip_prefix(candidate)
-                    .is_some_and(|suffix| suffix.starts_with('='))
-        })
-    })
-}
-
-fn push_arg_if_missing(
-    args: &mut Vec<String>,
-    existing_args: &[String],
-    candidates: &[&str],
-    value: Option<&str>,
-) {
-    if has_arg(args, candidates) || has_arg(existing_args, candidates) {
-        return;
-    }
-
-    let Some(candidate) = candidates.first() else {
-        return;
-    };
-
-    args.push((*candidate).to_string());
-    if let Some(value) = value {
-        args.push(value.to_string());
-    }
-}
-
-fn extract_arg_value(args: &[String], candidates: &[&str]) -> Option<String> {
-    for (index, arg) in args.iter().enumerate() {
-        for candidate in candidates {
-            if arg == candidate {
-                if let Some(value) = args.get(index + 1) {
-                    return Some(value.clone());
-                }
-            }
-
-            let prefix = format!("{candidate}=");
-            if let Some(value) = arg.strip_prefix(&prefix) {
-                return Some(value.to_string());
-            }
-        }
-    }
-
-    None
-}
+const SDCPP_UNSUPPORTED_FLAGS: [&str; 4] = [
+    "--diffusion-on-cpu",
+    "--vae-on-gpu",
+    "--clip-on-gpu",
+    "--control-net-on-gpu",
+];
+const SDCPP_SERVER_UNSUPPORTED_FLAGS: [&str; 3] =
+    ["--preview", "--preview-path", "--preview-interval"];
+const SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG: &str = "--sdcpp-preview";
 
 fn push_llamacpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
     match config.compute_mode {
@@ -80,117 +28,127 @@ fn push_llamacpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
     }
 }
 
+fn push_sdcpp_compute_args(args: &mut Vec<String>, config: &EngineConfig) {
+    match config.compute_mode {
+        EngineComputeMode::Gpu => {}
+        EngineComputeMode::Cpu => {
+            args.push("--clip-on-cpu".to_string());
+            args.push("--vae-on-cpu".to_string());
+        }
+    }
+}
+
+fn sdcpp_extra_args(config: &EngineConfig) -> Vec<String> {
+    let unsupported_flags = SDCPP_UNSUPPORTED_FLAGS
+        .iter()
+        .chain(SDCPP_SERVER_UNSUPPORTED_FLAGS.iter())
+        .copied()
+        .chain(std::iter::once(SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG))
+        .collect::<Vec<_>>();
+    let mut filtered = Vec::new();
+    let mut index = 0;
+
+    while let Some(arg) = config.extra_args.get(index) {
+        let should_skip = unsupported_flags.iter().any(|flag| {
+            arg.as_str() == *flag
+                || arg
+                    .strip_prefix(flag)
+                    .is_some_and(|suffix| suffix.starts_with('='))
+        });
+
+        if should_skip {
+            let skip_value = unsupported_flags.contains(&arg.as_str())
+                && config
+                    .extra_args
+                    .get(index + 1)
+                    .is_some_and(|next| !next.starts_with('-'));
+            index += if skip_value { 2 } else { 1 };
+            continue;
+        }
+
+        filtered.push(arg.clone());
+        index += 1;
+    }
+
+    filtered
+}
+
 /// Resolves the explicit stable-diffusion.cpp preview output path from extra arguments.
 pub fn resolve_sdcpp_preview_path(extra_args: &[String]) -> Option<PathBuf> {
-    extract_arg_value(extra_args, &["--preview-path"]).map(PathBuf::from)
-}
-
-pub(super) fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
-    extract_arg_value(extra_args, &["--preview"])
-        .is_none_or(|value| !value.trim().eq_ignore_ascii_case("none"))
-}
-
-fn find_companion_model_file(
-    model_path: &Path,
-    stems: &[&str],
-    extensions: &[&str],
-) -> Option<String> {
-    let model_dir = model_path.parent()?;
-    let mut entries = std::fs::read_dir(model_dir)
-        .ok()?
-        .flatten()
-        .collect::<Vec<_>>();
-    entries.sort_by_key(std::fs::DirEntry::file_name);
-
-    for entry in entries {
-        let path = entry.path();
-        if !path.is_file() {
-            continue;
+    let mut index = 0;
+    while let Some(arg) = extra_args.get(index) {
+        if let Some(path) = arg
+            .strip_prefix(SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG)
+            .and_then(|suffix| suffix.strip_prefix('='))
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+        {
+            return Some(PathBuf::from(path));
         }
 
-        let file_name = path.file_name()?.to_string_lossy().to_ascii_lowercase();
-        let extension = path.extension()?.to_string_lossy().to_ascii_lowercase();
-
-        if extensions.iter().all(|candidate| extension != *candidate) {
-            continue;
+        if arg == SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG
+            && let Some(path) = extra_args
+                .get(index + 1)
+                .map(String::as_str)
+                .map(str::trim)
+                .filter(|value| !value.is_empty() && !value.starts_with('-'))
+        {
+            return Some(PathBuf::from(path));
         }
 
-        if stems.iter().any(|stem| file_name.contains(stem)) {
-            return Some(path.to_string_lossy().to_string());
-        }
+        index += 1;
     }
 
     None
 }
 
-fn resolve_qwen_image_support_file(
-    model_path: &Path,
-    extra_args: &[String],
-    arg_names: &[&str],
-    stems: &[&str],
-    extensions: &[&str],
-) -> Option<String> {
-    extract_arg_value(extra_args, arg_names)
-        .or_else(|| find_companion_model_file(model_path, stems, extensions))
+pub(super) fn sdcpp_preview_enabled(extra_args: &[String]) -> bool {
+    resolve_sdcpp_preview_path(extra_args).is_some()
+        || extra_args.iter().any(|arg| {
+            arg == SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG
+                || arg
+                    .strip_prefix(SDCPP_LAUNCHER_ONLY_PREVIEW_FLAG)
+                    .is_some_and(|suffix| suffix.starts_with('='))
+        })
 }
 
-fn qwen_image_requirements_error(model_path: &str) -> AppError {
-    AppError::Validation(format!(
-        "Qwen Image model '{model_path}' needs companion files for stable-diffusion.cpp. Place 'qwen_image_vae.safetensors' and 'Qwen2.5-VL-7B-Instruct*.gguf' next to the selected model, or pass '--vae' and '--llm' in Extra Arguments."
-    ))
+fn build_generic_engine_args(config: &EngineConfig, port: u16) -> Vec<String> {
+    let mut args = vec!["--port".to_string(), port.to_string()];
+    if let Some(model_path) = config.model_path.as_deref() {
+        args.push("--model".to_string());
+        args.push(model_path.to_string());
+    }
+    args.extend(config.extra_args.clone());
+    args
 }
 
-pub(super) fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Result<Vec<String>, AppError> {
+pub(super) fn build_engine_args(config: &EngineConfig, port: u16) -> Vec<String> {
+    match config.engine_id.as_str() {
+        "llamacpp" => build_llamacpp_args(config, port),
+        "sdcpp" => build_sdcpp_args(config, port),
+        _ => build_generic_engine_args(config, port),
+    }
+}
+
+fn build_sdcpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
     let mut args = vec!["--listen-port".to_string(), port.to_string()];
+    let extra_args = sdcpp_extra_args(config);
+    push_sdcpp_compute_args(&mut args, config);
 
     if let Some(model_path) = config.model_path.as_deref() {
-        if is_qwen_image_model(Some(model_path)) {
-            let model_path_buf = Path::new(model_path);
-            let vae_path = resolve_qwen_image_support_file(
-                model_path_buf,
-                &config.extra_args,
-                &["--vae"],
-                &["qwen_image_vae", "qwen-image-vae"],
-                &["safetensors"],
-            );
-            let llm_path = resolve_qwen_image_support_file(
-                model_path_buf,
-                &config.extra_args,
-                &["--llm"],
-                &["qwen2.5-vl", "qwen2_5_vl", "qwen25-vl", "qwen25_vl"],
-                &["gguf"],
-            );
-
-            if vae_path.is_none() || llm_path.is_none() {
-                return Err(qwen_image_requirements_error(model_path));
-            }
-
-            args.push("--diffusion-model".to_string());
-            args.push(model_path.to_string());
-            push_arg_if_missing(
-                &mut args,
-                &config.extra_args,
-                &["--vae"],
-                vae_path.as_deref(),
-            );
-            push_arg_if_missing(
-                &mut args,
-                &config.extra_args,
-                &["--llm"],
-                llm_path.as_deref(),
-            );
-        } else {
-            args.push("--model".to_string());
-            args.push(model_path.to_string());
-        }
+        args.push("--model".to_string());
+        args.push(model_path.to_string());
     }
 
-    args.extend(config.extra_args.clone());
-    Ok(args)
+    args.extend(extra_args);
+    args
 }
 
-pub(super) fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
-    let effective_context_size = config.context_size.max(4096);
+fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<String> {
+    let effective_context_size = minimum_context_size(&config.engine_id)
+        .map_or(config.context_size, |min_context_size| {
+            config.context_size.max(min_context_size)
+        });
     let mut args = vec![
         "--port".to_string(),
         port.to_string(),
@@ -198,31 +156,10 @@ pub(super) fn build_llamacpp_args(config: &EngineConfig, port: u16) -> Vec<Strin
         effective_context_size.to_string(),
     ];
     push_llamacpp_compute_args(&mut args, config);
-
-    push_arg_if_missing(
-        &mut args,
-        &config.extra_args,
-        &["--parallel", "-np"],
-        Some("1"),
-    );
-    push_arg_if_missing(
-        &mut args,
-        &config.extra_args,
-        &["--reasoning", "-rea"],
-        Some("off"),
-    );
-
-    if is_qwen_model(config.model_path.as_deref()) {
-        push_arg_if_missing(&mut args, &config.extra_args, &["--jinja"], None);
-        push_arg_if_missing(
-            &mut args,
-            &config.extra_args,
-            &["--reasoning-format"],
-            Some("deepseek"),
-        );
-        push_arg_if_missing(&mut args, &config.extra_args, &["--no-context-shift"], None);
-        push_arg_if_missing(&mut args, &config.extra_args, &["--flash-attn"], Some("on"));
+    if let Some(model_path) = config.model_path.as_deref() {
+        args.push("--model".to_string());
+        args.push(model_path.to_string());
     }
-
+    args.extend(config.extra_args.clone());
     args
 }

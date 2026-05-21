@@ -105,23 +105,25 @@ describe('MonitoringService', () => {
         expect(mockUnlisten).toHaveBeenCalled();
     });
 
-    it('should start fallback polling when not in Tauri', async () => {
+    it('should not poll when event transport is unavailable outside Tauri', async () => {
         vi.mocked(mockTauri.isTauri).mockReturnValue(false);
         vi.useFakeTimers();
         vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
         await service.startMonitoring();
-
-        // Fast-forward time to trigger interval
         await vi.advanceTimersByTimeAsync(2100);
 
-        expect(mockTauri.invoke).toHaveBeenCalledWith('get_system_stats');
+        expect(mockTauri.invoke).not.toHaveBeenCalled();
+        expect(tracer.warn).toHaveBeenCalledWith(
+            '[MonitoringService] Event transport unavailable outside Tauri',
+        );
 
         vi.useRealTimers();
     });
 
     it('should stop polling on stopMonitoring', async () => {
-        vi.mocked(mockTauri.isTauri).mockReturnValue(false);
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+        vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
         vi.useFakeTimers();
         const clearTimeoutSpy = vi.spyOn(globalThis, 'clearTimeout');
 
@@ -196,8 +198,9 @@ describe('MonitoringService', () => {
         expect((service as unknown as { listeners: unknown[] }).listeners).toHaveLength(1);
     });
 
-    it('should handle invoke error in fallback polling', async () => {
-        vi.mocked(mockTauri.isTauri).mockReturnValue(false);
+    it('should handle invoke error in polling after event subscription fails', async () => {
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+        vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
         vi.useFakeTimers();
 
         vi.mocked(mockTauri.invoke).mockRejectedValue(new Error('Network error'));
@@ -215,13 +218,14 @@ describe('MonitoringService', () => {
 
         await service.startMonitoring();
         await vi.advanceTimersByTimeAsync(2100);
-        expect(mockTauri.invoke).toHaveBeenCalledWith('get_system_stats');
+        expect(mockTauri.invoke).not.toHaveBeenCalled();
 
         vi.useRealTimers();
     });
 
     it('should clear pollingInterval via stopMonitoring (L82)', async () => {
-        vi.mocked(mockTauri.isTauri).mockReturnValue(false);
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+        vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
         vi.useFakeTimers();
         vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
@@ -233,7 +237,8 @@ describe('MonitoringService', () => {
     });
 
     it('should not start fallback twice if already polling (L118)', async () => {
-        vi.mocked(mockTauri.isTauri).mockReturnValue(false);
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+        vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
         vi.useFakeTimers();
         vi.mocked(mockTauri.invoke).mockResolvedValue(mockStats);
 
@@ -245,7 +250,8 @@ describe('MonitoringService', () => {
     });
 
     it('should handle failed invoke response in fallback (L118-125)', async () => {
-        vi.mocked(mockTauri.isTauri).mockReturnValue(false);
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+        vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
         vi.useFakeTimers();
 
         vi.mocked(mockTauri.invoke).mockRejectedValue(new Error('Backend unavailable'));
@@ -257,6 +263,32 @@ describe('MonitoringService', () => {
         await vi.advanceTimersByTimeAsync(2100);
 
         // Subscriber should not have been called with stats
+        expect(subscriber).not.toHaveBeenCalled();
+        vi.useRealTimers();
+    });
+
+    it('should not notify subscribers from an in-flight fallback poll after stop', async () => {
+        vi.mocked(mockTauri.isTauri).mockReturnValue(true);
+        vi.mocked(mockTauri.listen).mockRejectedValue(new Error('Listen fail'));
+        vi.useFakeTimers();
+
+        let resolveStats: ((value: ISystemStats) => void) | undefined;
+        vi.mocked(mockTauri.invoke).mockImplementation(
+            () =>
+                new Promise<ISystemStats>((resolve) => {
+                    resolveStats = resolve;
+                }),
+        );
+
+        const subscriber = vi.fn();
+        service.subscribe(subscriber);
+        await service.startMonitoring();
+        await vi.advanceTimersByTimeAsync(2100);
+
+        service.stopMonitoring();
+        resolveStats?.(mockStats);
+        await Promise.resolve();
+
         expect(subscriber).not.toHaveBeenCalled();
         vi.useRealTimers();
     });

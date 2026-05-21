@@ -3,7 +3,6 @@ import { ChatAttachmentRenderer } from './ChatAttachmentRenderer';
 import { extractErrorMessage, safeExtractText } from './ChatContentFormatter';
 import { createChatImageGenerationMessage } from './ChatImageGenerationMessage';
 import { ChatImageController } from './ChatImageController';
-import { ChatInputContextMenu } from './ChatInputContextMenu';
 import { configureChatMarkdown } from './ChatMarkdown';
 import { ChatMessageInteractionController } from './ChatMessageInteractionController';
 import { ChatMessageRenderer } from './ChatMessageRenderer';
@@ -40,7 +39,6 @@ type ChatUIDeps = {
     isTauriRuntime: () => boolean;
     openExternalUrl: (url: string) => Promise<void>;
     copyText: (text: string) => Promise<void>;
-    readClipboardText: () => Promise<string | null>;
     tracer: Pick<LoggerService, 'warn' | 'error' | 'debug'>;
 };
 
@@ -67,7 +65,6 @@ export class ChatUI {
     private _attachmentRenderVersion = 0;
     private readonly _attachmentRenderer: ChatAttachmentRenderer;
     private readonly _imageController: ChatImageController;
-    private readonly _inputContextMenu: ChatInputContextMenu;
     private readonly _messageInteractionController: ChatMessageInteractionController;
     private readonly _messageRenderer: ChatMessageRenderer;
     private readonly _typingController: ChatTypingController;
@@ -100,25 +97,6 @@ export class ChatUI {
                 this.showToast(message, type);
             },
             translate: this._translate,
-            tracer: deps.tracer,
-        });
-        this._inputContextMenu = new ChatInputContextMenu({
-            translate: this._translate,
-            copyText: (text) => deps.copyText(text),
-            readClipboardText: () => deps.readClipboardText(),
-            canPaste: () => {
-                const browserGlobals = globalThis as unknown as {
-                    navigator?: {
-                        clipboard?: {
-                            readText?: unknown;
-                        };
-                    };
-                };
-                return (
-                    deps.isTauriRuntime() ||
-                    typeof browserGlobals.navigator?.clipboard?.readText === 'function'
-                );
-            },
             tracer: deps.tracer,
         });
         this._attachmentRenderer = new ChatAttachmentRenderer({
@@ -174,7 +152,6 @@ export class ChatUI {
         if (this._isInitialized || this._isDestroyed) return;
         this._isInitialized = true;
         document.addEventListener('click', this._boundDocumentClick);
-        this._inputContextMenu.bind(this._dom.chatInput);
         await this._retryStatusListener.bind();
     }
 
@@ -184,7 +161,6 @@ export class ChatUI {
         this._isInitialized = false;
 
         document.removeEventListener('click', this._boundDocumentClick);
-        this._inputContextMenu.destroy();
         this._retryStatusListener.destroy();
         this._imageController.destroy();
         this._attachmentRenderer.revokeAttachmentObjectUrls();
@@ -235,17 +211,26 @@ export class ChatUI {
     ): void {
         this._prepareContainer();
 
+        const rawImages = opts['images'];
+        const primaryImage = this._getPrimaryImage(rawImages);
+        const isSingleAssistantImage =
+            role === 'assistant' && Array.isArray(rawImages) && rawImages.length === 1;
+        if (isSingleAssistantImage && primaryImage !== null) {
+            const handle = this.createImageGenerationMessage();
+            handle.finalize({
+                text: safeExtractText(content, this._translate),
+                images: rawImages as ChatImagePayload[],
+            });
+            return;
+        }
+
         const row = document.createElement('div');
         row.className = `chat-row ${role === 'user' ? 'user' : 'bot'}`;
 
         const safeContent = safeExtractText(content, this._translate);
 
         const bubble = this._createMessageBubble(opts);
-        const actions = this._appendMessageActions(
-            safeContent,
-            role,
-            this._getPrimaryImage(opts['images']),
-        );
+        const actions = this._appendMessageActions(safeContent, role, primaryImage);
         const textNode = this._createMessageTextNode(safeContent, opts);
         bubble.appendChild(textNode);
 
@@ -307,16 +292,14 @@ export class ChatUI {
         });
     }
 
-    public createImageGenerationMessage(opts: {
-        onCancel: () => void | Promise<void>;
-    }): ImageGenerationMessageHandle {
+    public createImageGenerationMessage(): ImageGenerationMessageHandle {
         this._prepareContainer();
         return createChatImageGenerationMessage({
-            opts,
             translate: this._translate,
             isDestroyed: () => this._isDestroyed,
             tracer: this._deps.tracer,
             scrollToBottom: (sticky) => this._scrollToBottom(sticky),
+            isNearBottom: () => this._isNearBottom(),
             appendRow: (row) => {
                 this._dom.messagesContainer?.appendChild(row);
             },
@@ -338,6 +321,10 @@ export class ChatUI {
 
     private _scrollToBottom(sticky = false): void {
         this._viewportController.scrollToBottom(this._dom.messagesContainer, sticky);
+    }
+
+    private _isNearBottom(): boolean {
+        return this._viewportController.isNearBottom(this._dom.messagesContainer);
     }
 
     public revealLatestMessage(): void {

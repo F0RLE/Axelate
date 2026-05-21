@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { ModalFocusTrapHelper } from './ModalFocusTrapHelper';
 
 describe('ModalFocusTrapHelper', () => {
-    it('should keep focus inside modal and close on overlay click', () => {
+    it('should disable tab focus movement and close on overlay click', () => {
         const onClose = vi.fn();
         const helper = new ModalFocusTrapHelper(onClose);
         const modal = document.createElement('dialog');
@@ -18,17 +18,17 @@ describe('ModalFocusTrapHelper', () => {
 
         helper.attach(modal);
         helper.focusFirstElement(modal);
-        expect(document.activeElement).toBe(first);
+        expect(document.activeElement).toBe(document.body);
 
         last.focus();
-        helper.handleModalKeydown(
-            new KeyboardEvent('keydown', {
-                key: 'Tab',
-                bubbles: true,
-                cancelable: true,
-            }),
-        );
-        expect(document.activeElement).toBe(first);
+        const tabEvent = new KeyboardEvent('keydown', {
+            key: 'Tab',
+            bubbles: true,
+            cancelable: true,
+        });
+        helper.handleModalKeydown(tabEvent);
+        expect(tabEvent.defaultPrevented).toBe(true);
+        expect(document.activeElement).toBe(document.body);
 
         outside.focus();
         const focusInEvent = new FocusEvent('focusin', { bubbles: true });
@@ -37,7 +37,7 @@ describe('ModalFocusTrapHelper', () => {
             value: outside,
         });
         helper.handleFocusIn(focusInEvent);
-        expect(document.activeElement).toBe(first);
+        expect(document.activeElement).toBe(document.body);
 
         helper.attachOverlayOnly(modal);
         modal.dispatchEvent(new MouseEvent('click', { bubbles: true }));
@@ -47,7 +47,7 @@ describe('ModalFocusTrapHelper', () => {
         document.body.innerHTML = '';
     });
 
-    it('should prefer content controls over close buttons for initial modal focus', () => {
+    it('should not focus modal controls on open', () => {
         const helper = new ModalFocusTrapHelper(vi.fn());
         const modal = document.createElement('dialog');
         const closeButton = document.createElement('button');
@@ -61,7 +61,7 @@ describe('ModalFocusTrapHelper', () => {
 
         helper.focusFirstElement(modal);
 
-        expect(document.activeElement).toBe(actionButton);
+        expect(document.activeElement).toBe(document.body);
 
         helper.detach();
         document.body.innerHTML = '';

@@ -4,7 +4,7 @@ import type { ISystemStats, StatsCallback } from '../types/monitoringTypes';
 
 type MonitoringLogger = Pick<LoggerService, 'info' | 'debug' | 'error' | 'warn'>;
 
-const FALLBACK_MONITORING_POLL_INTERVAL_MS = 2000;
+const MONITORING_POLL_INTERVAL_MS = 2000;
 
 export class MonitoringService {
     private isListening = false;
@@ -19,7 +19,7 @@ export class MonitoringService {
     ) {}
 
     /**
-     * Starts listening to system stats or falls back to bridge polling.
+     * Starts listening to system stats.
      */
     public async startMonitoring(): Promise<void> {
         if (this.isListening) return;
@@ -55,11 +55,11 @@ export class MonitoringService {
                     return;
                 }
                 this._tracer.error('[MonitoringService] Failed to listen to events:', e);
-                this.startFallback();
+                this.startPolling(lifecycleToken);
             }
         } else {
-            this._tracer.warn('[MonitoringService] Event transport unavailable, starting polling');
-            this.startFallback();
+            this._tracer.warn('[MonitoringService] Event transport unavailable outside Tauri');
+            this.stopMonitoring();
         }
     }
 
@@ -110,30 +110,36 @@ export class MonitoringService {
         });
     }
 
-    private startFallback(): void {
+    private startPolling(lifecycleToken: number): void {
         if (this.pollingTimeout !== null) {
             return;
         }
 
         const poll = (): void => {
             this.pollingTimeout = globalThis.setTimeout(() => {
-                void this._pollFallbackStats().finally(() => {
+                void this._pollStats(lifecycleToken).finally(() => {
                     this.pollingTimeout = null;
-                    if (this.isListening) {
+                    if (this.isListening && lifecycleToken === this._lifecycleToken) {
                         poll();
                     }
                 });
-            }, FALLBACK_MONITORING_POLL_INTERVAL_MS);
+            }, MONITORING_POLL_INTERVAL_MS);
         };
 
         poll();
     }
 
-    private async _pollFallbackStats(): Promise<void> {
+    private async _pollStats(lifecycleToken: number): Promise<void> {
         try {
             const stats = await this._tauri.invoke<ISystemStats>('get_system_stats');
+            if (!this.isListening || lifecycleToken !== this._lifecycleToken) {
+                return;
+            }
             this.notifyListeners(stats);
         } catch (e) {
+            if (!this.isListening || lifecycleToken !== this._lifecycleToken) {
+                return;
+            }
             this._tracer.warn('[MonitoringService] Poll failed', e);
         }
     }

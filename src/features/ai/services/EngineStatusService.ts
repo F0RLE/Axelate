@@ -1,7 +1,8 @@
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { EngineStatusContext } from './AIBridgeContext';
+import { escapeCssSelectorValue } from '@/shared/utils/cssSelectors';
 
-type EngineStatusLogger = Pick<LoggerService, 'info' | 'error'>;
+type EngineStatusLogger = Pick<LoggerService, 'debug' | 'info' | 'error'>;
 
 type EngineState = 'idle' | 'starting' | 'swapping' | 'ready' | 'error';
 type BackendEngineState =
@@ -49,6 +50,7 @@ export class EngineStatusService {
     private readonly _unlisteners: (() => void)[] = [];
     private _domObserver: MutationObserver | null = null;
     private _domSyncFrame: number | null = null;
+    private _refreshGeneration = 0;
     private _initialized = false;
 
     public constructor(private readonly _tracer: EngineStatusLogger) {}
@@ -70,6 +72,7 @@ export class EngineStatusService {
         }
         if (this._context?.tauriProvider.isTauri() !== true) return;
 
+        this._refreshGeneration += 1;
         this._unlisteners.push(
             this._listen<EngineSwappingPayload>('ai:engine:swapping', (payload) => {
                 this._tracer.info(`[EngineStatus] Swapping from ${payload.from} to ${payload.to}`);
@@ -100,21 +103,19 @@ export class EngineStatusService {
             }),
         );
 
-        this._tracer.info('[EngineStatusService] Listening for engine events');
+        this._tracer.debug('[EngineStatusService] Listening for engine events');
         this._initialized = true;
         this._startDomSyncObserver();
         void this.refreshFromBackend();
     }
 
     public destroy(): void {
+        this._refreshGeneration += 1;
         this._unlisteners.forEach((fn) => fn());
         this._unlisteners.length = 0;
         this._domObserver?.disconnect();
         this._domObserver = null;
-        if (this._domSyncFrame !== null) {
-            cancelAnimationFrame(this._domSyncFrame);
-            this._domSyncFrame = null;
-        }
+        this._cancelDomSyncFrame();
         this._activeSlots.clear();
         this._initialized = false;
     }
@@ -153,11 +154,18 @@ export class EngineStatusService {
             return;
         }
 
+        const refreshGeneration = this._refreshGeneration;
         try {
             const state =
                 await this._context.tauriProvider.invoke<BackendEngineState>('get_engine_state');
+            if (refreshGeneration !== this._refreshGeneration) {
+                return;
+            }
             this._applyBackendState(state);
         } catch (error) {
+            if (refreshGeneration !== this._refreshGeneration) {
+                return;
+            }
             this._tracer.error('[EngineStatusService] Failed to refresh engine state:', error);
         }
     }
@@ -173,7 +181,7 @@ export class EngineStatusService {
 
     /** Updates all cards matching `engineId` with the given state class. */
     private _setCardState(engineId: string, state: EngineState): void {
-        const escapedEngineId = this._escapeSelectorValue(engineId);
+        const escapedEngineId = escapeCssSelectorValue(engineId);
         const cards = document.querySelectorAll<HTMLElement>(`[data-app-id="${escapedEngineId}"]`);
 
         cards.forEach((card) => {
@@ -187,7 +195,7 @@ export class EngineStatusService {
     }
 
     private _setDashboardCardState(engineId: string, state: EngineState): void {
-        const escapedEngineId = this._escapeSelectorValue(engineId);
+        const escapedEngineId = escapeCssSelectorValue(engineId);
         const cards = document.querySelectorAll<HTMLElement>(
             `[data-current-module="${escapedEngineId}"]`,
         );
@@ -204,6 +212,8 @@ export class EngineStatusService {
 
     private _startDomSyncObserver(): void {
         this._domObserver?.disconnect();
+        this._cancelDomSyncFrame();
+
         this._domObserver = new MutationObserver((records) => {
             if (this._retargetDomSyncObserver(records)) {
                 this._scheduleDomSync();
@@ -214,13 +224,14 @@ export class EngineStatusService {
                 this._scheduleDomSync();
             }
         });
-        const target = this._getDomSyncTarget();
-        this._domObserver.observe(target, {
+        const observeOptions: MutationObserverInit = {
             childList: true,
             subtree: true,
             attributes: true,
             attributeFilter: ['data-app-id', 'data-current-module'],
-        });
+        };
+        const target = this._getDomSyncTarget();
+        this._domObserver.observe(target, observeOptions);
     }
 
     private _getDomSyncTarget(): HTMLElement {
@@ -289,22 +300,31 @@ export class EngineStatusService {
         return element.hasAttribute('data-app-id') || element.hasAttribute('data-current-module');
     }
 
-    private _scheduleDomSync(): void {
-        if (this._domSyncFrame !== null) {
-            return;
-        }
-
-        this._domSyncFrame = requestAnimationFrame(() => {
-            this._domSyncFrame = null;
-            this._applyActiveStatesToDom();
-        });
-    }
-
     private _applyActiveStatesToDom(): void {
         this._activeSlots.forEach((_endpoint, engineId) => {
             this._setCardState(engineId, 'ready');
             this._setDashboardCardState(engineId, 'ready');
         });
+    }
+
+    private _scheduleDomSync(): void {
+        if (this._domSyncFrame !== null) {
+            return;
+        }
+
+        this._domSyncFrame = globalThis.requestAnimationFrame(() => {
+            this._domSyncFrame = null;
+            this._applyActiveStatesToDom();
+        });
+    }
+
+    private _cancelDomSyncFrame(): void {
+        if (this._domSyncFrame === null) {
+            return;
+        }
+
+        globalThis.cancelAnimationFrame(this._domSyncFrame);
+        this._domSyncFrame = null;
     }
 
     private _applyBackendState(state: BackendEngineState): void {
@@ -360,24 +380,35 @@ export class EngineStatusService {
         activeIds.forEach((engineId) => {
             this.setEngineState(engineId, 'idle');
         });
-        document.querySelectorAll<HTMLElement>('.app-card, .module-slot-card').forEach((card) => {
-            this._resetCardClasses(card);
-            card.classList.add('engine-idle');
-            card.classList.remove('module-running');
-            if (card.classList.contains('module-slot-card')) {
-                card.classList.add('module-stopped');
-                card.dataset['runtimeStatus'] = 'idle';
-            }
-        });
+        document
+            .querySelectorAll<HTMLElement>(
+                [
+                    '[data-app-id]',
+                    '[data-current-module]',
+                    '.engine-idle',
+                    '.engine-starting',
+                    '.engine-swapping',
+                    '.engine-ready',
+                    '.engine-error',
+                ].join(', '),
+            )
+            .forEach((card) => {
+                if (!this._isEngineBoundCard(card)) {
+                    return;
+                }
+
+                this._resetCardClasses(card);
+                card.classList.add('engine-idle');
+                card.classList.remove('module-running');
+                if (card.dataset['currentModule'] !== undefined) {
+                    card.classList.add('module-stopped');
+                    card.dataset['runtimeStatus'] = 'idle';
+                }
+            });
     }
 
-    private _escapeSelectorValue(value: string): string {
-        const cssApi = (globalThis as { CSS?: { escape?: (selector: string) => string } }).CSS;
-        if (typeof cssApi?.escape === 'function') {
-            return cssApi.escape(value);
-        }
-
-        return value.replace(/["\\]/gu, '\\$&');
+    private _isEngineBoundCard(card: HTMLElement): boolean {
+        return card.dataset['appId'] !== undefined || card.dataset['currentModule'] !== undefined;
     }
 
     private _resetCardClasses(card: HTMLElement): void {

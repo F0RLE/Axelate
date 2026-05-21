@@ -63,6 +63,7 @@ export class DownloadUI {
             (moduleId) => {
                 this._stateController.delete(moduleId);
                 this._renderDownloadStateList();
+                this._renderPrimaryDownloadState();
             },
         );
         this._eventController = new DownloadUiEventController(this._createEventControllerDeps());
@@ -358,21 +359,20 @@ export class DownloadUI {
         this.renderDownloadsProgress(progress);
     }
 
-    private _refreshTranslations(): void {
-        this._renderDownloadStateList();
-
+    private _renderPrimaryDownloadState(): void {
         const firstEntry = this._stateController.getPrimaryEntry();
-
         if (firstEntry === undefined) {
             this.renderDownloadsProgress({ hasActive: false });
             return;
         }
 
-        const [moduleId, firstDownload] = firstEntry;
+        const [moduleId, state] = firstEntry;
+        this._renderProgressFromModuleState(moduleId, state);
+    }
 
-        this.renderDownloadsProgress({
-            ...this._presenter.buildProgressFromModuleState(moduleId, firstDownload),
-        });
+    private _refreshTranslations(): void {
+        this._renderDownloadStateList();
+        this._renderPrimaryDownloadState();
     }
 
     /**

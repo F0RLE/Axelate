@@ -2,18 +2,18 @@ import DOMPurify from 'dompurify';
 import { marked } from 'marked';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { TTranslateFunction } from '@/shared/types/global_bridge_types';
+import type { ChatTranslateFunction } from './ChatUiTypes';
+import {
+    buildSafeImageDataUrl,
+    normalizeImagePayload,
+    type ChatImagePayload,
+} from './ChatImagePayload';
 
 type ChatMessageRendererLogger = Pick<LoggerService, 'error' | 'debug'>;
 
-type ChatImagePayload = {
-    mime: string;
-    data_base64: string;
-};
-
 type ChatMessageRendererDeps = {
     onImageLoad: () => void;
-    translate: TTranslateFunction;
+    translate: ChatTranslateFunction;
     tracer: ChatMessageRendererLogger;
 };
 
@@ -37,7 +37,7 @@ export class ChatMessageRenderer {
                 typeof (item as { mime?: unknown }).mime === 'string',
         ) as ChatImagePayload | undefined;
 
-        return candidate ?? null;
+        return candidate === undefined ? null : normalizeImagePayload(candidate);
     }
 
     public extractImageFromBubble(bubble: HTMLElement): ChatImagePayload | null {
@@ -56,7 +56,7 @@ export class ChatMessageRenderer {
             return null;
         }
 
-        return { mime, data_base64 };
+        return normalizeImagePayload({ mime, data_base64 });
     }
 
     public createMessageTextNode(content: string, opts: Record<string, unknown>): HTMLElement {
@@ -93,7 +93,7 @@ export class ChatMessageRenderer {
 
         images.forEach((img) => {
             try {
-                const imageDataUrl = this._buildImageDataUrl(img);
+                const imageDataUrl = buildSafeImageDataUrl(img);
                 if (imageDataUrl === null) return;
 
                 const wrapper = document.createElement('div');
@@ -170,15 +170,5 @@ export class ChatMessageRenderer {
         ]
             .filter((className) => className !== '')
             .join(' ');
-    }
-
-    private _buildImageDataUrl(image: ChatImagePayload): string | null {
-        const mime = image.mime || 'image/png';
-        const base64 = image.data_base64 || '';
-        if (base64 === '') {
-            return null;
-        }
-
-        return `data:${mime};base64,${base64}`;
     }
 }

@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { CatalogService } from './CatalogService';
 import type { IModule } from '@/shared/types/coreTypes';
-import { FALLBACK_CONFIG } from '@/shared/config/catalog_fallback';
 import {
     createCatalogHarness,
     createMockAppConfig,
@@ -78,7 +77,7 @@ describe('CatalogService', () => {
             expect(app?.type).toBe('local');
         });
 
-        it('should fallback to FALLBACK_CONFIG if config is empty or invalid', async () => {
+        it('should keep an explicitly empty catalog empty', async () => {
             const invalidConfig = createMockAppConfig();
 
             setupBridgeMocks(mockBridge, invalidConfig);
@@ -87,9 +86,8 @@ describe('CatalogService', () => {
 
             const catalog = service.getCatalog();
 
-            // Should be hydrated from fallback source
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
-            expect(catalog.ai[0]?.id).toBe(FALLBACK_CONFIG.catalog.ai[0]?.id);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
         });
 
         it('should inject apiProviderData for API modules', async () => {
@@ -133,8 +131,7 @@ describe('CatalogService', () => {
         });
     });
 
-    // ---------------------------------------------------------- getCatalogCategory fallback (lines 39-40)
-    describe('getCatalogCategory fallback', () => {
+    describe('getCatalogCategory defaults', () => {
         it('should return empty array for unknown category', () => {
             // getCatalogCategory is now on GlobalBridge, not CatalogService
             // Test service-level method instead
@@ -161,8 +158,7 @@ describe('CatalogService', () => {
         });
     });
 
-    // ---------------------------------------------------------- invoke fallback
-    describe('bridge fallback', () => {
+    describe('bridge failure handling', () => {
         it('should load config through bridge even when isTauri=false', async () => {
             const mockConfig = createMockAppConfig({
                 catalog: { ai: [{ id: 'fetched-ai', name: 'Fetched AI' }], services: [] },
@@ -178,36 +174,57 @@ describe('CatalogService', () => {
             expect(mockBridge.invoke).toHaveBeenCalledWith('get_config');
         });
 
-        it('should fallback to FALLBACK_CONFIG when bridge returns null config', async () => {
+        it('should use an empty catalog when bridge returns null config', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             setupBridgeMocks(mockBridge, null);
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
         });
 
-        it('should fallback when bridge throws', async () => {
+        it('should use an empty catalog when bridge throws', async () => {
             mockBridge.isTauri.mockReturnValue(false);
             mockBridge.invoke.mockRejectedValue(new Error('Bridge error'));
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
+        });
+
+        it('should use an empty catalog when bridge returns malformed catalog shape', async () => {
+            setupBridgeMocks(
+                mockBridge,
+                createMockAppConfig({
+                    catalog: { ai: null, services: undefined },
+                    apiProviders: null,
+                }),
+            );
+
+            await service.loadCatalog();
+
+            const catalog = service.getCatalog();
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
+            expect(globalThis.dispatchEvent).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'catalog-loaded' }),
+            );
         });
     });
 
-    // ---------------------------------------------------------- _ensureValidConfig null config (lines 278-279)
     describe('_ensureValidConfig null config', () => {
-        it('should use FALLBACK_CONFIG when bridge invoke returns null', async () => {
+        it('should use an empty catalog when bridge invoke returns null', async () => {
             setupBridgeMocks(mockBridge, null);
 
             await service.loadCatalog();
 
             const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(FALLBACK_CONFIG.catalog.ai.length);
+            expect(catalog.ai).toHaveLength(0);
+            expect(catalog.services).toHaveLength(0);
         });
     });
 
@@ -232,8 +249,7 @@ describe('CatalogService', () => {
         });
     });
 
-    // ---------------------------------------------------------- _ensureFallbacks api-type (L193)
-    describe('_ensureFallbacks api-type branch (L193)', () => {
+    describe('catalog hydration', () => {
         it('should mark api-type apps as installed=true', async () => {
             const config = createMockAppConfig({
                 catalog: {
@@ -318,6 +334,85 @@ describe('CatalogService', () => {
             expect(service.getCatalog().services.some((app) => app.id === integration?.id)).toBe(
                 true,
             );
+        });
+
+        it('should reload catalog when backend reports integration folder changes', async () => {
+            const config = createMockAppConfig({
+                catalog: {
+                    ai: [],
+                    services: [{ id: 'catalog-anchor', name: 'Catalog Anchor', type: 'local' }],
+                    stars: [],
+                },
+            });
+            const firstModules = [
+                {
+                    id: 'parser',
+                    name: 'Parser',
+                    description: 'Parser integration',
+                    version: '1.0.0',
+                    icon: '🤖',
+                } as unknown as IModule,
+            ];
+            const secondModules: IModule[] = [];
+            const listener = { integrationsChanged: null as null | (() => void) };
+            let moduleListCalls = 0;
+
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.listen.mockImplementation((event: string, callback: () => void) => {
+                if (event === 'integrations_changed') {
+                    listener.integrationsChanged = callback;
+                }
+                return Promise.resolve(() => {});
+            });
+            mockBridge.invoke.mockImplementation((cmd: string) => {
+                if (cmd === 'get_config') return Promise.resolve(config);
+                if (cmd === 'get_engine_definitions') return Promise.resolve([]);
+                if (cmd === 'get_modules') {
+                    moduleListCalls += 1;
+                    return Promise.resolve(moduleListCalls === 1 ? firstModules : secondModules);
+                }
+                return Promise.resolve(undefined);
+            });
+
+            await service.loadCatalog();
+            await Promise.resolve();
+            expect(service.getAppById('parser')).toBeDefined();
+
+            if (listener.integrationsChanged === null) {
+                throw new Error('integrations_changed listener was not registered');
+            }
+            listener.integrationsChanged();
+            await Promise.resolve();
+            await Promise.resolve();
+            await Promise.resolve();
+            await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+
+            expect(moduleListCalls).toBe(2);
+            expect(service.getAppById('parser')).toBeUndefined();
+            expect(mockBridge.listen).toHaveBeenCalledTimes(1);
+        });
+
+        it('should unsubscribe the integration watcher if destroy runs while binding is pending', async () => {
+            let resolveListen: (unlisten: () => void) => void = () => {
+                throw new Error('listen promise was not started');
+            };
+            const unlisten = vi.fn();
+
+            setupBridgeMocks(mockBridge, createMockAppConfig());
+            mockBridge.isTauri.mockReturnValue(true);
+            mockBridge.listen.mockReturnValue(
+                new Promise((resolve) => {
+                    resolveListen = resolve;
+                }),
+            );
+
+            const loadPromise = service.loadCatalog();
+            service.destroy();
+            resolveListen(unlisten);
+            await loadPromise;
+            await Promise.resolve();
+
+            expect(unlisten).toHaveBeenCalledTimes(1);
         });
     });
 

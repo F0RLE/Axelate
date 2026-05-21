@@ -21,6 +21,7 @@ type ModuleSettingsControllerFactoryDeps = {
     debouncedSave: (key: string, value: SettingValue) => void;
     notifySettingsChanged: () => void;
     showSaveIndicator: () => void;
+    showSaveErrorIndicator: () => void;
     hideSaveIndicator: () => void;
     showDirtyIndicator: () => void;
 };
@@ -53,6 +54,9 @@ export class ModuleSettingsControllerFactory {
             },
             showSaveIndicator: () => {
                 this._deps.showSaveIndicator();
+            },
+            showSaveErrorIndicator: () => {
+                this._deps.showSaveErrorIndicator();
             },
             tracer: this._deps.tracer,
         });

@@ -730,10 +730,13 @@ describe('DownloadUI', () => {
             );
 
             const list = document.getElementById('downloads-dynamic-list');
-            const cancelBtn = list?.querySelector('.download-cancel-btn');
+            const cancelBtn =
+                list?.querySelector<HTMLButtonElement>('.download-cancel-btn') ?? null;
             expect(cancelBtn).not.toBeNull();
+            expect(cancelBtn?.type).toBe('button');
+            expect(cancelBtn?.querySelector('use')?.getAttribute('href')).toBe('#icon-trash');
 
-            if (cancelBtn !== null) (cancelBtn as HTMLElement).click();
+            if (cancelBtn !== null) cancelBtn.click();
             expect(cancelFn).toHaveBeenCalledWith('mod-cancel');
         });
 
@@ -753,10 +756,12 @@ describe('DownloadUI', () => {
             );
 
             const list = document.getElementById('downloads-dynamic-list');
-            const pauseBtn = list?.querySelector('.download-pause-btn');
+            const pauseBtn = list?.querySelector<HTMLButtonElement>('.download-pause-btn') ?? null;
             expect(pauseBtn).not.toBeNull();
+            expect(pauseBtn?.type).toBe('button');
+            expect(pauseBtn?.querySelector('use')?.getAttribute('href')).toBe('#icon-pause');
 
-            if (pauseBtn !== null) (pauseBtn as HTMLElement).click();
+            if (pauseBtn !== null) pauseBtn.click();
             expect(pauseFn).toHaveBeenCalledWith('mod-pause');
         });
 
@@ -857,6 +862,53 @@ describe('DownloadUI', () => {
             expect(list?.querySelectorAll('.download-item-card').length).toBe(0);
         });
 
+        it('should return downloads layout to empty state after final cleanup', () => {
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-final',
+                        progress: 0.4,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            expect(
+                document
+                    .getElementById('downloads-container')
+                    ?.classList.contains('active-download'),
+            ).toBe(true);
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-final',
+                        progress: 1,
+                        status: 'complete',
+                    },
+                }),
+            );
+
+            vi.advanceTimersByTime(2100);
+
+            expect(
+                document
+                    .getElementById('downloads-container')
+                    ?.classList.contains('active-download'),
+            ).toBe(false);
+            expect(
+                document.getElementById('downloads-body')?.classList.contains('empty-state'),
+            ).toBe(true);
+            expect(
+                document.getElementById('downloads-empty-text')?.classList.contains('hidden'),
+            ).toBe(false);
+            expect(document.getElementById('downloads-item-label')?.textContent).toBe(
+                'No active downloads',
+            );
+        });
+
         it('should cancel stale terminal cleanup when the same module restarts downloading', () => {
             ui.init();
 
@@ -892,6 +944,38 @@ describe('DownloadUI', () => {
 
             expect(card).not.toBeNull();
             expect(card?.querySelector('.downloads-status-pill')?.textContent).toBe('Downloading');
+        });
+
+        it('should patch existing download cards for module ids that need selector escaping', () => {
+            ui.init();
+            const moduleId = 'mod"quoted\\id';
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: moduleId,
+                        progress: 0.2,
+                        status: 'downloading',
+                    },
+                }),
+            );
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: moduleId,
+                        progress: 0.6,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const cards = list?.querySelectorAll('.download-item-card');
+            expect(cards?.length).toBe(1);
+            expect(cards?.[0]?.getAttribute('data-module-id')).toBe(moduleId);
+            expect(cards?.[0]?.querySelector('.downloads-progress-percent')?.textContent).toBe(
+                '60%',
+            );
         });
 
         it('should render error status card', () => {

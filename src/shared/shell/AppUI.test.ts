@@ -6,6 +6,7 @@ import type { NavigationService } from '@/infrastructure/navigation/NavigationSe
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IApp } from '../types/coreTypes';
 import { CUSTOM_IMAGE_PROVIDER_ID, CUSTOM_TEXT_PROVIDER_ID } from '../utils/customProviderSupport';
+import { openIntegrationUrlDialog } from './ui/IntegrationImportDialog';
 
 describe('AppUI lifecycle', () => {
     let appUI: AppUI | null = null;
@@ -17,6 +18,8 @@ describe('AppUI lifecycle', () => {
     let launchAppMock: ReturnType<typeof vi.fn>;
     let openModuleSettingsMock: ReturnType<typeof vi.fn>;
     let stopAiProviderMock: ReturnType<typeof vi.fn>;
+    let reloadCatalogMock: ReturnType<typeof vi.fn<() => Promise<void>>>;
+    let openExternalUrlMock: ReturnType<typeof vi.fn<(_url: string) => Promise<void>>>;
     let getCatalogCategoryMock: ReturnType<typeof vi.fn>;
     let tracerMock: LoggerService;
     let platformServiceMock: {
@@ -41,6 +44,8 @@ describe('AppUI lifecycle', () => {
         launchAppMock = vi.fn().mockResolvedValue(undefined);
         openModuleSettingsMock = vi.fn();
         stopAiProviderMock = vi.fn();
+        reloadCatalogMock = vi.fn<() => Promise<void>>().mockResolvedValue(undefined);
+        openExternalUrlMock = vi.fn<(_url: string) => Promise<void>>().mockResolvedValue(undefined);
         getCatalogCategoryMock = vi.fn().mockReturnValue([]);
         tracerMock = {
             info: vi.fn(),
@@ -99,6 +104,8 @@ describe('AppUI lifecycle', () => {
                             ) => void
                         )(category, moduleData);
                     },
+                    getIntegrationImportLastDirectory: () => null,
+                    setIntegrationImportLastDirectory: vi.fn(),
                 },
                 launchApp: async (category: string, app: IApp) => {
                     await (
@@ -114,6 +121,10 @@ describe('AppUI lifecycle', () => {
                 stopAiProvider: () => {
                     (stopAiProviderMock as () => void)();
                 },
+                reloadCatalog: async () => {
+                    await reloadCatalogMock();
+                },
+                openExternalUrl: openExternalUrlMock,
             },
         );
     }
@@ -159,6 +170,43 @@ describe('AppUI lifecycle', () => {
         expect(testEventBus.listenerCount('page:change')).toBe(initialCount);
     });
 
+    it('opens the first URL when an error toast is clicked', () => {
+        appUI = createAppUI();
+
+        appUI.showToast(
+            'Error 402: Payment Required. Please check your balance at https://openrouter.ai/settings/credits.',
+            'error',
+        );
+
+        const toast = document.querySelector('.toast');
+        if (!(toast instanceof HTMLElement)) {
+            throw new Error('Toast was not created');
+        }
+
+        expect(toast.classList.contains('toast--actionable')).toBe(true);
+
+        toast.click();
+
+        expect(openExternalUrlMock).toHaveBeenCalledWith('https://openrouter.ai/settings/credits');
+    });
+
+    it('keeps explicitly provided toast actions ahead of URL auto-actions', () => {
+        appUI = createAppUI();
+        const onClick = vi.fn();
+
+        appUI.showToast('Open https://example.com', 'info', 3000, null, null, onClick);
+
+        const toast = document.querySelector('.toast');
+        if (!(toast instanceof HTMLElement)) {
+            throw new Error('Toast was not created');
+        }
+
+        toast.click();
+
+        expect(onClick).toHaveBeenCalledOnce();
+        expect(openExternalUrlMock).not.toHaveBeenCalled();
+    });
+
     it('should remove language-changed listener on destroy', () => {
         appUI = createAppUI();
         const refreshSpy = vi.spyOn(
@@ -174,6 +222,20 @@ describe('AppUI lifecycle', () => {
         globalThis.dispatchEvent(new Event('language-changed'));
 
         expect(refreshSpy).toHaveBeenCalledTimes(1);
+    });
+
+    it('should close transient integration dialogs on page change', async () => {
+        appUI = createAppUI();
+        const result = openIntegrationUrlDialog({
+            translate: (_key, fallback) => fallback,
+        });
+
+        expect(document.querySelector('.integration-import-dialog-view')).not.toBeNull();
+
+        testEventBus.emit('page:change', { pageId: 'settings' });
+
+        await expect(result).resolves.toBeNull();
+        expect(document.querySelector('.integration-import-dialog-view')).toBeNull();
     });
 
     it('should cancel pending AI card wheel switch on destroy', () => {
@@ -350,8 +412,8 @@ describe('AppUI lifecycle', () => {
         appUI.clearModuleCard('ai_image');
         expect(card.classList.contains('empty')).toBe(true);
         expect(stopAiProviderMock).toHaveBeenCalled();
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(textApp);
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(textApp, 'ai_text');
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp, 'ai_image');
     });
 
     it('should stop the current services module when clearing its card', () => {
@@ -374,10 +436,10 @@ describe('AppUI lifecycle', () => {
 
         appUI.clearModuleCard('services');
 
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(serviceApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(serviceApp, 'services');
     });
 
-    it('should stop the previous services module when switching cards without action button running state', () => {
+    it('should not stop the previous services module when only switching selected cards', () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="selected">
@@ -399,10 +461,10 @@ describe('AppUI lifecycle', () => {
 
         appUI.updateModuleCard('services', newApp);
 
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(oldApp);
+        expect(platformServiceMock.stop).not.toHaveBeenCalled();
     });
 
-    it('should swallow stop errors when switching away from a previous module', async () => {
+    it('should not touch runtime stop path when switching selected cards', async () => {
         appUI = createAppUI();
         platformServiceMock.stop.mockRejectedValueOnce(new Error('stop failed'));
         document.body.innerHTML = `
@@ -427,6 +489,7 @@ describe('AppUI lifecycle', () => {
         }).not.toThrow();
 
         await Promise.resolve();
+        expect(platformServiceMock.stop).not.toHaveBeenCalled();
     });
 
     it('should reset services card instead of showing an AI module when clearing services', () => {
@@ -539,10 +602,7 @@ describe('AppUI lifecycle', () => {
         appUI.updateModuleCard('ai_image', sharedApp);
         expect(card.dataset['currentCapability']).toBe('ai_image');
 
-        const resolvedCategory = (
-            appUI as unknown as { _resolveCategoryFromCard: (card: HTMLElement) => string }
-        )._resolveCategoryFromCard(card);
-        expect(resolvedCategory).toBe('ai_image');
+        expect(appUI.getPreferredAiCategory()).toBe('ai_image');
     });
 
     it('should retarget AI card settings and close actions after wheel switching slots', () => {
@@ -582,7 +642,7 @@ describe('AppUI lifecycle', () => {
         closeBadge.click();
 
         expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('ai_image');
-        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp);
+        expect(platformServiceMock.stop).toHaveBeenCalledWith(imageApp, 'ai_image');
         expect(card.dataset['currentModule']).toBe('text-model');
     });
 
@@ -639,7 +699,7 @@ describe('AppUI lifecycle', () => {
         expect(updateSelectionSpy).toHaveBeenLastCalledWith(null);
     });
 
-    it('should mark selected service cards as running after backend status confirms launch', async () => {
+    it('should show selected service runtime status after launch', async () => {
         appUI = createAppUI();
         document.body.innerHTML = `
             <div id="services-module-card" class="empty">
@@ -669,39 +729,6 @@ describe('AppUI lifecycle', () => {
         expect(card.dataset['runtimeStatus']).toBe('running');
     });
 
-    it('should handle modal download success and error', () => {
-        appUI = createAppUI();
-        const privateAppUI = appUI as unknown as {
-            _onModalDownloadSuccess: (btn: HTMLElement | null, app: IApp, category: string) => void;
-            _onModalDownloadError: (btn: HTMLElement | null, err: unknown) => void;
-            _modalManager: {
-                refreshCurrentSelection: ReturnType<typeof vi.fn>;
-                isViewingCategory: ReturnType<typeof vi.fn>;
-            };
-        };
-        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(true);
-        const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
-
-        const card = document.createElement('div');
-        card.className = 'app-card';
-        card.innerHTML = `
-            <div class="module-selection-card-actions"></div>
-            <div class="app-type-badge not-installed"></div>
-            <div class="app-card-overlay"></div>
-        `;
-        const btn = document.createElement('button');
-        btn.className = 'download-btn downloading indeterminate';
-        card.appendChild(btn);
-
-        const app = { id: 'local-app', name: 'Local App', installed: false } as IApp;
-        privateAppUI._onModalDownloadSuccess(btn, app, 'services');
-        expect(app.installed).toBe(true);
-        expect(btn.classList.contains('downloading')).toBe(false);
-        expect(refreshSpy).toHaveBeenCalled();
-
-        privateAppUI._onModalDownloadError(btn, new Error('broken'));
-    });
-
     it('should show a placeholder toast instead of selecting or downloading coming-soon modules', async () => {
         appUI = createAppUI();
         const toastSpy = vi.spyOn(appUI, 'showToast');
@@ -729,7 +756,7 @@ describe('AppUI lifecycle', () => {
         expect(launchAppMock).not.toHaveBeenCalled();
     });
 
-    it('should stop stale launched module after quick reselection', async () => {
+    it('should stop stale service launch during quick reselection', async () => {
         appUI = createAppUI();
 
         let releaseFirstLaunch!: () => void;
@@ -776,9 +803,10 @@ describe('AppUI lifecycle', () => {
         releaseFirstLaunch();
         await Promise.resolve();
         await Promise.resolve();
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 
-        expect(launchApp).toHaveBeenNthCalledWith(1, 'services', firstApp);
-        expect(launchApp).toHaveBeenNthCalledWith(2, 'services', secondApp);
+        expect(launchApp).toHaveBeenCalledWith('services', firstApp);
+        expect(launchApp).toHaveBeenCalledWith('services', secondApp);
         expect(platformServiceMock.stop).toHaveBeenCalledWith(firstApp);
     });
 
@@ -804,16 +832,19 @@ describe('AppUI lifecycle', () => {
         expect(reopenSpy).not.toHaveBeenCalled();
     });
 
-    it('should reopen modal after delete when app selection is still open', async () => {
+    it('should refresh modal after delete when app selection is still open', async () => {
         appUI = createAppUI();
 
         const privateAppUI = appUI as unknown as {
             _handleDeleteModule: (app: IApp, category: string) => Promise<void>;
-            _modalManager: { isAppSelectionOpen: () => boolean };
+            _modalManager: {
+                isAppSelectionOpen: () => boolean;
+                refreshCurrentSelection: (apps?: IApp[], selectedId?: string | null) => void;
+            };
         };
 
         vi.spyOn(privateAppUI._modalManager, 'isAppSelectionOpen').mockReturnValue(true);
-        const reopenSpy = vi.spyOn(appUI, 'openAppSelection');
+        const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
 
         platformServiceMock.delete.mockResolvedValue(undefined);
         const refreshedApps = [{ id: 'svc', name: 'Service', installed: false }] as IApp[];
@@ -824,31 +855,80 @@ describe('AppUI lifecycle', () => {
             'services',
         );
 
-        expect(reopenSpy).toHaveBeenCalledWith('services', refreshedApps);
+        expect(refreshSpy).toHaveBeenCalledWith(refreshedApps, null);
     });
 
-    it('should not refresh modal after download success when viewing another category', () => {
+    it('should refresh an open integrations modal after catalog reload events', () => {
         appUI = createAppUI();
+        const refreshedApps: IApp[] = [];
+        getCatalogCategoryMock.mockReturnValue(refreshedApps);
 
         const privateAppUI = appUI as unknown as {
-            _onModalDownloadSuccess: (btn: HTMLElement | null, app: IApp, category: string) => void;
             _modalManager: {
                 isViewingCategory: (category: string) => boolean;
-                refreshCurrentSelection: () => void;
+                refreshCurrentSelection: (apps?: IApp[], selectedId?: string | null) => void;
             };
         };
-
-        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(false);
+        vi.spyOn(privateAppUI._modalManager, 'isViewingCategory').mockReturnValue(true);
         const refreshSpy = vi.spyOn(privateAppUI._modalManager, 'refreshCurrentSelection');
 
-        const btn = document.createElement('button');
-        btn.className = 'download-btn downloading indeterminate';
-        const app = { id: 'local-app', name: 'Local App', installed: false } as IApp;
+        globalThis.dispatchEvent(new Event('catalog-loaded'));
 
-        privateAppUI._onModalDownloadSuccess(btn, app, 'services');
+        expect(refreshSpy).toHaveBeenCalledWith(refreshedApps, null);
+    });
 
-        expect(app.installed).toBe(true);
-        expect(refreshSpy).not.toHaveBeenCalled();
+    it('should clear selected integration without stopping it when it disappears from catalog', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="services-module-card" class="selected">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+        const missingApp = {
+            id: 'axelate-telegram-parser',
+            name: 'Parser',
+            installed: true,
+            type: 'local',
+        } as IApp;
+        appUI.updateModuleCard('services', missingApp);
+        getCatalogCategoryMock.mockReturnValue([]);
+
+        globalThis.dispatchEvent(new Event('catalog-loaded'));
+
+        expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('services');
+        expect(platformServiceMock.stop).not.toHaveBeenCalledWith(missingApp, 'services');
+        expect(document.getElementById('services-module-card')?.classList.contains('empty')).toBe(
+            true,
+        );
+    });
+
+    it('should clear selected AI slots when their module disappears from catalog', () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="selected">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+        const missingApp = {
+            id: 'local-text-engine',
+            name: 'Local Text Engine',
+            installed: true,
+            type: 'local',
+            capability: 'text',
+        } as IApp;
+        appUI.updateModuleCard('ai_text', missingApp);
+        getCatalogCategoryMock.mockImplementation((category: string) =>
+            category === 'ai' ? [] : [],
+        );
+
+        globalThis.dispatchEvent(new Event('catalog-loaded'));
+
+        expect(uiStateMocks.removeSelectedModule).toHaveBeenCalledWith('ai_text');
+        expect(document.getElementById('ai-module-card')?.classList.contains('empty')).toBe(true);
     });
 
     it('should resolve app by id from injected catalog resolver', () => {

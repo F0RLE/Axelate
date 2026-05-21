@@ -7,13 +7,13 @@ describe('EngineStatusService', () => {
     let service: EngineStatusService;
     let listeners: Record<string, (payload: unknown) => void>;
     let core: EngineStatusContext;
-    let tracer: Pick<LoggerService, 'info' | 'error'>;
+    let tracer: Pick<LoggerService, 'debug' | 'info' | 'error'>;
 
     beforeEach(() => {
         listeners = {};
         document.body.innerHTML = '';
         (globalThis as unknown as { CSS: { escape: (value: string) => string } }).CSS = {
-            escape: (value: string) => value,
+            escape: (value: string) => value.replace(/["\\]/gu, '\\$&'),
         };
 
         core = {
@@ -33,6 +33,7 @@ describe('EngineStatusService', () => {
         } as unknown as EngineStatusContext;
 
         tracer = {
+            debug: vi.fn(),
             info: vi.fn(),
             error: vi.fn(),
         };
@@ -123,6 +124,27 @@ describe('EngineStatusService', () => {
         expect((card as HTMLElement | null)?.dataset['runtimeStatus']).toBe('idle');
     });
 
+    it('updates cards for engine ids that need selector escaping', () => {
+        const engineId = 'engine"quoted\\id';
+        const appCard = document.createElement('div');
+        appCard.className = 'app-card selected';
+        appCard.dataset['appId'] = engineId;
+        appCard.innerHTML =
+            '<div class="module-selection-card-actions"><button class="modal-btn">Select</button></div>';
+        const dashboardCard = document.createElement('div');
+        dashboardCard.className = 'module-slot-card selected';
+        dashboardCard.dataset['currentModule'] = engineId;
+        document.body.append(appCard, dashboardCard);
+
+        service.init();
+        listeners['ai:engine:ready']?.({ engine_id: engineId, endpoint: '/engine' });
+
+        expect(appCard.classList.contains('engine-ready')).toBe(true);
+        expect(appCard.querySelector('button')?.textContent).toBe('Remove');
+        expect(dashboardCard.classList.contains('module-running')).toBe(true);
+        expect(dashboardCard.dataset['runtimeStatus']).toBe('running');
+    });
+
     it('falls back to untranslated labels and handles cards without modal buttons', () => {
         (core as unknown as { i18n: { t: ReturnType<typeof vi.fn> } }).i18n.t.mockImplementation(
             (_: string, fallback: string = ''): string => fallback,
@@ -165,6 +187,57 @@ describe('EngineStatusService', () => {
         expect(unlisten).toHaveBeenCalledTimes(4);
         expect(service.activeEngineIds).toEqual([]);
         expect(service.hasActiveEngines).toBe(false);
+    });
+
+    it('ignores stale backend refresh results after destroy', async () => {
+        let resolveRefresh: (state: unknown) => void = () => {
+            throw new Error('refresh was not started');
+        };
+        vi.mocked(core.tauriProvider.invoke).mockImplementation(
+            () =>
+                new Promise((resolve) => {
+                    resolveRefresh = resolve;
+                }),
+        );
+        service.init();
+        service.destroy();
+
+        resolveRefresh({
+            ready: {
+                slots: [
+                    {
+                        engine: {
+                            id: 'llamacpp',
+                            endpoint: 'http://127.0.0.1:8080',
+                            healthy: true,
+                        },
+                    },
+                ],
+            },
+        });
+        await Promise.resolve();
+
+        expect(service.activeEngineIds).toEqual([]);
+    });
+
+    it('does not reset unrelated launcher cards when backend reports idle', async () => {
+        document.body.innerHTML = `
+            <div class="app-card module-running"></div>
+            <div class="app-card engine-ready" data-app-id="llamacpp"></div>
+            <div class="module-slot-card module-running" data-current-module="llamacpp"></div>
+        `;
+        vi.mocked(core.tauriProvider.invoke).mockResolvedValueOnce('idle');
+
+        await service.refreshFromBackend();
+
+        const unrelated = document.querySelector<HTMLElement>('.app-card:not([data-app-id])');
+        const engineCard = document.querySelector<HTMLElement>('[data-app-id="llamacpp"]');
+        const slotCard = document.querySelector<HTMLElement>('[data-current-module="llamacpp"]');
+        expect(unrelated?.classList.contains('engine-idle')).toBe(false);
+        expect(unrelated?.classList.contains('module-running')).toBe(true);
+        expect(engineCard?.classList.contains('engine-idle')).toBe(true);
+        expect(slotCard?.classList.contains('module-stopped')).toBe(true);
+        expect(slotCard?.dataset['runtimeStatus']).toBe('idle');
     });
 
     it('returns noop unlisten and handles listen promise failure branches', async () => {

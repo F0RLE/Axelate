@@ -111,23 +111,23 @@ export function createChatStreamingMessage(
                     .then((rawHtml) => {
                         if (!isStreamingTargetLive(version)) return;
                         textNode.innerHTML = DOMPurify.sanitize(rawHtml);
-                        if (scrollToBottom) deps.scrollToBottom();
+                        if (scrollToBottom) deps.scrollToBottom(true);
                     })
                     .catch(() => {
                         if (!isStreamingTargetLive(version)) return;
                         textNode.textContent = sourceText;
-                        if (scrollToBottom) deps.scrollToBottom();
+                        if (scrollToBottom) deps.scrollToBottom(true);
                     });
                 return;
             }
 
             if (!isStreamingTargetLive(version)) return;
             textNode.innerHTML = DOMPurify.sanitize(parseResult);
-            if (scrollToBottom) deps.scrollToBottom();
+            if (scrollToBottom) deps.scrollToBottom(true);
         } catch {
             if (!isStreamingTargetLive(version)) return;
             textNode.textContent = sourceText;
-            if (scrollToBottom) deps.scrollToBottom();
+            if (scrollToBottom) deps.scrollToBottom(true);
         }
     };
 
@@ -142,7 +142,7 @@ export function createChatStreamingMessage(
             ) {
                 if (!isStreamingTargetLive(version)) return;
                 textNode.textContent = accumulatedText;
-                if (scrollToBottom) deps.scrollToBottom();
+                if (scrollToBottom) deps.scrollToBottom(true);
             } else {
                 renderMarkdown(accumulatedText, version, scrollToBottom);
             }
@@ -247,7 +247,7 @@ export function createChatStreamingMessage(
             if (actions !== null && !bubble.contains(actions.actionBar)) {
                 bubble.appendChild(actions.actionBar);
             }
-            deps.scrollToBottom();
+            deps.scrollToBottom(true);
         },
         discard: () => {
             isDiscarded = true;

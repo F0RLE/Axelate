@@ -3,6 +3,7 @@
 //! Handles reading and writing `engine_config.json` outside of the API layer.
 
 use std::collections::HashMap;
+use std::io::ErrorKind;
 
 use crate::domain::engine::config::normalize_engine_config;
 use crate::domain::engine::types::EngineConfig;
@@ -36,7 +37,11 @@ pub async fn load_engine_config_map() -> Result<EngineConfigMap, AppError> {
 /// Saves persisted engine configuration map atomically.
 pub async fn save_engine_config_map(map: &EngineConfigMap) -> Result<(), AppError> {
     let path = &*FILE_ENGINE_CONFIG;
-    let tmp = path.with_extension("tmp");
+    let tmp = path.with_extension(format!(
+        "tmp-{}-{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    ));
 
     if let Some(dir) = path.parent() {
         tokio::fs::create_dir_all(dir)
@@ -46,16 +51,36 @@ pub async fn save_engine_config_map(map: &EngineConfigMap) -> Result<(), AppErro
 
     let json =
         serde_json::to_string_pretty(map).map_err(|e| AppError::Serialization(e.to_string()))?;
-    tokio::fs::write(&tmp, &json)
-        .await
-        .map_err(|e| AppError::Io(e.to_string()))?;
-
-    if let Err(e) = tokio::fs::rename(&tmp, path).await {
-        let _ = tokio::fs::remove_file(path).await;
-        tokio::fs::rename(&tmp, path)
+    {
+        let mut file = tokio::fs::File::create(&tmp)
             .await
-            .map_err(|_| AppError::Io(e.to_string()))?;
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        tokio::io::AsyncWriteExt::write_all(&mut file, json.as_bytes())
+            .await
+            .map_err(|e| AppError::Io(e.to_string()))?;
+        file.sync_all()
+            .await
+            .map_err(|e| AppError::Io(e.to_string()))?;
+    }
+
+    if let Err(rename_error) = tokio::fs::rename(&tmp, path).await {
+        cleanup_engine_config_tmp(&tmp).await;
+        return Err(AppError::Io(format!(
+            "Failed to atomically publish engine config '{}': {rename_error}",
+            path.display()
+        )));
     }
 
     Ok(())
+}
+
+async fn cleanup_engine_config_tmp(tmp: &std::path::Path) {
+    if let Err(error) = tokio::fs::remove_file(tmp).await {
+        if error.kind() != ErrorKind::NotFound {
+            tracing::warn!(
+                "Failed to remove temporary engine config {}: {error}",
+                tmp.display()
+            );
+        }
+    }
 }

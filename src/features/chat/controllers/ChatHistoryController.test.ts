@@ -34,7 +34,7 @@ function createController(stateOverrides?: Partial<MutableState>) {
         isDestroyed: vi.fn(() => false),
         getPendingChatRevealStore: vi.fn(() => null),
         tracer: {
-            info: vi.fn(),
+            debug: vi.fn(),
             error: vi.fn(),
         },
     };
@@ -73,6 +73,56 @@ describe('ChatHistoryController', () => {
         expect(deps.renderHistory).toHaveBeenLastCalledWith(secondHistory);
     });
 
+    it('should load the new session when session id changes during an in-flight restore', async () => {
+        const firstHistory: IChatMessage[] = [{ role: 'user', content: 'first' }];
+        const secondHistory: IChatMessage[] = [{ role: 'assistant', content: 'second' }];
+        let resolveFirstLoad: (history: IChatMessage[]) => void = () => {};
+        const { controller, deps, aiBridge, state } = createController({
+            history: firstHistory,
+        });
+        aiBridge.getHistory
+            .mockImplementationOnce(
+                () =>
+                    new Promise<IChatMessage[]>((resolve) => {
+                        resolveFirstLoad = resolve;
+                    }),
+            )
+            .mockImplementationOnce(() => Promise.resolve(secondHistory));
+
+        const firstLoad = controller.ensureHistoryLoaded();
+        state.sessionId = 'session-2';
+        const secondLoad = controller.ensureHistoryLoaded();
+        resolveFirstLoad(firstHistory);
+        await Promise.all([firstLoad, secondLoad]);
+
+        expect(aiBridge.getHistory).toHaveBeenCalledTimes(2);
+        expect(deps.renderHistory).not.toHaveBeenCalledWith(firstHistory);
+        expect(deps.setHistory).toHaveBeenLastCalledWith(secondHistory);
+        expect(deps.renderHistory).toHaveBeenLastCalledWith(secondHistory);
+    });
+
+    it('should ignore an in-flight history restore after destroy', async () => {
+        const restoredHistory: IChatMessage[] = [{ role: 'user', content: 'late' }];
+        let destroyed = false;
+        let resolveLoad: (history: IChatMessage[]) => void = () => {};
+        const { controller, deps, aiBridge } = createController();
+        deps.isDestroyed.mockImplementation(() => destroyed);
+        aiBridge.getHistory.mockImplementationOnce(
+            () =>
+                new Promise<IChatMessage[]>((resolve) => {
+                    resolveLoad = resolve;
+                }),
+        );
+
+        const load = controller.ensureHistoryLoaded();
+        destroyed = true;
+        resolveLoad(restoredHistory);
+        await load;
+
+        expect(deps.setHistory).not.toHaveBeenCalled();
+        expect(deps.renderHistory).not.toHaveBeenCalled();
+    });
+
     it('should clear rendered chat when the current session has no persisted history', async () => {
         const { controller, deps, state } = createController({
             history: [{ role: 'user', content: 'stale' }],
@@ -102,6 +152,65 @@ describe('ChatHistoryController', () => {
         expect(aiBridge.getHistory).toHaveBeenCalledTimes(1);
         expect(deps.setHistory).toHaveBeenLastCalledWith(defaultHistory);
         expect(deps.renderHistory).toHaveBeenLastCalledWith(defaultHistory);
+    });
+
+    it('should isolate multimodal history snapshots from later mutations', () => {
+        const { controller, state } = createController({
+            history: [
+                {
+                    role: 'user',
+                    content: [
+                        { type: 'text', text: 'look' },
+                        {
+                            type: 'image_url',
+                            image_url: { url: 'data:image/png;base64,old', detail: 'auto' },
+                        },
+                    ],
+                },
+            ],
+        });
+
+        const snapshot = controller.getLocalHistorySnapshot();
+        const snapshotContent = snapshot[0]?.content;
+        if (!Array.isArray(snapshotContent) || snapshotContent[1]?.type !== 'image_url') {
+            throw new Error('snapshot did not keep image content');
+        }
+        snapshotContent[1].image_url.url = 'data:image/png;base64,mutated';
+
+        const currentContent = state.history[0]?.content;
+        expect(Array.isArray(currentContent) ? currentContent[1] : undefined).toEqual({
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,old', detail: 'auto' },
+        });
+    });
+
+    it('should isolate restored multimodal history from caller-owned objects', () => {
+        const { controller, state } = createController();
+        const snapshot: IChatMessage[] = [
+            {
+                role: 'user',
+                content: [
+                    { type: 'text', text: 'look' },
+                    {
+                        type: 'image_url',
+                        image_url: { url: 'data:image/png;base64,old', detail: 'high' },
+                    },
+                ],
+            },
+        ];
+
+        controller.restoreLocalHistorySnapshot(snapshot);
+        const snapshotContent = snapshot[0]?.content;
+        if (!Array.isArray(snapshotContent) || snapshotContent[1]?.type !== 'image_url') {
+            throw new Error('snapshot did not keep image content');
+        }
+        snapshotContent[1].image_url.url = 'data:image/png;base64,mutated';
+
+        const currentContent = state.history[0]?.content;
+        expect(Array.isArray(currentContent) ? currentContent[1] : undefined).toEqual({
+            type: 'image_url',
+            image_url: { url: 'data:image/png;base64,old', detail: 'high' },
+        });
     });
 
     it('should rewind the last turn and return text for regeneration', async () => {

@@ -5,7 +5,11 @@
 
 import { type IBridge } from '@/shared/types/IBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { IModuleDownloadState } from '../types/coreTypes';
+import type {
+    IModuleDownloadState,
+    ReleaseDownloadOptions,
+    ReleaseDownloadSelection,
+} from '../types/coreTypes';
 import { commands } from '../types/bindings';
 import { invokeSafe } from '../api/invoke';
 
@@ -14,7 +18,6 @@ export type DownloadModuleOutcome = 'completed' | 'paused' | 'cancelled';
 
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
-    private readonly _deletedModules = new Set<string>();
     private readonly _lastLoggedDownloadPhase = new Map<string, string>();
     private _downloadProgressUnlisten: (() => void) | null = null;
     private _initialized = false;
@@ -29,46 +32,29 @@ export class ModuleService {
      */
     public async init() {
         if (this._initialized) return;
-        this._initialized = true;
         if (!this._bridge.isTauri()) return;
 
-        this._downloadProgressUnlisten = await this._bridge.listen<{
-            module_id: string;
-            status: string;
-            progress: number;
-            message: string;
-            downloaded: number;
-            total: number;
-            speed: number;
-        }>('download_progress', (payload) => {
-            this._logDownloadPhase(payload);
-
-            this._downloadState[payload.module_id] = {
-                status: payload.status as
-                    | 'init'
-                    | 'pending'
-                    | 'connecting'
-                    | 'downloading'
-                    | 'verifying'
-                    | 'extracting'
-                    | 'paused'
-                    | 'complete'
-                    | 'error'
-                    | 'cancelled',
-                progress: payload.progress,
-                message: payload.message,
-                downloaded: payload.downloaded,
-                total: payload.total,
-                speed: payload.speed,
-            };
-
-            if (payload.status === 'complete') {
-                (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
-            }
-            // Dispatch custom event for UI components that don't use this service directly
-            const event = new CustomEvent('download-progress-update', { detail: payload });
-            globalThis.dispatchEvent(event);
-        });
+        try {
+            this._downloadProgressUnlisten = await this._bridge.listen<{
+                module_id: string;
+                status: string;
+                progress: number;
+                message: string;
+                downloaded: number;
+                total: number;
+                speed: number;
+            }>('download_progress', (payload) => {
+                this._logDownloadPhase(payload);
+                this._publishDownloadProgress(payload);
+            });
+            this._initialized = true;
+        } catch (error) {
+            this._initialized = false;
+            this._tracer.error(
+                `[ModuleService] Failed to subscribe to download progress: ${String(error)}`,
+            );
+            throw error;
+        }
     }
 
     /**
@@ -86,7 +72,6 @@ export class ModuleService {
      */
     public async checkInstalled(moduleId: string): Promise<boolean> {
         if (!this._bridge.isTauri()) return false;
-        if (this._deletedModules.has(moduleId)) return false;
 
         try {
             // Updated to use new API layer
@@ -132,6 +117,7 @@ export class ModuleService {
         repoUrl: string,
         expectedHash?: string,
         dlType?: string,
+        releaseSelection?: ReleaseDownloadSelection | null,
     ): Promise<DownloadModuleOutcome> {
         this._tracer.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
         if (expectedHash !== undefined && expectedHash !== '') {
@@ -143,34 +129,109 @@ export class ModuleService {
         }
 
         try {
-            this._deletedModules.delete(moduleId);
             // Sanitize expectedHash: pass null if empty string or undefined to ensure rust gets None
             const hashToPass =
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
 
             // Updated to use new API layer
             const result = await invokeSafe(
-                commands.downloadModule(moduleId, repoUrl, hashToPass, dlType ?? null),
+                commands.downloadModule(
+                    moduleId,
+                    repoUrl,
+                    hashToPass,
+                    dlType ?? null,
+                    releaseSelection ?? null,
+                ),
             );
 
             if (result.status === 'error') {
-                const interrupted = this._downloadOutcomeFromError(result.error.message);
-                if (interrupted !== null) {
-                    return interrupted;
-                }
                 throw new Error(result.error.message);
             }
             return this._normalizeDownloadOutcome(result.data);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
-            const interrupted = this._downloadOutcomeFromError(errorMessage);
-            if (interrupted !== null) {
-                return interrupted;
-            }
             this._tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
-            this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
+            this._publishDownloadProgress({
+                module_id: moduleId,
+                status: 'error',
+                progress: 0,
+                message: errorMessage,
+                downloaded: 0,
+                total: 0,
+                speed: 0,
+                error: errorMessage,
+            });
             throw err;
         }
+    }
+
+    public async getReleaseDownloadOptions(
+        moduleId: string,
+        repoUrl: string,
+    ): Promise<ReleaseDownloadOptions | null> {
+        if (!this._bridge.isTauri()) return null;
+
+        try {
+            const result = await invokeSafe(commands.getReleaseDownloadOptions(moduleId, repoUrl));
+            if (result.status === 'ok') {
+                return result.data as ReleaseDownloadOptions;
+            }
+            this._tracer.warn(
+                `[ModuleService] Release options failed for ${moduleId}: ${result.error.message}`,
+            );
+            throw new Error(result.error.message);
+        } catch (err) {
+            this._tracer.error(`[ModuleService] Release options error: ${String(err)}`);
+            throw err;
+        }
+    }
+
+    public async importIntegrationFolder(path: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationFolder(path));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        return result.data;
+    }
+
+    public async importIntegrationArchive(path: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationArchive(path));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        return result.data;
+    }
+
+    public async importIntegrationPath(path: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationPath(path));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        return result.data;
+    }
+
+    public async importIntegrationUrl(sourceUrl: string): Promise<string> {
+        if (!this._bridge.isTauri()) {
+            throw new Error('Import available only in desktop app');
+        }
+
+        const result = await invokeSafe(commands.importIntegrationUrl(sourceUrl));
+        if (result.status === 'error') {
+            throw new Error(result.error.message);
+        }
+        return result.data;
     }
 
     private _normalizeDownloadOutcome(value: unknown): DownloadModuleOutcome {
@@ -178,17 +239,6 @@ export class ModuleService {
             return value;
         }
         return 'completed';
-    }
-
-    private _downloadOutcomeFromError(message: string): DownloadModuleOutcome | null {
-        const normalized = message.toLowerCase();
-        if (normalized.includes('download paused')) {
-            return 'paused';
-        }
-        if (normalized.includes('download cancelled')) {
-            return 'cancelled';
-        }
-        return null;
     }
 
     /**
@@ -261,8 +311,6 @@ export class ModuleService {
                 return false;
             }
 
-            this._deletedModules.add(moduleId);
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._downloadState[moduleId];
             return true;
         } catch (e) {
@@ -281,13 +329,17 @@ export class ModuleService {
         this._tracer.info(`[ModuleService] Control ${serviceName} -> ${action}`);
         if (this._bridge.isTauri()) {
             try {
-                await this._bridge.invoke('control_module', {
-                    request: {
+                const result = await invokeSafe(
+                    commands.controlModule({
                         module_id: serviceName,
                         action: action.toLowerCase(),
-                    },
-                });
-                return true;
+                    }),
+                );
+                if (result.status === 'error') {
+                    this._tracer.error(`[ModuleService] Control failed: ${result.error.message}`);
+                    return false;
+                }
+                return result.data.success === true;
             } catch (e) {
                 this._tracer.error(`[ModuleService] Control failed: ${String(e)}`);
                 return false;
@@ -333,5 +385,30 @@ export class ModuleService {
         ) {
             this._lastLoggedDownloadPhase.delete(payload.module_id);
         }
+    }
+
+    private _publishDownloadProgress(payload: {
+        module_id: string;
+        status: string;
+        progress: number;
+        message?: string;
+        downloaded?: number;
+        total?: number;
+        speed?: number;
+        error?: unknown;
+    }): void {
+        const state: IModuleDownloadState = {
+            status: payload.status as IModuleDownloadState['status'],
+            progress: payload.status === 'complete' ? 1 : payload.progress,
+        };
+        if (payload.message !== undefined) state.message = payload.message;
+        if (payload.downloaded !== undefined) state.downloaded = payload.downloaded;
+        if (payload.total !== undefined) state.total = payload.total;
+        if (payload.speed !== undefined) state.speed = payload.speed;
+        if (payload.error !== undefined) state.error = payload.error;
+
+        this._downloadState[payload.module_id] = state;
+
+        globalThis.dispatchEvent(new CustomEvent('download-progress-update', { detail: payload }));
     }
 }

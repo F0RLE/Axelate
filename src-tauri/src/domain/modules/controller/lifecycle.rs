@@ -4,14 +4,30 @@ use crate::domain::modules::lifecycle::{CommandDefinition, ModuleManifest};
 use crate::domain::modules::paths as module_paths;
 use crate::errors::AppError;
 use crate::models::ControlResponse;
+use std::collections::HashMap;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
+use std::sync::{Arc, LazyLock};
 use std::time::Duration;
+use tokio::fs;
 use tokio::process::{Child, Command};
+use tokio::sync::Mutex;
 use tokio::time::timeout;
 
 const MODULE_CHILD_EXIT_POLL_INTERVAL: Duration = Duration::from_secs(1);
+type ModuleLifecycleLocks = HashMap<String, Arc<Mutex<()>>>;
+static MODULE_LIFECYCLE_LOCKS: LazyLock<Mutex<ModuleLifecycleLocks>> =
+    LazyLock::new(|| Mutex::new(HashMap::new()));
+
+async fn module_lifecycle_lock(module_id: &str) -> Arc<Mutex<()>> {
+    let mut locks = MODULE_LIFECYCLE_LOCKS.lock().await;
+    Arc::clone(
+        locks
+            .entry(module_id.to_string())
+            .or_insert_with(|| Arc::new(Mutex::new(()))),
+    )
+}
 
 fn build_command(cmd: CommandDefinition) -> Command {
     match cmd {
@@ -57,6 +73,9 @@ impl<'a> LifecycleExecutor<'a> {
 
     /// Safely starts a module with the given manifest
     pub async fn start(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
+        let lifecycle_lock = module_lifecycle_lock(&self.module_id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
+
         // 1. Guard against double-start
         // Check registry first (atomic-ish)
         if self.controller.registry.contains_key(&self.module_id) {
@@ -79,7 +98,7 @@ impl<'a> LifecycleExecutor<'a> {
             });
         }
 
-        if let Some(entry_path) = self.resolve_script_entry_path(manifest) {
+        if let Some(entry_path) = self.resolve_script_entry_path(manifest)? {
             if let Some(existing_pid) = self
                 .reconcile_existing_script_processes(&entry_path)
                 .await?
@@ -132,13 +151,14 @@ impl<'a> LifecycleExecutor<'a> {
             let mut builder = build_command(start_cmd);
             builder
                 .current_dir(self.module_path)
+                .env("AXELATE_MODULE_ID", &self.module_id)
                 .stdout(Stdio::from(
                     log_file
                         .try_clone()
                         .map_err(|e| AppError::Io(e.to_string()))?,
                 ))
                 .stderr(Stdio::from(log_file));
-            crate::domain::integration_api::apply_process_env(&mut builder);
+            crate::domain::integration_api::apply_process_env(&mut builder, &self.module_id)?;
 
             builder.spawn().map_err(|e| AppError::Internal {
                 request_id: None,
@@ -150,15 +170,24 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     async fn register_spawned_child(&self, mut child: Child) -> Result<ControlResponse, AppError> {
-        let pid = child.id().ok_or_else(|| AppError::Internal {
-            request_id: None,
-            message: format!("Spawned process for {} has no PID", self.module_id),
-        })?;
-        if let Err(error) = self.persist_pid(pid as usize) {
-            let _ = child.kill().await;
-            return Err(error);
-        }
+        let Some(pid) = child.id().map(|pid| pid as usize) else {
+            self.kill_unregistered_child(&mut child, "missing PID after spawn")
+                .await;
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Module {} exited before PID capture", self.module_id),
+            });
+        };
 
+        self.persist_or_kill_spawned_child(&mut child, pid)
+            .await
+            .inspect_err(|error| {
+                tracing::error!(
+                    module_id = %self.module_id,
+                    pid,
+                    "Failed to publish module PID file after spawn: {error}"
+                );
+            })?;
         let module_id = self.module_id.clone();
         let controller_registry = self.controller.registry; // Pass registry reference to the task
 
@@ -178,6 +207,7 @@ impl<'a> LifecycleExecutor<'a> {
                 match outcome {
                     Ok(Some(_status)) => {
                         controller_registry.remove(&module_id);
+                        crate::domain::integration_api::revoke_module_api_token(&module_id);
                         tracing::info!(
                             "Module {module_id} exited naturally and was cleaned up from registry"
                         );
@@ -190,7 +220,16 @@ impl<'a> LifecycleExecutor<'a> {
                         tracing::warn!(
                             "Failed to poll child status for module {module_id}: {error}"
                         );
-                        controller_registry.remove(&module_id);
+                        if let Some((_, mut child)) = controller_registry.remove(&module_id) {
+                            crate::domain::integration_api::revoke_module_api_token(&module_id);
+                            if let Err(kill_error) = child.kill().await {
+                                tracing::warn!(
+                                    module_id = %module_id,
+                                    "Failed to kill module after status polling failed: {kill_error}"
+                                );
+                            }
+                            Self::reap_child_after_kill_attempt(&module_id, &mut child).await;
+                        }
                         return;
                     }
                 }
@@ -204,39 +243,110 @@ impl<'a> LifecycleExecutor<'a> {
         })
     }
 
-    fn module_log_path(&self) -> PathBuf {
-        module_paths::runtime_log_path(&self.module_id)
+    async fn kill_unregistered_child(&self, child: &mut Child, reason: &str) {
+        if let Err(error) = child.kill().await {
+            tracing::warn!(
+                module_id = %self.module_id,
+                "Failed to kill spawned module after {reason}: {error}"
+            );
+        }
+
+        Self::reap_child_after_kill_attempt(&self.module_id, child).await;
     }
 
-    fn persist_pid(&self, pid: usize) -> Result<(), AppError> {
+    async fn reap_child_after_kill_attempt(module_id: &str, child: &mut Child) {
+        match child.try_wait() {
+            Ok(Some(_)) => return,
+            Ok(None) => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id,
+                    "Failed to poll module child after kill attempt: {error}"
+                );
+            }
+        }
+
+        match timeout(Duration::from_secs(5), child.wait()).await {
+            Ok(Ok(_)) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(
+                    module_id,
+                    "Failed to wait module child after kill attempt: {error}"
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    module_id,
+                    "Timed out waiting for module child after kill attempt"
+                );
+            }
+        }
+    }
+
+    async fn persist_pid(&self, pid: usize) -> Result<(), AppError> {
         let pid_file = self.module_path.join("module.pid");
         let temp_pid_file = self.module_path.join("module.pid.tmp");
-        std::fs::write(&temp_pid_file, pid.to_string()).map_err(|error| {
-            AppError::Io(format!(
-                "Failed to write temp PID file {}: {error}",
-                temp_pid_file.display()
-            ))
-        })?;
+        fs::write(&temp_pid_file, pid.to_string())
+            .await
+            .map_err(|error| {
+                AppError::Io(format!(
+                    "Failed to write module PID temp file '{}': {error}",
+                    temp_pid_file.display()
+                ))
+            })?;
 
-        std::fs::rename(&temp_pid_file, &pid_file).map_err(|error| {
-            AppError::Io(format!(
-                "Failed to move temp PID file {} to {}: {error}",
+        if let Err(error) = fs::rename(&temp_pid_file, &pid_file).await {
+            let _ = fs::remove_file(&temp_pid_file).await;
+            return Err(AppError::Io(format!(
+                "Failed to publish module PID file '{}' -> '{}': {error}",
                 temp_pid_file.display(),
                 pid_file.display()
-            ))
-        })?;
+            )));
+        }
 
         Ok(())
     }
 
+    async fn persist_or_kill_spawned_child(
+        &self,
+        child: &mut Child,
+        pid: usize,
+    ) -> Result<(), AppError> {
+        match self.persist_pid(pid).await {
+            Ok(()) => Ok(()),
+            Err(error) => {
+                self.kill_unregistered_child(child, "PID publish failure")
+                    .await;
+                Err(error)
+            }
+        }
+    }
+
+    fn log_reconciled_pid_publish_failure(&self, error: &AppError) {
+        tracing::error!(
+                module_id = %self.module_id,
+                "Failed to publish reconciled module PID file: {error}"
+        );
+    }
+
+    fn module_log_path(&self) -> PathBuf {
+        module_paths::runtime_log_path(&self.module_id)
+    }
     /// Gracefully stops a module with escalation
-    pub async fn stop(&self, manifest: &ModuleManifest) -> ControlResponse {
+    pub async fn stop(&self, manifest: &ModuleManifest) -> Result<ControlResponse, AppError> {
+        let lifecycle_lock = module_lifecycle_lock(&self.module_id).await;
+        let _lifecycle_guard = lifecycle_lock.lock().await;
         tracing::info!("Stopping module: {}", self.module_id);
-        let script_entry_path = self.resolve_script_entry_path(manifest);
+        let script_entry_path = self.resolve_script_entry_path(manifest)?;
 
         // 1. Run stop script if exists
         if let Some(stop_cmd) = manifest.lifecycle.as_ref().and_then(|l| l.stop.clone()) {
-            let _ = self.run_command(stop_cmd, Duration::from_secs(5)).await;
+            if let Err(error) = self.run_command(stop_cmd, Duration::from_secs(5)).await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Module stop script failed, continuing with process termination: {error}"
+                );
+            }
         }
 
         // 2. Attempt soft termination and wait
@@ -255,10 +365,31 @@ impl<'a> LifecycleExecutor<'a> {
                 }
             }
 
-            // Wait with timeout
-            if timeout(Duration::from_secs(5), child.wait()).await.is_err() {
-                tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
-                let _ = child.kill().await;
+            match timeout(Duration::from_secs(5), child.wait()).await {
+                Ok(Ok(_status)) => {}
+                Ok(Err(error)) => {
+                    tracing::warn!(
+                        module_id = %self.module_id,
+                        "Failed to wait registered module process during stop: {error}"
+                    );
+                    if let Err(kill_error) = child.kill().await {
+                        tracing::warn!(
+                            module_id = %self.module_id,
+                            "Failed to force-kill registered module process after wait error: {kill_error}"
+                        );
+                    }
+                    Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
+                }
+                Err(_) => {
+                    tracing::warn!("Module {} stop timed out, forcing kill", self.module_id);
+                    if let Err(error) = child.kill().await {
+                        tracing::warn!(
+                            module_id = %self.module_id,
+                            "Failed to force-kill registered module process: {error}"
+                        );
+                    }
+                    Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
+                }
             }
         }
 
@@ -297,16 +428,44 @@ impl<'a> LifecycleExecutor<'a> {
                     && let Ok(pid) = pid_str.trim().parse::<usize>()
                 {
                     // Safe kill_orphan now includes existence check
-                    let _ = crate::domain::modules::controller::process::kill_orphan(pid);
+                    if let Err(error) =
+                        crate::domain::modules::controller::process::kill_orphan(pid)
+                    {
+                        tracing::warn!(
+                            module_id = %self.module_id,
+                            pid,
+                            "Failed to force-kill orphan module process: {error}"
+                        );
+                    }
                 }
             }
             tokio::time::sleep(Duration::from_millis(500)).await;
         }
 
-        // 4. Cleanup PID file (Wait loop already verified termination)
-        let _ = std::fs::remove_file(self.module_path.join("module.pid"));
+        if self
+            .controller
+            .is_running(&self.module_id, self.module_path)
+            .await
+        {
+            return Err(AppError::Internal {
+                request_id: None,
+                message: format!("Module {} failed to stop", self.module_id),
+            });
+        }
 
-        ControlResponse {
+        // 4. Cleanup PID file (Wait loop already verified termination)
+        match std::fs::remove_file(self.module_path.join("module.pid")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to remove module PID file after stop: {error}"
+                );
+            }
+        }
+
+        Ok(ControlResponse {
             success: process_scan_error.is_none(),
             message: process_scan_error.map_or_else(
                 || format!("Module {} stopped", self.module_id),
@@ -318,11 +477,18 @@ impl<'a> LifecycleExecutor<'a> {
                 },
             ),
             status: Some("stopped".to_string()),
-        }
+        })
     }
 
-    fn resolve_script_entry_path(&self, manifest: &ModuleManifest) -> Option<std::path::PathBuf> {
-        script_runtime::resolve_entry_path(self.module_path, manifest).ok()
+    fn resolve_script_entry_path(
+        &self,
+        manifest: &ModuleManifest,
+    ) -> Result<Option<PathBuf>, AppError> {
+        if !script_runtime::supports_manifest(manifest) {
+            return Ok(None);
+        }
+
+        script_runtime::resolve_entry_path(self.module_path, manifest).map(Some)
     }
 
     async fn reconcile_existing_script_processes(
@@ -337,7 +503,10 @@ impl<'a> LifecycleExecutor<'a> {
         if let Some(&existing_pid) = matching_pids.first()
             && matching_pids.len() == 1
         {
-            self.persist_pid(existing_pid)?;
+            if let Err(error) = self.persist_pid(existing_pid).await {
+                self.log_reconciled_pid_publish_failure(&error);
+                return Err(error);
+            }
             return Ok(Some(existing_pid));
         }
 
@@ -348,21 +517,47 @@ impl<'a> LifecycleExecutor<'a> {
         );
 
         if let Some(mut child) = self.controller.unregister(&self.module_id) {
-            let _ = child.kill().await;
-            let _ = child.wait().await;
+            if let Err(error) = child.kill().await {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to kill registered duplicate module child: {error}"
+                );
+            }
+            Self::reap_child_after_kill_attempt(&self.module_id, &mut child).await;
         }
 
         for pid in matching_pids {
-            let _ = process::kill_orphan(pid);
+            process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to clean duplicate module process {pid} for '{}': {error}",
+                    self.module_id
+                ),
+            })?;
         }
 
-        let _ = std::fs::remove_file(self.module_path.join("module.pid"));
+        match std::fs::remove_file(self.module_path.join("module.pid")) {
+            Ok(()) => {}
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {}
+            Err(error) => {
+                tracing::warn!(
+                    module_id = %self.module_id,
+                    "Failed to remove stale module PID file after duplicate cleanup: {error}"
+                );
+            }
+        }
         Ok(None)
     }
 
     async fn kill_matching_script_processes(&self, entry_path: &Path) -> Result<(), AppError> {
         for pid in self.find_matching_script_processes(entry_path).await? {
-            let _ = process::kill_orphan(pid);
+            process::kill_orphan(pid).map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!(
+                    "Failed to kill module process {pid} for '{}': {error}",
+                    self.module_id
+                ),
+            })?;
         }
         Ok(())
     }
@@ -380,13 +575,19 @@ impl<'a> LifecycleExecutor<'a> {
         .await
         {
             Ok(pids) => Ok(pids),
-            Err(error) => Err(AppError::Internal {
-                request_id: None,
-                message: format!(
+            Err(error) => {
+                tracing::error!(
                     "Failed to scan matching script module processes for {}: {error}",
                     self.module_id
-                ),
-            }),
+                );
+                Err(AppError::Internal {
+                    request_id: None,
+                    message: format!(
+                        "Failed to scan module processes for '{}': {error}",
+                        self.module_id
+                    ),
+                })
+            }
         }
     }
 

@@ -1,3 +1,5 @@
+use crate::domain::engine::manager::canonical_engine_id as normalize_engine_id;
+use chrono::TimeZone;
 use serde::Serialize;
 use std::cmp::Ordering;
 use std::collections::VecDeque;
@@ -155,39 +157,9 @@ pub fn get_logs_since(since: f64) -> Vec<LogEntry> {
     }
 }
 
-fn is_frontend_relevant_log(entry: &LogEntry) -> bool {
-    let message = entry.message.to_ascii_uppercase();
-    let source = entry.source.to_ascii_uppercase();
-
-    let is_bot_source = source.contains("CHATSERVICE")
-        || source.contains("AIBRIDGE")
-        || source.contains("AI_SERVICE")
-        || source.contains("DOMAIN::AI")
-        || source.contains("DOMAIN::ENGINE")
-        || source.contains("INFRASTRUCTURE::ENGINE");
-
-    let is_ai_noise = message.contains("GEMINI_ERROR")
-        || message.contains("ERROR 429")
-        || message.contains("ERROR 400")
-        || message.contains("ERROR 403")
-        || message.contains("ERROR 500")
-        || message.contains("QUOTA")
-        || message.contains("PERMISSION_DENIED")
-        || message.contains("INVALID_ARGUMENT")
-        || message.contains("DEADLINE_EXCEEDED")
-        || message.contains("FAILED_PRECONDITION")
-        || message.contains("UNAVAILABLE")
-        || message.contains("INTERNAL_ERROR");
-
-    !(is_bot_source || is_ai_noise)
-}
-
-/// Retrieves frontend-facing log entries since a timestamp with noisy AI chatter removed.
+/// Retrieves frontend-facing log entries since a timestamp.
 pub fn get_frontend_logs_since(since: f64) -> Vec<LogEntry> {
-    let mut logs: Vec<LogEntry> = get_logs_since(since)
-        .into_iter()
-        .filter(is_frontend_relevant_log)
-        .collect();
+    let mut logs: Vec<LogEntry> = get_logs_since(since);
 
     logs.extend(RuntimeLogCollector::collect_since(since));
     logs.sort_by(|left, right| {
@@ -199,10 +171,19 @@ pub fn get_frontend_logs_since(since: f64) -> Vec<LogEntry> {
     logs
 }
 
+/// Retrieves frontend-facing log entries for one explicit console view.
+pub fn get_frontend_logs_for_view(view_id: &str, since: f64) -> Vec<LogEntry> {
+    get_frontend_logs_since(since)
+        .into_iter()
+        .filter(|entry| is_entry_in_console_view(entry, view_id))
+        .collect()
+}
+
 fn parse_runtime_log_line(
     namespace: RuntimeLogNamespace,
     runtime_id: &str,
     line: &str,
+    line_index: usize,
     since: f64,
 ) -> Option<LogEntry> {
     let line = line.trim();
@@ -210,7 +191,8 @@ fn parse_runtime_log_line(
         return None;
     }
 
-    let timestamp = parse_log_timestamp(line)?;
+    let timestamp_offset = f64::from(u32::try_from(line_index).ok()?) / 1_000_000.0;
+    let timestamp = parse_log_timestamp(line)? + timestamp_offset;
     if timestamp <= since {
         return None;
     }
@@ -563,15 +545,8 @@ fn sanitize_module_id(raw: &str) -> Option<String> {
 
 fn infer_runtime_log_source(namespace: RuntimeLogNamespace, runtime_id: &str) -> String {
     match namespace {
-        RuntimeLogNamespace::Engine => canonical_engine_id(runtime_id).to_string(),
+        RuntimeLogNamespace::Engine => normalize_engine_id(runtime_id),
         RuntimeLogNamespace::Module => format!("module:{runtime_id}"),
-    }
-}
-
-fn canonical_engine_id(engine_id: &str) -> &str {
-    match engine_id {
-        "stable-diffusion" => "sdcpp",
-        value => value,
     }
 }
 
@@ -580,7 +555,10 @@ fn parse_log_timestamp(line: &str) -> Option<f64> {
     chrono::NaiveDateTime::parse_from_str(timestamp_text, "%Y-%m-%d %H:%M:%S")
         .ok()
         .and_then(|timestamp| {
-            let timestamp = timestamp.and_utc();
+            let timestamp = chrono::Local
+                .from_local_datetime(&timestamp)
+                .single()
+                .or_else(|| chrono::Local.from_local_datetime(&timestamp).earliest())?;
             let seconds = timestamp.timestamp().to_string().parse::<f64>().ok()?;
             let milliseconds = timestamp
                 .timestamp_subsec_millis()
@@ -634,7 +612,7 @@ fn is_entry_in_console_view(entry: &LogEntry, view_id: &str) -> bool {
     }
 
     if let Some(engine_id) = view_id.strip_prefix("engine:") {
-        return canonical_engine_id(&entry.source) == canonical_engine_id(engine_id);
+        return normalize_engine_id(&entry.source) == normalize_engine_id(engine_id);
     }
 
     false
@@ -648,6 +626,7 @@ fn clear_module_runtime_logs() {
 pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuard, String> {
     let log_dir = &*crate::utils::paths::LOG_DIR;
     std::fs::create_dir_all(log_dir).map_err(|e| e.to_string())?;
+    clear_startup_log_files(log_dir).map_err(|e| e.to_string())?;
 
     // Keep the launcher log easy to open from the UI and external editors.
     let file_appender = tracing_appender::rolling::never(log_dir, "axelate.log");
@@ -660,6 +639,9 @@ pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuar
         filter = filter.add_directive(dir);
     }
     if let Ok(dir) = "wry=error".parse() {
+        filter = filter.add_directive(dir);
+    }
+    if let Ok(dir) = "frontend=info".parse() {
         filter = filter.add_directive(dir);
     }
 
@@ -684,12 +666,18 @@ pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuar
     Ok(guard)
 }
 
+fn clear_startup_log_files(log_dir: &Path) -> std::io::Result<()> {
+    fs::write(log_dir.join("axelate.log"), "")?;
+    clear_module_runtime_logs();
+    Ok(())
+}
+
 impl RuntimeLogCollector {
     fn is_known_engine_source(source: &str) -> bool {
-        let source = canonical_engine_id(source);
+        let source = normalize_engine_id(source);
         Self::runtime_ids(&crate::utils::paths::ENGINE_LOGS_DIR)
             .into_iter()
-            .any(|runtime_id| canonical_engine_id(&runtime_id) == source)
+            .any(|runtime_id| normalize_engine_id(&runtime_id) == source)
     }
 
     fn runtime_ids(root: &Path) -> Vec<String> {
@@ -785,7 +773,10 @@ impl RuntimeLogCollector {
             entries.extend(
                 content
                     .lines()
-                    .filter_map(|line| parse_runtime_log_line(namespace, runtime_id, line, since)),
+                    .enumerate()
+                    .filter_map(|(line_index, line)| {
+                        parse_runtime_log_line(namespace, runtime_id, line, line_index, since)
+                    }),
             );
         }
 
@@ -810,7 +801,12 @@ impl RuntimeLogCollector {
             for log_file in log_files.filter_map(Result::ok) {
                 let path = log_file.path();
                 if Self::is_log_file(&path) {
-                    let _ = fs::write(path, "");
+                    if let Err(error) = fs::write(&path, "") {
+                        tracing::warn!(
+                            path = %path.display(),
+                            "Failed to clear runtime log file: {error}"
+                        );
+                    }
                 }
             }
         }
@@ -863,6 +859,7 @@ mod tests {
             RuntimeLogNamespace::Module,
             "sample-integration",
             "2026-04-24 07:00:00 [INFO] Integration started",
+            0,
             0.0,
         )
         .ok_or_else(|| "module runtime log entry".to_string())?;
@@ -879,6 +876,7 @@ mod tests {
             RuntimeLogNamespace::Engine,
             "llamacpp",
             "2026-04-24 07:00:00 [INFO] model loaded",
+            0,
             0.0,
         )
         .ok_or_else(|| "engine runtime log entry".to_string())?;
@@ -886,6 +884,21 @@ mod tests {
         assert_eq!(entry.source, "llamacpp");
         assert_eq!(entry.module_id, None);
         assert_eq!(entry.source_label.as_deref(), Some("Llamacpp"));
+        Ok(())
+    }
+
+    #[test]
+    fn engine_runtime_log_line_uses_shared_engine_id_normalization() -> Result<(), String> {
+        let entry = parse_runtime_log_line(
+            RuntimeLogNamespace::Engine,
+            "llama.cpp",
+            "2026-04-24 07:00:00 [INFO] model loaded",
+            0,
+            0.0,
+        )
+        .ok_or_else(|| "engine runtime log entry".to_string())?;
+
+        assert_eq!(entry.source, "llama-cpp");
         Ok(())
     }
 }

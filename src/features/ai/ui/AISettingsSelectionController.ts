@@ -69,7 +69,7 @@ export class AISettingsSelectionController {
         viewPolicy: AISettingsViewPolicy,
     ): string {
         const modelData = this.getModelData(appId, modelKey);
-        void viewPolicy.isImageOnlyProvider(appId);
+        void viewPolicy;
         return renderModelStats(modelData, translate);
     }
 

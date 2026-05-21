@@ -65,31 +65,47 @@ export function registerCoreContainer(args: RegisterCoreContainerArgs): void {
     container.lock();
 }
 
-export function destroyCoreResources(args: DestroyCoreResourcesArgs): void {
+export async function destroyCoreResources(args: DestroyCoreResourcesArgs): Promise<void> {
     if (args.deferredChatInitTimer !== null) {
         globalThis.clearTimeout(args.deferredChatInitTimer);
     }
 
-    args.stateManager.destroy();
-    args.eventHandler.destroy();
-    args.chatController.destroy();
-    args.appUI.destroy();
-    args.settingsUI.destroy();
-    args.moduleSettingsUI.destroy();
-    args.downloadUI.destroy();
-    args.navigationUI.destroy();
-    args.windowUI.destroy();
-    args.windowService.destroy();
-    args.moduleService.destroy();
-    args.i18nUI.destroy();
-    args.consoleUI.destroy();
-    args.monitoringUI.destroy();
-    args.monitoringService.destroy();
-    args.sidebarUI.destroy();
-    args.particles.destroy();
-    args.soundService.destroy();
-    args.stateStore.destroy();
-    args.aiBridge.destroy();
-    args.bridge.destroy();
-    args.errorHandler.destroy();
+    const destroyers: Array<() => Promise<void> | void> = [
+        () => args.stateManager.destroy(),
+        () => args.eventHandler.destroy(),
+        () => args.chatController.destroy(),
+        () => args.appUI.destroy(),
+        () => args.settingsUI.destroy(),
+        () => args.moduleSettingsUI.destroy(),
+        () => args.downloadUI.destroy(),
+        () => args.navigationUI.destroy(),
+        () => args.windowUI.destroy(),
+        () => args.windowService.destroy(),
+        () => args.moduleService.destroy(),
+        () => args.i18nUI.destroy(),
+        () => args.consoleUI.destroy(),
+        () => args.monitoringUI.destroy(),
+        () => args.monitoringService.destroy(),
+        () => args.sidebarUI.destroy(),
+        () => args.particles.destroy(),
+        () => args.soundService.destroy(),
+        () => args.stateStore.destroy(),
+        () => args.aiBridge.destroy(),
+        () => args.bridge.destroy(),
+        () => args.errorHandler.destroy(),
+        () => args.globalTextContextMenu.destroy(),
+    ];
+    const errors: unknown[] = [];
+
+    for (const destroy of destroyers) {
+        try {
+            await destroy();
+        } catch (error: unknown) {
+            errors.push(error);
+        }
+    }
+
+    if (errors.length > 0) {
+        throw new AggregateError(errors, 'Core resource cleanup failed');
+    }
 }

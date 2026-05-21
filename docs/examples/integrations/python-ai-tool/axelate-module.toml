@@ -1,0 +1,15 @@
+api_version = "1"
+id = "python-ai-tool"
+name = "Python AI Tool"
+version = "0.1.0"
+description = "Example integration that calls Axelate AI and stores settings."
+author = "Axelate"
+type = "service"
+icon = "⚙"
+readme = "README.md"
+settings_ui = "settings-ui/index.html"
+
+[runtime]
+kind = "python"
+version = "3.11"
+entry = "src/main.py"

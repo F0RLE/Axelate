@@ -10,7 +10,10 @@ use reqwest::{Client, StatusCode};
 use std::sync::Arc;
 use tokio::sync::mpsc;
 
-use super::types::{ChatReply, ChatRequest, ChatResponse, TokenUsage, WebSearchOptions};
+use super::provider_http;
+use super::provider_payload;
+use super::provider_response;
+use super::types::{ChatReply, ChatRequest, ChatResponse, TokenUsage};
 
 // ==================================================================================
 // Stream Protocol
@@ -106,9 +109,6 @@ pub struct OpenAiCompatibleProvider {
     client: Client,
 }
 
-/// Backward-compatible alias for the legacy provider name.
-pub type OpenRouterProvider = OpenAiCompatibleProvider;
-
 struct RequestExecution {
     endpoint: String,
     api_key: String,
@@ -162,10 +162,7 @@ impl OpenAiCompatibleProvider {
     pub fn new(base_url: &str) -> Self {
         Self {
             base_url: base_url.to_string(),
-            client: Client::builder()
-                .connect_timeout(std::time::Duration::from_secs(8))
-                .build()
-                .unwrap_or_else(|_| Client::new()),
+            client: provider_http::build_provider_client(),
         }
     }
 
@@ -189,7 +186,7 @@ impl OpenAiCompatibleProvider {
         if !res.status().is_success() {
             let status = res.status();
             let error_text = res.text().await.unwrap_or_default();
-            return Ok(build_api_error_response(
+            return Ok(provider_response::build_api_error_response(
                 message_id,
                 req.model,
                 status,
@@ -204,7 +201,9 @@ impl OpenAiCompatibleProvider {
             }
         })?;
 
-        Ok(parse_non_stream_response(&body, message_id, req.model))
+        Ok(provider_response::parse_non_stream_response(
+            &body, message_id, req.model,
+        ))
     }
 
     fn prepare_request_execution(
@@ -216,7 +215,7 @@ impl OpenAiCompatibleProvider {
         Ok(RequestExecution {
             endpoint: format!("{}/chat/completions", self.base_url.trim_end_matches('/')),
             api_key: resolve_api_key(req, &self.base_url)?,
-            payload: build_request_payload(req, stream, is_local),
+            payload: provider_payload::build_chat_completion_payload(req, stream, is_local),
         })
     }
 
@@ -250,16 +249,19 @@ impl OpenAiCompatibleProvider {
                         return Ok(resp);
                     }
                     let status = resp.status();
-                    if should_retry_status(status) && attempts <= MAX_RETRIES {
-                        tokio::time::sleep(retry_delay(attempts, status)).await;
+                    if provider_http::should_retry_status(status) && attempts <= MAX_RETRIES {
+                        tokio::time::sleep(provider_http::retry_delay(attempts, status)).await;
                         continue;
                     }
                     return Ok(resp);
                 }
                 Err(error) => {
-                    if should_retry_error(&error) && attempts <= MAX_RETRIES {
-                        tokio::time::sleep(retry_delay(attempts, StatusCode::REQUEST_TIMEOUT))
-                            .await;
+                    if provider_http::should_retry_error(&error) && attempts <= MAX_RETRIES {
+                        tokio::time::sleep(provider_http::retry_delay(
+                            attempts,
+                            StatusCode::REQUEST_TIMEOUT,
+                        ))
+                        .await;
                         continue;
                     }
                     return Err(crate::errors::AppError::External {
@@ -272,35 +274,8 @@ impl OpenAiCompatibleProvider {
     }
 }
 
-const fn should_retry_status(status: StatusCode) -> bool {
-    matches!(
-        status,
-        StatusCode::TOO_MANY_REQUESTS
-            | StatusCode::BAD_GATEWAY
-            | StatusCode::SERVICE_UNAVAILABLE
-            | StatusCode::GATEWAY_TIMEOUT
-    )
-}
-
-fn should_retry_error(error: &reqwest::Error) -> bool {
-    error.is_connect() || error.is_timeout()
-}
-
-fn retry_delay(attempt: u32, status: StatusCode) -> std::time::Duration {
-    let capped_attempt = attempt.max(1);
-    let base_ms = if status == StatusCode::TOO_MANY_REQUESTS {
-        700u64
-    } else {
-        350u64
-    };
-    let backoff_multiplier = 2u64.saturating_pow(capped_attempt.saturating_sub(1));
-    let jitter_ms = rand::random_range(0..150u64);
-
-    std::time::Duration::from_millis(base_ms * backoff_multiplier + jitter_ms)
-}
-
-fn is_local_base_url(base_url: &str) -> bool {
-    base_url.contains("localhost") || base_url.contains("127.0.0.1")
+pub(super) fn is_local_base_url(base_url: &str) -> bool {
+    provider_payload::is_local_base_url(base_url)
 }
 
 fn resolve_accept_header(payload: &serde_json::Map<String, serde_json::Value>) -> &'static str {
@@ -330,284 +305,6 @@ fn resolve_api_key(req: &ChatRequest, base_url: &str) -> Result<String, crate::e
     ))
 }
 
-fn build_request_payload(
-    req: &ChatRequest,
-    stream: bool,
-    is_local: bool,
-) -> serde_json::Map<String, serde_json::Value> {
-    let mut payload = serde_json::Map::new();
-    payload.insert(
-        "model".to_string(),
-        serde_json::Value::String(req.model.clone()),
-    );
-
-    let mapped_messages: Vec<serde_json::Value> = req
-        .messages
-        .iter()
-        .map(|message| {
-            serde_json::json!({
-                "role": message.role,
-                "content": message.content,
-            })
-        })
-        .collect();
-    payload.insert(
-        "messages".to_string(),
-        serde_json::Value::Array(mapped_messages),
-    );
-    payload.insert("stream".to_string(), serde_json::Value::Bool(stream));
-
-    if stream && !is_local {
-        payload.insert(
-            "stream_options".to_string(),
-            serde_json::json!({ "include_usage": true }),
-        );
-    }
-
-    if let Some(level) = &req.thinking_level
-        && level != "off"
-        && !is_local
-    {
-        payload.insert(
-            "reasoning".to_string(),
-            serde_json::json!({ "effort": level }),
-        );
-    }
-
-    let max_tokens = serde_json::json!(req.max_tokens.unwrap_or(8192));
-    if is_local {
-        payload.insert("max_tokens".to_string(), max_tokens);
-    } else {
-        payload.insert("max_completion_tokens".to_string(), max_tokens);
-    }
-
-    if !is_local
-        && let Some(session_id) = req.session_id.as_ref().map(|value| value.trim())
-        && !session_id.is_empty()
-    {
-        payload.insert(
-            "session_id".to_string(),
-            serde_json::Value::String(session_id.to_string()),
-        );
-    }
-
-    if !is_local
-        && should_attach_web_search(req)
-        && let Some(web_search) = req.web_search.as_ref()
-    {
-        payload.insert(
-            "tools".to_string(),
-            serde_json::Value::Array(vec![build_web_search_tool(web_search)]),
-        );
-        payload.insert(
-            "tool_choice".to_string(),
-            serde_json::Value::String("auto".to_string()),
-        );
-    }
-
-    payload
-}
-
-fn should_attach_web_search(req: &ChatRequest) -> bool {
-    if !req
-        .web_search
-        .as_ref()
-        .is_some_and(|web_search| web_search.enabled)
-    {
-        return false;
-    }
-
-    let Some(last_user_message) = req
-        .messages
-        .iter()
-        .rev()
-        .find(|message| message.role == "user")
-    else {
-        return false;
-    };
-    let text = extract_message_text(&last_user_message.content).to_lowercase();
-    let text = text.trim();
-    if text.is_empty() {
-        return false;
-    }
-
-    const WEB_SEARCH_TRIGGERS: &[&str] = &[
-        "актуаль",
-        "интернет",
-        "найди",
-        "новост",
-        "погугли",
-        "поиск",
-        "посмотри в сети",
-        "свеж",
-        "сейчас",
-        "сегодня",
-        "ссылка",
-        "site:",
-        "today",
-        "latest",
-        "current",
-        "recent",
-        "news",
-        "search",
-        "browse",
-        "web",
-        "internet",
-        "look up",
-        "price",
-        "weather",
-    ];
-
-    text.starts_with("http://")
-        || text.starts_with("https://")
-        || text.contains(" http://")
-        || text.contains(" https://")
-        || WEB_SEARCH_TRIGGERS
-            .iter()
-            .any(|trigger| text.contains(trigger))
-}
-
-fn extract_message_text(content: &serde_json::Value) -> String {
-    match content {
-        serde_json::Value::String(text) => text.clone(),
-        serde_json::Value::Array(parts) => parts
-            .iter()
-            .filter_map(|part| {
-                (part.get("type")?.as_str()? == "text")
-                    .then(|| part.get("text")?.as_str())
-                    .flatten()
-                    .map(ToOwned::to_owned)
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
-        _ => String::new(),
-    }
-}
-
-fn parse_non_stream_response(
-    body: &serde_json::Value,
-    message_id: String,
-    model: String,
-) -> ChatResponse {
-    let usage = extract_token_usage(body);
-
-    let reply_text = body
-        .get("choices")
-        .and_then(|choices| choices.as_array())
-        .and_then(|choices| choices.first())
-        .and_then(|choice| choice.get("message"))
-        .and_then(|message| message.get("content"))
-        .map(extract_message_text)
-        .unwrap_or_default();
-
-    if reply_text.trim().is_empty() {
-        return ChatResponse {
-            id: message_id,
-            ok: false,
-            reply: None,
-            error: Some("Empty response body from AI provider".to_string()),
-            model: Some(model),
-            thought_signature: None,
-            usage,
-        };
-    }
-
-    ChatResponse {
-        id: message_id,
-        ok: true,
-        reply: Some(ChatReply {
-            text: reply_text,
-            role: "assistant".to_string(),
-        }),
-        error: None,
-        model: Some(model),
-        thought_signature: None,
-        usage,
-    }
-}
-
-fn build_api_error_response(
-    message_id: String,
-    model: String,
-    status: StatusCode,
-    error_text: &str,
-) -> ChatResponse {
-    ChatResponse {
-        id: message_id,
-        ok: false,
-        reply: None,
-        error: Some(format!("API Error {status}: {error_text}")),
-        model: Some(model),
-        thought_signature: None,
-        usage: None,
-    }
-}
-
-fn build_web_search_tool(options: &WebSearchOptions) -> serde_json::Value {
-    let mut parameters = serde_json::Map::new();
-    parameters.insert(
-        "engine".to_string(),
-        serde_json::Value::String(
-            options
-                .engine
-                .clone()
-                .filter(|value| !value.trim().is_empty())
-                .unwrap_or_else(|| "auto".to_string()),
-        ),
-    );
-    parameters.insert(
-        "max_results".to_string(),
-        serde_json::json!(options.max_results.unwrap_or(5).clamp(1, 25)),
-    );
-    parameters.insert(
-        "max_total_results".to_string(),
-        serde_json::json!(options.max_total_results.unwrap_or(10).max(1)),
-    );
-    parameters.insert(
-        "search_context_size".to_string(),
-        serde_json::Value::String(
-            options
-                .search_context_size
-                .clone()
-                .filter(|value| matches!(value.as_str(), "low" | "medium" | "high"))
-                .unwrap_or_else(|| "medium".to_string()),
-        ),
-    );
-
-    if !options.allowed_domains.is_empty() {
-        parameters.insert(
-            "allowed_domains".to_string(),
-            serde_json::Value::Array(
-                options
-                    .allowed_domains
-                    .iter()
-                    .filter(|value| !value.trim().is_empty())
-                    .map(|value| serde_json::Value::String(value.trim().to_string()))
-                    .collect(),
-            ),
-        );
-    }
-
-    if !options.excluded_domains.is_empty() {
-        parameters.insert(
-            "excluded_domains".to_string(),
-            serde_json::Value::Array(
-                options
-                    .excluded_domains
-                    .iter()
-                    .filter(|value| !value.trim().is_empty())
-                    .map(|value| serde_json::Value::String(value.trim().to_string()))
-                    .collect(),
-            ),
-        );
-    }
-
-    serde_json::json!({
-        "type": "openrouter:web_search",
-        "parameters": parameters,
-    })
-}
-
 #[async_trait]
 impl AiProvider for OpenAiCompatibleProvider {
     async fn generate_stream(
@@ -633,7 +330,7 @@ impl AiProvider for OpenAiCompatibleProvider {
         if !res.status().is_success() {
             let status = res.status();
             let error_text = res.text().await.unwrap_or_default();
-            return Ok(build_api_error_response(
+            return Ok(provider_response::build_api_error_response(
                 message_id,
                 req.model,
                 status,
@@ -688,7 +385,13 @@ impl AiProvider for OpenAiCompatibleProvider {
             }
         }
 
-        if !saw_done && !state.saw_terminal_chunk && state.full_content.trim().is_empty() {
+        if !saw_done && !state.saw_terminal_chunk {
+            tracing::warn!(
+                request_id = %request_id,
+                message_id = %message_id,
+                chunks = state.chunks_emitted,
+                "AI stream ended before a completion marker was received"
+            );
             return Ok(ChatResponse {
                 id: message_id,
                 ok: false,
@@ -698,15 +401,6 @@ impl AiProvider for OpenAiCompatibleProvider {
                 thought_signature: None,
                 usage: state.final_usage,
             });
-        }
-
-        if !saw_done && !state.saw_terminal_chunk {
-            tracing::warn!(
-                request_id = %request_id,
-                message_id = %message_id,
-                chunks = state.chunks_emitted,
-                "AI stream ended without completion marker after emitting content"
-            );
         }
 
         // Final event
@@ -820,11 +514,11 @@ fn handle_stream_json_line(
         return StreamChunkResult::Error("AI stream returned malformed JSON chunk".to_string());
     };
 
-    if let Some(message) = extract_stream_error_message(&json) {
+    if let Some(message) = provider_response::extract_stream_error_message(&json) {
         return StreamChunkResult::Error(message);
     }
 
-    if let Some(usage) = extract_token_usage(&json) {
+    if let Some(usage) = provider_response::extract_token_usage(&json) {
         state.final_usage = Some(usage);
     }
 
@@ -834,14 +528,17 @@ fn handle_stream_json_line(
         .and_then(|choices| choices.first());
 
     if let Some(choice) = choice {
-        if let Some(message) = choice.get("error").and_then(extract_error_message) {
+        if let Some(message) = choice
+            .get("error")
+            .and_then(provider_response::extract_error_message)
+        {
             return StreamChunkResult::Error(message);
         }
 
         if let Some(finish_reason) = choice.get("finish_reason").and_then(|value| value.as_str()) {
             if finish_reason.eq_ignore_ascii_case("error") {
                 return StreamChunkResult::Error(
-                    extract_error_message(choice)
+                    provider_response::extract_error_message(choice)
                         .unwrap_or_else(|| "AI provider reported a streaming error".to_string()),
                 );
             }
@@ -868,11 +565,11 @@ fn handle_stream_json_line(
 
     if let Some(reasoning) = delta
         .and_then(|d| d.get("reasoning_content"))
-        .and_then(extract_stream_text)
+        .and_then(provider_response::extract_stream_text)
         .or_else(|| {
             delta
                 .and_then(|d| d.get("reasoning"))
-                .and_then(extract_stream_text)
+                .and_then(provider_response::extract_stream_text)
         })
     {
         sink.emit(StreamEvent::ThoughtChunk {
@@ -883,28 +580,39 @@ fn handle_stream_json_line(
 
     let content = delta
         .and_then(|d| d.get("content"))
-        .and_then(extract_stream_text)
+        .and_then(provider_response::extract_stream_text)
         .or_else(|| {
             choice
                 .and_then(|value| value.get("text"))
-                .and_then(extract_stream_text)
+                .and_then(provider_response::extract_stream_text)
                 .or_else(|| {
                     choice
                         .and_then(|value| value.get("content"))
-                        .and_then(extract_stream_text)
+                        .and_then(provider_response::extract_stream_text)
                 })
         })
-        .or_else(|| json.get("content").and_then(extract_stream_text))
+        .or_else(|| {
+            json.get("content")
+                .and_then(provider_response::extract_stream_text)
+        })
         .or_else(|| {
             json.get("message")
                 .and_then(|message| message.get("content"))
-                .and_then(extract_stream_text)
+                .and_then(provider_response::extract_stream_text)
         })
-        .or_else(|| json.get("response").and_then(extract_stream_text))
+        .or_else(|| {
+            json.get("response")
+                .and_then(provider_response::extract_stream_text)
+        })
+        .or_else(|| {
+            json.get("message")
+                .and_then(|message| message.get("content"))
+                .and_then(provider_response::extract_stream_text)
+        })
         .or_else(|| {
             json.get("token")
                 .and_then(|token| token.get("text"))
-                .and_then(extract_stream_text)
+                .and_then(provider_response::extract_stream_text)
         });
 
     if let Some(content) = content {
@@ -918,135 +626,14 @@ fn handle_stream_json_line(
     StreamChunkResult::Continue
 }
 
-fn extract_stream_text(value: &serde_json::Value) -> Option<String> {
-    match value {
-        serde_json::Value::String(text) => Some(text.clone()),
-        serde_json::Value::Array(parts) => {
-            let text = parts
-                .iter()
-                .filter_map(|part| {
-                    part.get("text")
-                        .and_then(|candidate| candidate.as_str())
-                        .or_else(|| part.get("content").and_then(|candidate| candidate.as_str()))
-                })
-                .collect::<Vec<_>>()
-                .join("");
-
-            (!text.is_empty()).then_some(text)
-        }
-        serde_json::Value::Object(object) => object
-            .get("text")
-            .and_then(|candidate| candidate.as_str())
-            .map(ToOwned::to_owned),
-        _ => None,
-    }
-}
-
-fn extract_token_usage(json: &serde_json::Value) -> Option<TokenUsage> {
-    let usage = json.get("usage").unwrap_or(json);
-    let timings = json.get("timings");
-
-    let prompt_tokens = read_usage_count(
-        usage,
-        timings,
-        &[
-            "prompt_tokens",
-            "input_tokens",
-            "prompt_eval_count",
-            "prompt_n",
-        ],
-    );
-    let completion_tokens = read_usage_count(
-        usage,
-        timings,
-        &[
-            "completion_tokens",
-            "output_tokens",
-            "eval_count",
-            "predicted_n",
-        ],
-    );
-    let total_tokens = read_usage_count(usage, timings, &["total_tokens"])
-        .or_else(|| (prompt_tokens.is_some() || completion_tokens.is_some()).then_some(0))
-        .map(|total| {
-            if total > 0 {
-                total
-            } else {
-                prompt_tokens.unwrap_or(0) + completion_tokens.unwrap_or(0)
-            }
-        });
-
-    match (prompt_tokens, completion_tokens, total_tokens) {
-        (None, None, None) => None,
-        (prompt_tokens, completion_tokens, total_tokens) => Some(TokenUsage {
-            prompt_tokens: prompt_tokens.unwrap_or(0),
-            completion_tokens: completion_tokens.unwrap_or(0),
-            total_tokens: total_tokens.unwrap_or(0),
-        }),
-    }
-}
-
-fn read_usage_count(
-    usage: &serde_json::Value,
-    timings: Option<&serde_json::Value>,
-    keys: &[&str],
-) -> Option<u32> {
-    keys.iter()
-        .find_map(|key| usage.get(*key).and_then(json_number_to_u32))
-        .or_else(|| {
-            timings.and_then(|timings| {
-                keys.iter()
-                    .find_map(|key| timings.get(*key).and_then(json_number_to_u32))
-            })
-        })
-}
-
-fn json_number_to_u32(value: &serde_json::Value) -> Option<u32> {
-    value
-        .as_u64()
-        .and_then(|value| u32::try_from(value).ok())
-        .or_else(|| {
-            value.as_f64().and_then(|value| {
-                let rounded = value.round();
-                if rounded.is_finite() && rounded >= 0.0 && rounded <= f64::from(u32::MAX) {
-                    rounded.to_string().parse::<u32>().ok()
-                } else {
-                    None
-                }
-            })
-        })
-}
-
-fn extract_stream_error_message(json: &serde_json::Value) -> Option<String> {
-    json.get("error")
-        .and_then(extract_error_message)
-        .or_else(|| json.get("errors").and_then(extract_error_message))
-}
-
-fn extract_error_message(value: &serde_json::Value) -> Option<String> {
-    match value {
-        serde_json::Value::String(message) => {
-            let trimmed = message.trim();
-            (!trimmed.is_empty()).then(|| trimmed.to_string())
-        }
-        serde_json::Value::Array(items) => items.iter().find_map(extract_error_message),
-        serde_json::Value::Object(object) => ["message", "detail", "error"]
-            .iter()
-            .find_map(|key| object.get(*key).and_then(extract_error_message)),
-        _ => None,
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used, clippy::indexing_slicing)]
 
-    use super::{
-        StreamChunkResult, StreamingAccumulator, build_request_payload, build_web_search_tool,
-        is_local_base_url, process_stream_chunk, retry_delay, should_retry_status,
-    };
+    use super::{StreamChunkResult, StreamingAccumulator, is_local_base_url, process_stream_chunk};
     use crate::domain::ai::{ChatMessage, ChatRequest};
     use crate::domain::ai::{StreamEvent, StreamSink, WebSearchOptions};
+    use crate::domain::ai::{provider_http, provider_payload};
     use reqwest::StatusCode;
     use serde_json::json;
 
@@ -1082,7 +669,7 @@ mod tests {
 
     #[test]
     fn build_web_search_tool_applies_defaults() {
-        let tool = build_web_search_tool(&WebSearchOptions {
+        let tool = provider_payload::build_web_search_tool(&WebSearchOptions {
             enabled: true,
             ..Default::default()
         });
@@ -1096,7 +683,7 @@ mod tests {
 
     #[test]
     fn build_web_search_tool_keeps_domain_filters() {
-        let tool = build_web_search_tool(&WebSearchOptions {
+        let tool = provider_payload::build_web_search_tool(&WebSearchOptions {
             enabled: true,
             allowed_domains: vec!["openai.com".to_string()],
             excluded_domains: vec!["reddit.com".to_string()],
@@ -1111,33 +698,64 @@ mod tests {
     fn local_base_url_detection_matches_local_endpoints() {
         assert!(is_local_base_url("http://localhost:8081/v1"));
         assert!(is_local_base_url("http://127.0.0.1:8081/v1"));
+        assert!(is_local_base_url("http://[::1]:8081/v1"));
         assert!(!is_local_base_url("https://openrouter.ai/api/v1"));
+        assert!(!is_local_base_url("https://localhost.example.com/v1"));
     }
 
     #[test]
     fn retry_policy_is_limited_to_interactive_safe_cases() {
-        assert!(should_retry_status(StatusCode::TOO_MANY_REQUESTS));
-        assert!(should_retry_status(StatusCode::SERVICE_UNAVAILABLE));
-        assert!(should_retry_status(StatusCode::BAD_GATEWAY));
-        assert!(should_retry_status(StatusCode::GATEWAY_TIMEOUT));
-        assert!(!should_retry_status(StatusCode::INTERNAL_SERVER_ERROR));
-        assert!(!should_retry_status(StatusCode::FORBIDDEN));
+        assert!(provider_http::should_retry_status(
+            StatusCode::TOO_MANY_REQUESTS
+        ));
+        assert!(provider_http::should_retry_status(
+            StatusCode::SERVICE_UNAVAILABLE
+        ));
+        assert!(provider_http::should_retry_status(StatusCode::BAD_GATEWAY));
+        assert!(provider_http::should_retry_status(
+            StatusCode::GATEWAY_TIMEOUT
+        ));
+        assert!(!provider_http::should_retry_status(
+            StatusCode::INTERNAL_SERVER_ERROR
+        ));
+        assert!(!provider_http::should_retry_status(StatusCode::FORBIDDEN));
     }
 
     #[test]
     fn retry_delay_stays_short_for_chat_requests() {
-        assert!(retry_delay(1, StatusCode::SERVICE_UNAVAILABLE).as_millis() < 500);
-        assert!(retry_delay(1, StatusCode::TOO_MANY_REQUESTS).as_millis() < 900);
+        assert!(provider_http::retry_delay(1, StatusCode::SERVICE_UNAVAILABLE).as_millis() < 500);
+        assert!(provider_http::retry_delay(1, StatusCode::TOO_MANY_REQUESTS).as_millis() < 900);
     }
 
     #[test]
     fn build_request_payload_uses_cloud_token_field_and_session_id() {
-        let payload = build_request_payload(&sample_request(), true, false);
+        let payload =
+            provider_payload::build_chat_completion_payload(&sample_request(), true, false);
 
         assert_eq!(payload.get("max_completion_tokens"), Some(&json!(2048)));
         assert_eq!(payload.get("session_id"), Some(&json!("session-1")));
         assert!(payload.get("max_tokens").is_none());
         assert_eq!(payload.get("reasoning"), Some(&json!({ "effort": "high" })));
+    }
+
+    #[test]
+    fn build_request_payload_maps_off_reasoning_to_openrouter_none() {
+        let mut request = sample_request();
+        request.thinking_level = Some("off".to_string());
+
+        let payload = provider_payload::build_chat_completion_payload(&request, true, false);
+
+        assert_eq!(payload.get("reasoning"), Some(&json!({ "effort": "none" })));
+    }
+
+    #[test]
+    fn build_request_payload_keeps_explicit_none_reasoning() {
+        let mut request = sample_request();
+        request.thinking_level = Some("none".to_string());
+
+        let payload = provider_payload::build_chat_completion_payload(&request, true, false);
+
+        assert_eq!(payload.get("reasoning"), Some(&json!({ "effort": "none" })));
     }
 
     #[test]
@@ -1148,7 +766,7 @@ mod tests {
             ..Default::default()
         });
 
-        let payload = build_request_payload(&request, true, false);
+        let payload = provider_payload::build_chat_completion_payload(&request, true, false);
 
         assert!(payload.get("tool_choice").is_none());
         assert!(payload.get("tools").is_none());
@@ -1163,7 +781,7 @@ mod tests {
             ..Default::default()
         });
 
-        let payload = build_request_payload(&request, true, false);
+        let payload = provider_payload::build_chat_completion_payload(&request, true, false);
 
         assert_eq!(payload.get("tool_choice"), Some(&json!("auto")));
         assert_eq!(
@@ -1177,7 +795,8 @@ mod tests {
 
     #[test]
     fn build_request_payload_keeps_local_compatibility_fields() {
-        let payload = build_request_payload(&sample_request(), true, true);
+        let payload =
+            provider_payload::build_chat_completion_payload(&sample_request(), true, true);
 
         assert_eq!(payload.get("max_tokens"), Some(&json!(2048)));
         assert!(payload.get("max_completion_tokens").is_none());
@@ -1239,6 +858,25 @@ mod tests {
         assert!(matches!(
             events.first(),
             Some(StreamEvent::ChatChunk { content, .. }) if content == "hello"
+        ));
+    }
+
+    #[test]
+    fn process_stream_chunk_supports_ollama_message_content() {
+        let sink = TestSink::default();
+        let mut state = StreamingAccumulator::new();
+        let chunk = b"data: {\"message\":{\"content\":\"hello from ollama\"},\"done\":true}\n\n";
+
+        let result = process_stream_chunk(chunk, "msg-1", &sink, &mut state);
+
+        assert!(matches!(result, StreamChunkResult::Continue));
+        assert_eq!(state.full_content, "hello from ollama");
+        assert!(state.saw_terminal_chunk);
+
+        let events = sink.events.lock().expect("sink events");
+        assert!(matches!(
+            events.first(),
+            Some(StreamEvent::ChatChunk { content, .. }) if content == "hello from ollama"
         ));
     }
 

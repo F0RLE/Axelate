@@ -318,9 +318,6 @@ export class I18nUI {
         }
     }
 
-    /**
-     * Initializes emoji flags (legacy compatibility).
-     */
     public initEmojiFlags(): void {
         this.updateSwitcherUI();
     }

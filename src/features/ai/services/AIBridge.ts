@@ -6,6 +6,7 @@ import type {
     IChunkHandler,
     IImageGenerationPreview,
 } from '../types/aiTypes';
+import type { IAIBridgeSendMessageOptions } from '../types/IAIBridge';
 import { AIProviderManager } from './AIProviderManager';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AIChatTransport, type IChatTransport } from './AIChatTransport';
@@ -37,7 +38,9 @@ export class AIBridge implements IAIBridge {
     private readonly _transport: IChatTransport;
     private readonly _manager: AIProviderManager;
     private readonly _engineStatus: EngineStatusService;
-    private readonly _providerPolicy = new AIBridgeProviderPolicy();
+    private readonly _providerPolicy = new AIBridgeProviderPolicy(() =>
+        this._context?.catalog.getCatalog(),
+    );
     private readonly _runtime: AIBridgeRuntime;
     private readonly _inactivityController: AIBridgeInactivityController;
     private readonly _messageController: AIBridgeMessageController;
@@ -141,13 +144,6 @@ export class AIBridge implements IAIBridge {
 
         if (started && this._context?.tauriProvider.isTauri() === true) {
             this._inactivityController.reset();
-            if (!this._providerPolicy.isCloudProvider(providerId)) {
-                await this._runtime.stopCrossSlotEngines({
-                    context: this._context,
-                    providerId,
-                    providerPolicy: this._providerPolicy,
-                });
-            }
             await this._refreshLocalContextWindow(providerId);
         }
 
@@ -187,6 +183,24 @@ export class AIBridge implements IAIBridge {
         }
     }
 
+    public async stopEngineSlot(capability: 'text' | 'image' | 'vision'): Promise<void> {
+        const providerId = this._manager.activeProviderId;
+        await this._runtime.stopEngineSlot(this._context, capability);
+        if (this._manager.activeProviderId !== providerId) {
+            return;
+        }
+
+        if (
+            providerId !== null &&
+            ((capability === 'image' &&
+                this._providerPolicy.isManagedLocalImageEngine(providerId)) ||
+                (capability === 'text' && this._providerPolicy.isLocalTextProvider(providerId)))
+        ) {
+            this._manager.stopProvider();
+            this._engineStatus.setEngineState(providerId, 'idle');
+        }
+    }
+
     public isActive(): boolean {
         return this._manager.isActive();
     }
@@ -205,8 +219,19 @@ export class AIBridge implements IAIBridge {
         source: MessageSource = 'chat',
         attachments: { name: string; type: string; data_base64: string }[] = [],
         history: IChatMessage[] = [],
+        options: IAIBridgeSendMessageOptions = {},
     ): Promise<IBridgeResponse> {
-        return await this._messageController.sendMessage(text, source, attachments, history);
+        return await this._messageController.sendMessage(
+            text,
+            source,
+            attachments,
+            history,
+            options,
+        );
+    }
+
+    public async prepareImagePrompt(text: string): Promise<IBridgeResponse> {
+        return await this._messageController.prepareImagePrompt(text);
     }
 
     public onMessage(listenerId: string, handler: MessageHandler): void {
@@ -247,6 +272,7 @@ export class AIBridge implements IAIBridge {
                 return await this._runtime.getHistory(this._context, this._manager.sessionId);
             } catch (e) {
                 this._tracer.error('[AIBridge] Failed to load history:', e);
+                throw e;
             }
         }
         return [];
@@ -265,17 +291,20 @@ export class AIBridge implements IAIBridge {
         }
     }
 
-    public async cancelImageGeneration(): Promise<void> {
+    public async cancelImageGeneration(providerId?: string | null): Promise<void> {
         if (this._context?.tauriProvider.isTauri() !== true) {
             return;
         }
 
-        const providerId = this._manager.activeProviderId;
-        if (providerId === null || !this._providerPolicy.isImageProvider(providerId)) {
+        const effectiveProviderId = providerId ?? this._manager.activeProviderId;
+        if (
+            effectiveProviderId === null ||
+            !this._providerPolicy.isImageProvider(effectiveProviderId)
+        ) {
             return;
         }
 
-        await this._runtime.cancelImageGeneration(this._context, providerId);
+        await this._runtime.cancelImageGeneration(this._context, effectiveProviderId);
     }
 
     public async cancelTextGeneration(): Promise<boolean> {
@@ -373,7 +402,11 @@ export class AIBridge implements IAIBridge {
 
     private _cleanupTransportState(): void {
         this._unlisteners.forEach((fn) => {
-            fn();
+            try {
+                fn();
+            } catch (error: unknown) {
+                this._tracer.warn('[AIBridge] Stream cleanup listener failed:', error);
+            }
         });
         this._unlisteners.length = 0;
         this._transport.destroy();

@@ -1,4 +1,10 @@
+node_modules
 dist
 coverage
+.axelate
+.vite
+.cache
+*.log
+*.tsbuildinfo
 shared/types/bindings.ts
 .axelate

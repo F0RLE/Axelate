@@ -2,6 +2,7 @@ import '@/styles/app.css';
 import { tracer } from '@/infrastructure/logging/LoggerService';
 import { createCoreAssembly, type CoreAssembly } from './CoreAssembly';
 import { bindCoreEntry } from './CoreEntry';
+import type { CoreServices } from './CoreContainer';
 
 export class Core {
     private readonly _assembly: CoreAssembly;
@@ -37,18 +38,24 @@ export class Core {
      * Executes the core initialization sequence with hardened survival logic.
      */
     public async init(): Promise<void> {
+        if (this._isCoreDestroyed()) return;
         if (this._isInitialized) return;
         if (this._initPromise !== null) {
             await this._initPromise;
             return;
         }
 
-        this._initPromise = this._runInit();
+        const initPromise = this._runInit();
+        this._initPromise = initPromise;
         try {
-            await this._initPromise;
-            this._isInitialized = true;
+            await initPromise;
+            if (this._initPromise === initPromise && !this._isCoreDestroyed()) {
+                this._isInitialized = true;
+            }
         } finally {
-            this._initPromise = null;
+            if (this._initPromise === initPromise) {
+                this._initPromise = null;
+            }
         }
     }
 
@@ -56,12 +63,36 @@ export class Core {
         await this._assembly.lifecycleController.runInit();
     }
 
-    public destroy(): void {
+    private _isCoreDestroyed(): boolean {
+        return this._isDestroyed;
+    }
+
+    public get aiBridge(): CoreServices['aiBridge'] {
+        return this._assembly.services.aiBridge;
+    }
+
+    public get moduleService(): CoreServices['moduleService'] {
+        return this._assembly.services.moduleService;
+    }
+
+    public get tauriProvider(): CoreServices['tauriProvider'] {
+        return this._assembly.services.tauriProvider;
+    }
+
+    public async destroy(): Promise<void> {
         if (this._isDestroyed) return;
         this._isDestroyed = true;
         this._isInitialized = false;
+        const pendingInit = this._initPromise;
         this._initPromise = null;
-        this._assembly.lifecycleController.destroy();
+        if (pendingInit !== null) {
+            try {
+                await pendingInit;
+            } catch {
+                // Init failures are superseded by teardown.
+            }
+        }
+        await this._assembly.lifecycleController.destroy();
     }
 }
 bindCoreEntry(() => new Core(), tracer);

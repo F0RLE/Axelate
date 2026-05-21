@@ -18,7 +18,7 @@ import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSett
 import type { MonitoringService } from '@/features/monitoring/services/MonitoringService';
 import type { ConsoleLogService } from '@/features/console/services/ConsoleLogService';
 import type { SettingsService } from '@/features/settings/services/SettingsService';
-import type { ChatController } from '@/features/chat/chat';
+import type { ChatController } from '@/features/chat/ChatController';
 import type { ModulePlatformService } from '@/shared/services/ModulePlatformService';
 import type { AIBridge } from '@/features/ai/services/AIBridge';
 import type { AppUI } from '@/shared/shell/AppUI';

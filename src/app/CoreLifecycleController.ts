@@ -1,5 +1,5 @@
 import type { AIBridge } from '@/features/ai/services/AIBridge';
-import type { ChatController } from '@/features/chat/chat';
+import type { ChatController } from '@/features/chat/ChatController';
 import type { DownloadUI } from '@/features/downloads/ui/DownloadUI';
 import type { MonitoringService } from '@/features/monitoring/services/MonitoringService';
 import type { SettingsService } from '@/features/settings/services/SettingsService';
@@ -19,6 +19,7 @@ import type { ErrorHandler } from '@/shared/services/ErrorHandler';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import type { UiStateStore } from '@/shared/services/state/UiStateStore';
 import type { AppUI } from '@/shared/shell/AppUI';
+import type { GlobalTextContextMenu } from '@/shared/shell/GlobalTextContextMenu';
 import type { Particles } from '@/shared/shell/Particles';
 import type { SidebarUI } from '@/shared/shell/SidebarUI';
 import type { WindowUI } from '@/shared/shell/WindowUI';
@@ -113,6 +114,7 @@ export type CoreDisposables = {
     aiBridge: AIBridge;
     bridge: GlobalBridge;
     errorHandler: ErrorHandler;
+    globalTextContextMenu: GlobalTextContextMenu;
 };
 
 export type CoreLifecycleDeps = {
@@ -133,6 +135,10 @@ export class CoreLifecycleController {
     constructor(private readonly _deps: CoreLifecycleDeps) {}
 
     public async runInit(): Promise<void> {
+        if (this._deps.state.isDestroyed()) {
+            return;
+        }
+
         const bootstrapResult = await runCoreBootstrap({
             bootstrap: this._deps.bootstrap,
             immediateUi: this._deps.immediateUi,
@@ -140,6 +146,10 @@ export class CoreLifecycleController {
                 this.initGlobalShortcuts();
             },
         });
+        if (this._deps.state.isDestroyed()) {
+            return;
+        }
+        this._deps.disposables.globalTextContextMenu.init();
 
         if (bootstrapResult.currentPage !== 'chat') {
             this.scheduleDeferredChatInit();
@@ -161,23 +171,39 @@ export class CoreLifecycleController {
                 });
             },
         });
+        if (this._deps.state.isDestroyed()) {
+            return;
+        }
         await this._listenForBackendSelectedModuleChanges();
+        if (this._deps.state.isDestroyed()) {
+            return;
+        }
 
         this._deps.bootstrap.tracer.info('[Core] Ready.');
     }
 
-    public destroy(): void {
+    public async destroy(): Promise<void> {
         if (this._activeGlobalShortcutKeydown !== null) {
             globalThis.removeEventListener('keydown', this._activeGlobalShortcutKeydown);
             this._activeGlobalShortcutKeydown = null;
         }
-        this._selectedModuleChangedUnlisten?.();
+        try {
+            this._selectedModuleChangedUnlisten?.();
+        } catch (error) {
+            this._deps.bootstrap.tracer.warn(
+                '[Core] Failed to remove selected module listener during destroy:',
+                error,
+            );
+        }
         this._selectedModuleChangedUnlisten = null;
-        destroyCoreResources({
-            deferredChatInitTimer: this._deferredChatInitTimer,
-            ...this._deps.disposables,
-        });
-        this._deferredChatInitTimer = null;
+        try {
+            await destroyCoreResources({
+                deferredChatInitTimer: this._deferredChatInitTimer,
+                ...this._deps.disposables,
+            });
+        } finally {
+            this._deferredChatInitTimer = null;
+        }
     }
 
     public initGlobalShortcuts(globalShortcutKeydown?: (e: KeyboardEvent) => void): void {
@@ -216,13 +242,17 @@ export class CoreLifecycleController {
             return;
         }
 
-        this._selectedModuleChangedUnlisten =
-            await backendSelection.tauriProvider.listen<SelectedModuleChangedPayload>(
-                'ui-state:selected-module-changed',
-                (payload) => {
-                    this._applyBackendSelectedModuleChange(payload);
-                },
-            );
+        const unlisten = await backendSelection.tauriProvider.listen<SelectedModuleChangedPayload>(
+            'ui-state:selected-module-changed',
+            (payload) => {
+                this._applyBackendSelectedModuleChange(payload);
+            },
+        );
+        if (this._deps.state.isDestroyed()) {
+            unlisten();
+            return;
+        }
+        this._selectedModuleChangedUnlisten = unlisten;
     }
 
     private _applyBackendSelectedModuleChange(payload: SelectedModuleChangedPayload): void {

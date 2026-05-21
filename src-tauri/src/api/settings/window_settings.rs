@@ -85,7 +85,7 @@ pub async fn save_zoom_level(
     ui_service: tauri::State<'_, ui_state::UiStateService>,
     zoom: f64,
 ) -> Result<(), AppError> {
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let mut state = ui_service.get_ui_state().await?;
     if (state.zoom_level - zoom).abs() < f64::EPSILON {
         return Ok(());
     }
@@ -102,7 +102,7 @@ async fn persist_zoom_for_window(
         window_settings::SCALING_MIN_ZOOM,
         window_settings::SCALING_MAX_ZOOM,
     );
-    let mut state = ui_service.get_ui_state().await.unwrap_or_default();
+    let mut state = ui_service.get_ui_state().await?;
     let previous_zoom = state.zoom_level;
     state.zoom_level = zoom;
 
@@ -161,7 +161,7 @@ pub async fn get_resolution_zoom(
     window: tauri::WebviewWindow,
     ui_service: tauri::State<'_, ui_state::UiStateService>,
 ) -> Result<f64, AppError> {
-    let state = ui_service.get_ui_state().await.unwrap_or_default();
+    let state = ui_service.get_ui_state().await?;
     let res_key = res_key_from_window(&window).unwrap_or_else(|| "unknown".to_string());
     Ok(resolve_zoom(&state, &res_key))
 }
@@ -210,15 +210,14 @@ pub async fn get_window_policy(
     }
 
     // Get current zoom from state to calculate effective dimensions
-    let zoom = ui_service
-        .get_ui_state()
-        .await
-        .map(|s| s.zoom_level)
-        .unwrap_or(1.0);
+    let zoom = ui_service.get_ui_state().await?.zoom_level;
 
     let win_size = window
         .inner_size()
-        .unwrap_or_default()
+        .map_err(|error| AppError::External {
+            request_id: None,
+            message: format!("Failed to read window inner size: {error}"),
+        })?
         .to_logical::<f64>(scale_factor);
 
     let effective_w = u32::try_from((win_size.width / zoom).round() as i64).unwrap_or(1920);
@@ -230,4 +229,83 @@ pub async fn get_window_policy(
         effective_w,
         effective_h,
     ))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::get_window_config;
+    use super::resolve_zoom;
+    use crate::infrastructure::config::window_settings::{
+        BP_COMPACT, BP_LARGE, BP_MEDIUM, SCALING_MAX_ZOOM, SCALING_MIN_ZOOM,
+        THRESHOLD_SMALL_SCREEN_HEIGHT, THRESHOLD_SMALL_SCREEN_WIDTH, THRESHOLD_WARNING_HEIGHT,
+        THRESHOLD_WARNING_WIDTH,
+    };
+    use crate::models::UIState;
+
+    fn assert_zoom_eq(actual: f64, expected: f64) {
+        assert!(
+            (actual - expected).abs() < f64::EPSILON,
+            "expected zoom {expected}, got {actual}"
+        );
+    }
+
+    #[test]
+    fn resolve_zoom_prefers_saved_resolution_zoom() {
+        let mut state = UIState {
+            zoom_level: 1.15,
+            ..UIState::default()
+        };
+        state.resolution_zoom.insert("1920x1080".to_string(), 1.35);
+
+        assert_zoom_eq(resolve_zoom(&state, "1920x1080"), 1.35);
+    }
+
+    #[test]
+    fn resolve_zoom_falls_back_to_global_zoom_then_default() {
+        let global = UIState {
+            zoom_level: 1.2,
+            ..UIState::default()
+        };
+        let invalid_global = UIState {
+            zoom_level: 0.0,
+            ..UIState::default()
+        };
+
+        assert_zoom_eq(resolve_zoom(&global, "missing"), 1.2);
+        assert_zoom_eq(resolve_zoom(&invalid_global, "missing"), 1.0);
+    }
+
+    #[test]
+    fn resolve_zoom_ignores_non_positive_resolution_zoom_and_clamps_bounds() {
+        let mut state = UIState {
+            zoom_level: 1.1,
+            ..UIState::default()
+        };
+        state.resolution_zoom.insert("invalid".to_string(), -2.0);
+        state.resolution_zoom.insert("too-low".to_string(), 0.01);
+        state.resolution_zoom.insert("too-high".to_string(), 99.0);
+
+        assert_zoom_eq(resolve_zoom(&state, "invalid"), 1.1);
+        assert_zoom_eq(resolve_zoom(&state, "too-low"), SCALING_MIN_ZOOM);
+        assert_zoom_eq(resolve_zoom(&state, "too-high"), SCALING_MAX_ZOOM);
+    }
+
+    #[test]
+    fn get_window_config_exposes_scaling_bounds() {
+        let config = get_window_config();
+
+        assert_eq!(config.breakpoints.compact, BP_COMPACT);
+        assert_eq!(config.breakpoints.medium, BP_MEDIUM);
+        assert_eq!(config.breakpoints.large, BP_LARGE);
+        assert_eq!(config.thresholds.warning_width, THRESHOLD_WARNING_WIDTH);
+        assert_eq!(config.thresholds.warning_height, THRESHOLD_WARNING_HEIGHT);
+        assert_eq!(
+            config.thresholds.small_screen_width,
+            THRESHOLD_SMALL_SCREEN_WIDTH
+        );
+        assert_eq!(
+            config.thresholds.small_screen_height,
+            THRESHOLD_SMALL_SCREEN_HEIGHT
+        );
+    }
 }
