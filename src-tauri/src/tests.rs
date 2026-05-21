@@ -79,8 +79,8 @@ mod app_tests {
     #[test]
     fn test_directory_paths() {
         use crate::utils::paths::{
-            CONFIG_DIR, ENGINE_LOGS_DIR, LOG_DIR, MODELS_DIR, MODULE_LOGS_DIR, RUNTIME_DIR,
-            SYSTEM_ROOT, USER_ROOT,
+            CONFIG_DIR, ENGINE_LOGS_DIR, ENGINE_RUNTIME_DIR, ENGINES_DIR, INTEGRATION_LOGS_DIR,
+            INTEGRATIONS_DIR, LOG_DIR, MODELS_DIR, RUNTIME_DIR, SYSTEM_ROOT, USER_ROOT,
         };
 
         // Verify all derived paths are rooted under the expected test directories.
@@ -96,10 +96,16 @@ mod app_tests {
         assert!(SYSTEM_ROOT.ends_with("System"));
         assert!(LOG_DIR.starts_with(SYSTEM_ROOT.as_path()));
         assert!(LOG_DIR.ends_with("Logs"));
-        assert!(ENGINE_LOGS_DIR.starts_with(LOG_DIR.as_path()));
-        assert!(ENGINE_LOGS_DIR.ends_with("Engines"));
-        assert!(MODULE_LOGS_DIR.starts_with(LOG_DIR.as_path()));
-        assert!(MODULE_LOGS_DIR.ends_with("Modules"));
+        assert!(ENGINE_RUNTIME_DIR.starts_with(RUNTIME_DIR.as_path()));
+        assert!(ENGINE_RUNTIME_DIR.ends_with("Engines"));
+        assert!(ENGINE_LOGS_DIR.starts_with(ENGINE_RUNTIME_DIR.as_path()));
+        assert!(ENGINE_LOGS_DIR.ends_with("Logs"));
+        assert!(INTEGRATION_LOGS_DIR.starts_with(LOG_DIR.as_path()));
+        assert!(INTEGRATION_LOGS_DIR.ends_with("Integrations"));
+        assert!(ENGINES_DIR.starts_with(SYSTEM_ROOT.as_path()));
+        assert!(ENGINES_DIR.ends_with("Engines"));
+        assert!(INTEGRATIONS_DIR.starts_with(SYSTEM_ROOT.as_path()));
+        assert!(INTEGRATIONS_DIR.ends_with("Integrations"));
         assert!(MODELS_DIR.starts_with(SYSTEM_ROOT.as_path()));
         assert!(MODELS_DIR.ends_with("Models"));
         assert!(RUNTIME_DIR.starts_with(SYSTEM_ROOT.as_path()));

@@ -275,6 +275,50 @@ describe('CatalogService', () => {
             expect(localApp?.installed).toBe(true);
             expect(localApp?.configSchema).toEqual({ setting: {} });
         });
+
+        it('should add discovered integration folders with manifest metadata to services', async () => {
+            const config = createMockAppConfig({
+                catalog: {
+                    ai: [{ id: 'gpt', name: 'GPT', type: 'api' }],
+                    services: [],
+                },
+                apiProviders: [{ id: 'gpt', models: { default: 'gpt-5' } }],
+            });
+
+            setupBridgeMocks(mockBridge, config, [
+                {
+                    id: 'sample-integration',
+                    name: 'Sample Integration',
+                    description: 'Sample integration workflow module for Axelate.',
+                    version: '0.3.0',
+                    icon: 'plug',
+                    preview: {
+                        title: 'Sample Integration',
+                        description:
+                            'Runs an external workflow and processes discovered information through Axelate AI.',
+                        sticker: '🤖',
+                    },
+                    settingsUi: 'settings-ui/index.html',
+                    status: 'stopped',
+                    configSchema: undefined,
+                } as unknown as IModule,
+            ]);
+
+            await service.loadCatalog();
+
+            const integration = service.getAppById('sample-integration');
+            expect(integration).toBeDefined();
+            expect(integration?.category).toBe('services');
+            expect(integration?.type).toBe('local');
+            expect(integration?.installed).toBe(true);
+            expect(integration?.name).toBe('Sample Integration');
+            expect(integration?.desc).toContain('Runs an external workflow');
+            expect(integration?.icon).toBe('🤖');
+            expect(integration?.settingsUi).toBe('settings-ui/index.html');
+            expect(service.getCatalog().services.some((app) => app.id === integration?.id)).toBe(
+                true,
+            );
+        });
     });
 
     describe('_initGlobalExposures DEV branch (L29)', () => {

@@ -86,7 +86,7 @@ describe('EngineStatusService', () => {
         expect(service.getEndpointForEngine('llamacpp')).toBe('http://127.0.0.1:8080');
         expect(service.hasActiveEngines).toBe(true);
         expect(llama.classList.contains('engine-ready')).toBe(true);
-        expect(llama.querySelector('button')?.textContent).toBe('Убрать');
+        expect(llama.querySelector('button')?.textContent).toBe('Remove');
         const dashboardCard = document.getElementById('ai-module-card');
         expect(dashboardCard?.classList.contains('module-running')).toBe(true);
         expect((dashboardCard as HTMLElement | null)?.dataset['runtimeStatus']).toBe('running');
@@ -140,10 +140,10 @@ describe('EngineStatusService', () => {
         );
 
         listeners['ai:engine:ready']?.({ engine_id: 'sdcpp', endpoint: '/engine' });
-        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Убрать');
+        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Remove');
 
         listeners['ai:engine:error']?.({ engine_id: 'sdcpp', message: 'oops' });
-        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Убрать');
+        expect(document.querySelector('[data-app-id="sdcpp"] button')?.textContent).toBe('Remove');
     });
 
     it('cleans active slots and unlisteners on destroy', async () => {

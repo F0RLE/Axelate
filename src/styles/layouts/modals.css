@@ -130,7 +130,7 @@
     max-height: calc(90vh - 200px);
 }
 
-.module-settings-legacy-note {
+.module-settings-standard-note {
     display: inline-flex;
     align-items: center;
     gap: 0.4rem;

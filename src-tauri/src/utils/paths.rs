@@ -159,23 +159,29 @@ pub static UI_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("UI"));
 /// System root for internal app data (`AxelateData/System`).
 pub static SYSTEM_ROOT: LazyLock<PathBuf> = LazyLock::new(|| APPDATA_ROOT.join("System"));
 
+/// Shared runtime directory for managed language/tool runtimes (`AxelateData/System/Runtime`)
+pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Runtime"));
+
+/// Runtime root for launcher-managed AI engines (`AxelateData/System/Runtime/Engines`)
+pub static ENGINE_RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| RUNTIME_DIR.join("Engines"));
+
+/// Downloaded integration packages directory (`AxelateData/System/Integrations`)
+pub static INTEGRATIONS_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Integrations"));
+
+/// Downloaded launcher-managed AI engines directory (`AxelateData/System/Engines`)
+pub static ENGINES_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Engines"));
+
 /// Log files directory (`AxelateData/System/Logs`)
 pub static LOG_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Logs"));
 
-/// Engine runtime log files directory (`AxelateData/System/Logs/Engines`)
-pub static ENGINE_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| LOG_DIR.join("Engines"));
+/// Engine runtime log files directory (`AxelateData/System/Runtime/Engines/Logs`)
+pub static ENGINE_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| ENGINE_RUNTIME_DIR.join("Logs"));
 
-/// Module runtime log files directory (`AxelateData/System/Logs/Modules`)
-pub static MODULE_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| LOG_DIR.join("Modules"));
+/// Integration runtime log files directory (`AxelateData/System/Logs/Integrations`)
+pub static INTEGRATION_LOGS_DIR: LazyLock<PathBuf> = LazyLock::new(|| LOG_DIR.join("Integrations"));
 
 /// Temporary files directory (`AxelateData/System/Temp`)
 pub static TEMP_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Temp"));
-
-/// Downloaded modules directory (`AxelateData/System/Modules`)
-pub static MODULES_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Modules"));
-
-/// Shared runtime directory for managed language/tool runtimes (`AxelateData/System/Runtime`)
-pub static RUNTIME_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Runtime"));
 
 /// Downloaded or user-provided model files directory (`AxelateData/System/Models`)
 pub static MODELS_DIR: LazyLock<PathBuf> = LazyLock::new(|| SYSTEM_ROOT.join("Models"));
@@ -221,18 +227,20 @@ pub static FILE_CHAT_HISTORY: LazyLock<PathBuf> = LazyLock::new(|| CHAT_DIR.join
 /// Maximum number of log files to keep
 const MAX_LOG_FILES: usize = 5;
 
-fn managed_directories() -> [&'static PathBuf; 13] {
+fn managed_directories() -> [&'static PathBuf; 15] {
     [
         &*APPDATA_ROOT,
         &*CONFIG_DIR,
         &*UI_DIR,
         &*SYSTEM_ROOT,
+        &*RUNTIME_DIR,
+        &*ENGINE_RUNTIME_DIR,
         &*LOG_DIR,
         &*ENGINE_LOGS_DIR,
-        &*MODULE_LOGS_DIR,
+        &*INTEGRATION_LOGS_DIR,
         &*TEMP_DIR,
-        &*MODULES_DIR,
-        &*RUNTIME_DIR,
+        &*INTEGRATIONS_DIR,
+        &*ENGINES_DIR,
         &*MODELS_DIR,
         &*CACHE_DIR,
         &*CHAT_DIR,
@@ -246,6 +254,7 @@ fn managed_directories() -> [&'static PathBuf; 13] {
 /// Returns `AppError::Io` if directory creation fails.
 pub fn init_filesystem() -> Result<(), AppError> {
     migrate_windows_system_root_to_roaming()?;
+    migrate_legacy_module_directories()?;
 
     for dir in managed_directories() {
         fs::create_dir_all(dir)?;
@@ -303,6 +312,18 @@ fn append_file(source_path: &Path, target_path: &Path) -> Result<(), AppError> {
 }
 
 fn migrate_legacy_module_runtime_logs() -> Result<(), AppError> {
+    let legacy_module_logs_dir = LOG_DIR.join("Modules");
+    if legacy_module_logs_dir.exists() {
+        merge_directories(&legacy_module_logs_dir, &INTEGRATION_LOGS_DIR)?;
+        remove_empty_dirs(&legacy_module_logs_dir)?;
+    }
+
+    let legacy_engine_logs_dir = LOG_DIR.join("Engines");
+    if legacy_engine_logs_dir.exists() {
+        merge_directories(&legacy_engine_logs_dir, &ENGINE_LOGS_DIR)?;
+        remove_empty_dirs(&legacy_engine_logs_dir)?;
+    }
+
     if !ENGINE_LOGS_DIR.exists() {
         return Ok(());
     }
@@ -318,7 +339,9 @@ fn migrate_legacy_module_runtime_logs() -> Result<(), AppError> {
             continue;
         }
 
-        let target_runtime_log = MODULE_LOGS_DIR.join(entry.file_name()).join("runtime.log");
+        let target_runtime_log = INTEGRATION_LOGS_DIR
+            .join(entry.file_name())
+            .join("runtime.log");
 
         if target_runtime_log.exists() {
             append_file(&legacy_runtime_log, &target_runtime_log)?;
@@ -327,6 +350,53 @@ fn migrate_legacy_module_runtime_logs() -> Result<(), AppError> {
         }
     }
 
+    Ok(())
+}
+
+fn legacy_engine_ids() -> std::collections::HashSet<String> {
+    serde_json::from_str::<Vec<crate::models::config::ModuleItem>>(include_str!(
+        "../../resources/config/local_modules.json"
+    ))
+    .unwrap_or_default()
+    .into_iter()
+    .filter(|item| item.type_name == "local")
+    .map(|item| item.id)
+    .collect()
+}
+
+fn migrate_legacy_module_directories() -> Result<(), AppError> {
+    let legacy_modules_dir = SYSTEM_ROOT.join("Modules");
+    if !legacy_modules_dir.exists() {
+        return Ok(());
+    }
+
+    let engine_ids = legacy_engine_ids();
+    fs::create_dir_all(&*INTEGRATIONS_DIR)?;
+    fs::create_dir_all(&*ENGINES_DIR)?;
+
+    for entry in fs::read_dir(&legacy_modules_dir)? {
+        let entry = entry?;
+        if !entry.file_type()?.is_dir() {
+            continue;
+        }
+
+        let id = entry.file_name().to_string_lossy().to_string();
+        let target_root = if engine_ids.contains(&id) {
+            &*ENGINES_DIR
+        } else {
+            &*INTEGRATIONS_DIR
+        };
+        let target_path = target_root.join(entry.file_name());
+
+        if target_path.exists() {
+            merge_directories(&entry.path(), &target_path)?;
+            remove_empty_dirs(&entry.path())?;
+        } else {
+            fs::rename(entry.path(), target_path)?;
+        }
+    }
+
+    remove_empty_dirs(&legacy_modules_dir)?;
     Ok(())
 }
 

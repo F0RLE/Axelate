@@ -88,9 +88,11 @@ export class ModalFocusTrapHelper {
     }
 
     public focusFirstElement(modal: HTMLDialogElement): void {
-        const first = this.getFocusableElements(modal)[0];
-        if (first !== undefined) {
-            first.focus();
+        const focusable = this.getFocusableElements(modal);
+        const preferred = focusable.find((element) => !element.classList.contains('app-close-btn'));
+        const target = preferred ?? focusable[0];
+        if (target !== undefined) {
+            target.focus();
             return;
         }
 
@@ -105,6 +107,8 @@ export class ModalFocusTrapHelper {
                 !element.hasAttribute('disabled') &&
                 element.tabIndex !== -1 &&
                 element.closest('.hidden') === null &&
+                element.closest('[hidden]') === null &&
+                element.closest('[inert]') === null &&
                 element.getAttribute('aria-hidden') !== 'true',
         );
     }

@@ -46,4 +46,46 @@ describe('ModalFocusTrapHelper', () => {
         helper.detach();
         document.body.innerHTML = '';
     });
+
+    it('should prefer content controls over close buttons for initial modal focus', () => {
+        const helper = new ModalFocusTrapHelper(vi.fn());
+        const modal = document.createElement('dialog');
+        const closeButton = document.createElement('button');
+        const actionButton = document.createElement('button');
+
+        closeButton.className = 'app-close-btn';
+        closeButton.textContent = 'Close';
+        actionButton.textContent = 'Select';
+        modal.append(closeButton, actionButton);
+        document.body.append(modal);
+
+        helper.focusFirstElement(modal);
+
+        expect(document.activeElement).toBe(actionButton);
+
+        helper.detach();
+        document.body.innerHTML = '';
+    });
+
+    it('should skip hidden and inert controls in tab order', () => {
+        const helper = new ModalFocusTrapHelper(vi.fn());
+        const modal = document.createElement('dialog');
+        const hiddenWrapper = document.createElement('div');
+        const hiddenButton = document.createElement('button');
+        const inertWrapper = document.createElement('div');
+        const inertButton = document.createElement('button');
+        const visibleButton = document.createElement('button');
+
+        hiddenWrapper.hidden = true;
+        hiddenWrapper.append(hiddenButton);
+        inertWrapper.setAttribute('inert', '');
+        inertWrapper.append(inertButton);
+        modal.append(hiddenWrapper, inertWrapper, visibleButton);
+        document.body.append(modal);
+
+        expect(helper.getFocusableElements(modal)).toEqual([visibleButton]);
+
+        helper.detach();
+        document.body.innerHTML = '';
+    });
 });

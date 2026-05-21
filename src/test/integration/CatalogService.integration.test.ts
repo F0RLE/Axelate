@@ -31,7 +31,7 @@ describe('CatalogService Integration', () => {
         const mockConfig = createMockAppConfig({
             catalog: {
                 ai: [{ id: 'llamacpp', name: 'Llama.cpp', type: 'local' }],
-                services: [{ id: 'mybot', name: 'My Bot' }],
+                services: [{ id: 'my-worker', name: 'My Worker' }],
             },
         });
 
@@ -51,7 +51,7 @@ describe('CatalogService Integration', () => {
         expect(catalog.ai.at(0)?.id).toBe('llamacpp');
         expect(catalog.ai.at(0)?.configSchema).toBeDefined();
         expect(catalog.services).toHaveLength(1);
-        expect(catalog.services.at(0)?.id).toBe('mybot');
+        expect(catalog.services.at(0)?.id).toBe('my-worker');
     });
 
     it('should handle Tauri backend failure and use fallback', async () => {
@@ -98,7 +98,7 @@ describe('CatalogService Integration', () => {
         const mockConfig = createMockAppConfig({
             catalog: {
                 ai: [{ id: 'gpt', name: 'GPT', type: 'api' }],
-                services: [{ id: 'bot', name: 'Bot' }],
+                services: [{ id: 'worker', name: 'Worker' }],
             },
         });
 

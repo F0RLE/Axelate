@@ -1,6 +1,27 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
+/// Module-owned card preview metadata.
+#[derive(Debug, Serialize, Deserialize, Clone, specta::Type, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct ModulePreview {
+    /// Optional card title override.
+    #[serde(default)]
+    pub title: Option<String>,
+    /// Optional card description override.
+    #[serde(default)]
+    pub description: Option<String>,
+    /// Optional emoji/text sticker shown when no image is provided.
+    #[serde(default)]
+    pub sticker: Option<String>,
+    /// Optional image URL or data URL for the card preview.
+    #[serde(default)]
+    pub image: Option<String>,
+    /// Optional directory with localized preview JSON files.
+    #[serde(default)]
+    pub i18n: Option<String>,
+}
+
 /// Module control request from frontend
 #[derive(Debug, Serialize, Deserialize, Type)]
 pub struct ControlRequest {
@@ -39,6 +60,9 @@ pub struct Module {
     pub category: String, // "ai" or "service"
     /// Icon/emoji for UI display
     pub icon: String,
+    /// Module-owned card preview metadata.
+    #[serde(default)]
+    pub preview: Option<ModulePreview>,
     /// Absolute filesystem path to module directory
     pub path: String, // Absolute path to module
     /// Whether module files are present locally

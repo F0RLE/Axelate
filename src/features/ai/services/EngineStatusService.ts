@@ -199,10 +199,10 @@ export class EngineStatusService {
             );
         } else if (state === 'ready') {
             btn.classList.remove('active-module-btn', 'stop-btn');
-            btn.textContent = this._translate('ui.launcher.modules.modal.btn_remove', 'Убрать');
+            btn.textContent = this._translate('ui.launcher.modules.modal.btn_remove', 'Remove');
         } else {
             btn.classList.remove('active-module-btn', 'stop-btn');
-            btn.textContent = this._translate('ui.launcher.modules.modal.btn_remove', 'Убрать');
+            btn.textContent = this._translate('ui.launcher.modules.modal.btn_remove', 'Remove');
         }
     }
 

@@ -59,11 +59,7 @@ export class ModuleSettingsViewHelper {
 
     public getModuleSettingsTitle(app: IApp, translate: TranslateFn): string {
         const suffix = translate('ui.settings.header_suffix', 'Settings');
-        if (typeof app.settingsUi === 'string' && app.settingsUi.trim() !== '') {
-            return suffix;
-        }
-
-        const legacy = translate('ui.settings.legacy_badge', 'Legacy');
-        return `${suffix} • ${legacy}`;
+        void app;
+        return suffix;
     }
 }

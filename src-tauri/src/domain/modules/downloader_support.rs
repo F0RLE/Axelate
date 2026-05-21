@@ -1,10 +1,28 @@
 use crate::errors::AppError;
+use crate::utils::paths::{ENGINES_DIR, INTEGRATIONS_DIR};
 use std::path::{Path, PathBuf};
 
 const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE: u64 = 3 * 1024 * 1024 * 1024;
 const MAX_ARCHIVE_TOTAL_UNCOMPRESSED_SIZE_LARGE_MODULE: u64 = 12 * 1024 * 1024 * 1024;
 const MAX_ARCHIVE_FILE_COUNT: usize = 10000;
 const MAX_ARCHIVE_FILE_COUNT_LARGE_MODULE: usize = 100_000;
+
+pub(super) fn is_engine_package(package_id: &str) -> bool {
+    serde_json::from_str::<Vec<crate::models::config::ModuleItem>>(include_str!(
+        "../../../resources/config/local_modules.json"
+    ))
+    .unwrap_or_default()
+    .into_iter()
+    .any(|item| item.id == package_id && item.type_name == "local")
+}
+
+pub(super) fn package_install_dir(package_id: &str) -> PathBuf {
+    if is_engine_package(package_id) {
+        ENGINES_DIR.join(package_id)
+    } else {
+        INTEGRATIONS_DIR.join(package_id)
+    }
+}
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(super) enum TarEntryAction {

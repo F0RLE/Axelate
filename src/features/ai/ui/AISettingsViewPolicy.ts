@@ -14,7 +14,7 @@ export class AISettingsViewPolicy {
     ]);
 
     public isCleanApp(appId: string): boolean {
-        return AISettingsViewPolicy._cleanAppIds.has(appId) || appId.includes('telegram');
+        return AISettingsViewPolicy._cleanAppIds.has(appId);
     }
 
     public supportsInternetAccess(appId: string): boolean {

@@ -33,6 +33,7 @@
 !**/.env.example
 .envrc
 .direnv/
+.codex
 
 # Editor / IDE
 .idea/

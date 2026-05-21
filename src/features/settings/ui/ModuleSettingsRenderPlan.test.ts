@@ -5,7 +5,7 @@ import type { IApp } from '@/shared/types/coreTypes';
 describe('resolveModuleSettingsRenderPlan', () => {
     it('uses the generic custom-ui path for modules that expose a settings html entry', () => {
         const app: IApp = {
-            id: 'axelate-telegram-bot',
+            id: 'sample-integration',
             settingsUi: 'settings-ui/index.html',
         };
 

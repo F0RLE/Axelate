@@ -10,7 +10,7 @@ describe('AISettingsViewPolicy', () => {
 
     it('should classify clean apps and feature support consistently', () => {
         expect(policy.isCleanApp('axelate')).toBe(true);
-        expect(policy.isCleanApp('telegram-bot')).toBe(true);
+        expect(policy.isCleanApp('sample-integration')).toBe(false);
         expect(policy.isCleanApp('gpt')).toBe(false);
         expect(policy.supportsInternetAccess('gpt')).toBe(true);
         expect(policy.supportsInternetAccess('axelate')).toBe(false);

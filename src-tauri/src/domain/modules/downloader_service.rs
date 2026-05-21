@@ -1,4 +1,4 @@
-use crate::utils::paths::MODULES_DIR;
+use super::downloader_support::package_install_dir;
 use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -162,7 +162,7 @@ impl Default for DownloaderService {
 }
 
 pub(super) fn resolve_existing_module_path(module_id: &str) -> Option<PathBuf> {
-    let path = MODULES_DIR.join(module_id);
+    let path = package_install_dir(module_id);
     (path.exists() && path.is_dir()).then_some(path)
 }
 

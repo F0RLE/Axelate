@@ -26,14 +26,14 @@ export const APP_PAGES: IAppPage[] = [
         id: 'modules',
         icon: '#icon-folder',
         i18nKey: 'ui.launcher.web.modules',
-        defaultLabel: 'Modules',
+        defaultLabel: 'Integrations',
         inSettings: true,
     },
     {
         id: 'marketplace',
         icon: '#icon-marketplace',
         i18nKey: 'ui.launcher.web.marketplace',
-        defaultLabel: 'Store',
+        defaultLabel: 'Market',
         inSettings: true,
     },
     {

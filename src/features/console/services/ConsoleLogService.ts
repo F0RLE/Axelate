@@ -59,9 +59,6 @@ type ConsoleLogServiceLogger = Pick<LoggerService, 'warn' | 'error'>;
 export class ConsoleLogService {
     private static readonly _MAX_LOG_COUNT = 1000;
     private static readonly _TRIM_THRESHOLD = 2000;
-    private static readonly _MODULE_LABELS: Readonly<Record<string, string>> = {
-        'axelate-telegram-bot': 'Telegram Bot',
-    };
     private static readonly _NOISE_PATTERNS = [
         /\[AIBridge\] Stream chunk received/i,
         /\[AIBridge\] Thought chunk received/i,
@@ -176,15 +173,12 @@ export class ConsoleLogService {
     }
 
     private _getModuleLabel(moduleId: string): string {
-        return (
-            ConsoleLogService._MODULE_LABELS[moduleId] ??
-            moduleId
-                .replace(/^axelate-/, '')
-                .split('-')
-                .filter(Boolean)
-                .map((part) => part[0]?.toUpperCase() + part.slice(1))
-                .join(' ')
-        );
+        return moduleId
+            .replace(/^axelate-/, '')
+            .split('-')
+            .filter(Boolean)
+            .map((part) => part[0]?.toUpperCase() + part.slice(1))
+            .join(' ');
     }
 
     public getLogsForView(viewId: string): ILogEntry[] {

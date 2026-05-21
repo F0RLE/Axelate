@@ -11,7 +11,7 @@ describe('CoreStateRestore', () => {
     it('should keep ai_text visible after restoring both AI slots', () => {
         const textApp = { id: 'gpt', name: 'GPT' };
         const imageApp = { id: 'comfyui', name: 'ComfyUI' };
-        const serviceApp = { id: 'telegram', name: 'Telegram' };
+        const serviceApp = { id: 'sample', name: 'Sample' };
         const updateModuleCard = vi.fn();
 
         const restoredSelections = restoreSelectedModules({
@@ -22,7 +22,7 @@ describe('CoreStateRestore', () => {
                 getSelectedModules: () => ({
                     ai_text: { id: 'gpt' },
                     ai_image: { id: 'comfyui' },
-                    services: { id: 'telegram' },
+                    services: { id: 'sample' },
                 }),
             } as never,
             catalog: {
@@ -30,7 +30,7 @@ describe('CoreStateRestore', () => {
                     ({
                         gpt: textApp,
                         comfyui: imageApp,
-                        telegram: serviceApp,
+                        sample: serviceApp,
                     })[appId] ?? null,
             } as never,
             appUI: {

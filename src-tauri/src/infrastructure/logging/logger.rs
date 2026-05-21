@@ -332,7 +332,6 @@ fn format_source_part(part: &str) -> String {
     match normalized.as_str() {
         "ai" => "AI".to_string(),
         "api" => "API".to_string(),
-        "bot" => "Bot".to_string(),
         "cpu" => "CPU".to_string(),
         "frontend" => "Frontend".to_string(),
         "gpu" => "GPU".to_string(),
@@ -657,7 +656,7 @@ impl RuntimeLogCollector {
         ));
         entries.extend(Self::collect_root(
             RuntimeLogNamespace::Module,
-            &crate::utils::paths::MODULE_LOGS_DIR,
+            &crate::utils::paths::INTEGRATION_LOGS_DIR,
             since,
         ));
 
@@ -733,7 +732,7 @@ impl RuntimeLogCollector {
 
     fn clear_runtime_logs() {
         Self::clear_runtime_logs_in_root(&crate::utils::paths::ENGINE_LOGS_DIR);
-        Self::clear_runtime_logs_in_root(&crate::utils::paths::MODULE_LOGS_DIR);
+        Self::clear_runtime_logs_in_root(&crate::utils::paths::INTEGRATION_LOGS_DIR);
     }
 
     fn clear_runtime_logs_in_root(root: &Path) {
@@ -800,15 +799,15 @@ mod tests {
     fn module_runtime_log_line_uses_module_source_namespace() -> Result<(), String> {
         let entry = parse_runtime_log_line(
             RuntimeLogNamespace::Module,
-            "axelate-telegram-bot",
-            "2026-04-24 07:00:00 [INFO] Bot started",
+            "sample-integration",
+            "2026-04-24 07:00:00 [INFO] Integration started",
             0.0,
         )
         .ok_or_else(|| "module runtime log entry".to_string())?;
 
-        assert_eq!(entry.source, "module:axelate-telegram-bot");
-        assert_eq!(entry.module_id.as_deref(), Some("axelate-telegram-bot"));
-        assert_eq!(entry.source_label.as_deref(), Some("Telegram Bot"));
+        assert_eq!(entry.source, "module:sample-integration");
+        assert_eq!(entry.module_id.as_deref(), Some("sample-integration"));
+        assert_eq!(entry.source_label.as_deref(), Some("Sample Integration"));
         Ok(())
     }
 

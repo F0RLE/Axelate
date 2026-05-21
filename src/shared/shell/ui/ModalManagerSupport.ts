@@ -100,6 +100,7 @@ export function populateModalAppList(options: {
     );
 
     options.listElement.innerHTML = '';
+    options.listElement.classList.toggle('app-grid-empty', visibleApps.length === 0);
     if (visibleApps.length === 0) {
         renderModalEmptyState(options.listElement, options.translate);
         return;

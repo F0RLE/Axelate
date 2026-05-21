@@ -137,6 +137,7 @@ export class CatalogService {
                 name: item.name,
                 desc: item.desc,
                 icon: item.icon,
+                preview: item.preview ?? null,
                 category: category,
                 type: category === 'ai' && item.type !== 'local' ? 'api' : 'local',
                 capability,
@@ -206,10 +207,54 @@ export class CatalogService {
             if (installedModule?.settingsUi !== undefined) {
                 app.settingsUi = installedModule.settingsUi;
             }
+
+            if (installedModule?.preview !== undefined) {
+                app.preview = installedModule.preview;
+            }
         };
 
         this._appData.ai.forEach(mergeAppSchema);
         this._appData.services.forEach(mergeAppSchema);
+        this._appendDiscoveredIntegrations(installedModules);
+    }
+
+    private _appendDiscoveredIntegrations(installedModules: IModule[]): void {
+        const knownIds = new Set(
+            [...this._appData.ai, ...this._appData.services].map((app) => app.id.toLowerCase()),
+        );
+
+        const discovered = installedModules
+            .filter((module) => !knownIds.has(module.id.toLowerCase()))
+            .map((module) => this._mapInstalledIntegration(module));
+
+        if (discovered.length === 0) return;
+
+        this._appData.services.push(...discovered);
+        this._tracer.info(
+            `[CatalogService] Added ${String(discovered.length)} discovered integration(s).`,
+        );
+    }
+
+    private _mapInstalledIntegration(module: IModule): IApp {
+        return {
+            id: module.id,
+            name: module.preview?.title ?? module.name,
+            desc: module.preview?.description ?? module.description,
+            icon: module.preview?.sticker ?? module.icon,
+            preview: module.preview ?? null,
+            category: 'services',
+            type: 'local',
+            capability: 'text',
+            repoUrl: '',
+            expectedHash: '',
+            comingSoon: false,
+            managedExternally: false,
+            version: module.version,
+            installed: true,
+            configSchema: module.configSchema as unknown as Record<string, IConfigField>,
+            settingsUi: module.settingsUi,
+            status: module.status,
+        };
     }
 
     /**

@@ -83,6 +83,7 @@ impl ConfigService {
                     .clone()
                     .unwrap_or_else(|| "Cloud AI Provider".to_string()),
                 icon: provider.icon.clone().unwrap_or_else(|| "cloud".to_string()),
+                preview: None,
                 type_name: "api".to_string(),
                 dl_type: None,
                 capabilities,

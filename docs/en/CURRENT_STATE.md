@@ -173,10 +173,10 @@ Important current interpretation:
 - it is not a stable cornerstone of the current product definition
 - it should be treated as placeholder or future integration, not as core value today
 
-### 4. `axelate-telegram-bot`
+### 4. `sample-integration`
 
 - type: script
-- role: Telegram workflow module
+- role: external workflow integration
 
 ### Confirmed Runtime Responsibilities
 
@@ -188,7 +188,7 @@ The backend currently handles real runtime concerns:
 - process start and stop
 - status inspection
 - PID handling
-- runtime log paths split by owner: engines under `System/Logs/Engines`, modules under `System/Logs/Modules`
+- runtime log paths split by owner: engines under `System/Runtime/Engines/Logs`, integrations under `System/Logs/Integrations`
 - duplicate process cleanup
 
 This is the strongest evidence that Axelate is already a launcher/workstation base and not just a model picker UI.

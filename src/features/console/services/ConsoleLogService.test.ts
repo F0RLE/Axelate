@@ -276,7 +276,7 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'General' },
-                    { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
+                    { id: 'module:sample-integration', label: 'Sample Integration' },
                 ],
                 status_items: [],
             },
@@ -286,10 +286,10 @@ describe('ConsoleLogService', () => {
                 return Promise.resolve([
                     {
                         timestamp: 1,
-                        source: 'module:axelate-telegram-bot',
+                        source: 'module:sample-integration',
                         level: 'INFO',
                         message: 'Started',
-                        module_id: 'axelate-telegram-bot',
+                        module_id: 'sample-integration',
                     },
                 ]);
             }
@@ -301,7 +301,7 @@ describe('ConsoleLogService', () => {
 
         expect(views).toEqual([
             { id: 'general', label: 'General' },
-            { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
+            { id: 'module:sample-integration', label: 'Sample Integration' },
         ]);
     });
 

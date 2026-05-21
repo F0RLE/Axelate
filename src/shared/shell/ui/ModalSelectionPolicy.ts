@@ -64,7 +64,7 @@ export class ModalSelectionPolicy {
         return {
             className: 'modal-btn modal-btn-secondary',
             key: 'ui.launcher.modules.modal.btn_remove',
-            defaultLabel: 'Убрать',
+            defaultLabel: 'Remove',
         };
     }
 

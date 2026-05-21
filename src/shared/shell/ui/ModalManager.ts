@@ -142,7 +142,7 @@ export class ModalManager {
 
         if (modal.open && !modal.classList.contains('hidden')) {
             this._overlayClickModal = modal;
-            this._focusTrap.attachOverlayOnly(modal);
+            this._focusTrap.attach(modal);
             return;
         }
 

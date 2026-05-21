@@ -85,7 +85,7 @@ describe('CoreContainer', () => {
     it('should resolve catalog categories via container', () => {
         const mockCatalog = {
             ai: [{ id: 'gpt', name: 'GPT' }],
-            services: [{ id: 'bot', name: 'Bot' }],
+            services: [{ id: 'worker', name: 'Worker' }],
         };
         const mockServices = {
             catalog: { getCatalog: vi.fn().mockReturnValue(mockCatalog) },

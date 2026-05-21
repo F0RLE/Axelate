@@ -1,6 +1,8 @@
 use crate::domain::modules::{downloader, lifecycle as module_lifecycle};
 use crate::errors::AppError;
+use crate::models::modules::ModulePreview;
 use crate::models::{ControlResponse, Module};
+use base64::{Engine as _, engine::general_purpose::STANDARD};
 use dashmap::DashMap;
 use std::path::Path;
 use std::str::FromStr;
@@ -20,6 +22,9 @@ pub use self::lifecycle::LifecycleExecutor;
 /// In-memory registry for active child processes.
 static PROCESS_REGISTRY: std::sync::LazyLock<DashMap<String, Child>> =
     std::sync::LazyLock::new(DashMap::new);
+const MODULE_PREVIEW_IMAGE_MAX_BYTES: u64 = 2 * 1024 * 1024;
+const PREVIEW_TITLE_KEY: &str = "preview.title";
+const PREVIEW_DESCRIPTION_KEY: &str = "preview.description";
 
 /// High-level API for module control
 #[derive(Debug)]
@@ -111,12 +116,12 @@ impl FromStr for ModuleAction {
     }
 }
 
-/// Scans directories for modules
+/// Scans installed integration packages.
 pub async fn get_all_modules() -> Vec<Module> {
     let mut modules = Vec::new();
     let controller = Controller::new();
 
-    if let Ok(mut entries) = fs::read_dir(&*crate::utils::paths::MODULES_DIR).await {
+    if let Ok(mut entries) = fs::read_dir(&*crate::utils::paths::INTEGRATIONS_DIR).await {
         while let Ok(Some(entry)) = entries.next_entry().await {
             if let Ok(file_type) = entry.file_type().await
                 && file_type.is_dir()
@@ -127,52 +132,52 @@ pub async fn get_all_modules() -> Vec<Module> {
                 }
                 let path = entry.path();
 
-                let (
-                    name,
-                    description,
-                    version,
-                    author,
-                    category,
-                    icon,
-                    config_schema,
-                    settings_ui,
-                ) = match module_lifecycle::ManifestLoader::load(&path) {
-                    Ok(m) => (
-                        m.name,
-                        m.description,
-                        m.version,
-                        m.author.unwrap_or_default(),
-                        m.category.unwrap_or_else(|| "service".to_string()),
-                        m.icon.unwrap_or_default(),
-                        m.config_schema,
-                        m.settings_ui,
-                    ),
-                    Err(_) => (
-                        id.clone(),
-                        String::new(),
-                        "0.0.0".to_string(),
-                        String::new(),
-                        "service".to_string(),
-                        String::new(),
-                        None,
-                        None,
-                    ),
+                let manifest = match module_lifecycle::ManifestLoader::load(&path) {
+                    Ok(manifest) => manifest,
+                    Err(error) => {
+                        tracing::warn!(
+                            integration_id = id,
+                            path = %path.display(),
+                            "Skipping integration without valid axelate-module.toml: {error}"
+                        );
+                        continue;
+                    }
                 };
+                let module_id = manifest.id.clone();
+                if downloader::validate_module_id(&module_id).is_err() {
+                    tracing::warn!(
+                        integration_id = module_id,
+                        path = %path.display(),
+                        "Skipping integration with invalid manifest id"
+                    );
+                    continue;
+                }
 
-                let status = if controller.is_running(&id, &path).await {
+                let preview = resolve_module_preview(&path, manifest.preview.clone()).await;
+                let name = manifest.name;
+                let description = manifest.description;
+                let version = manifest.version;
+                let author = manifest.author.unwrap_or_default();
+                let category = manifest.category.unwrap_or_else(|| "service".to_string());
+                let icon = manifest.icon.unwrap_or_default();
+                let config_schema = manifest.config_schema;
+                let settings_ui = manifest.settings_ui;
+
+                let status = if controller.is_running(&module_id, &path).await {
                     "running".to_string()
                 } else {
                     "stopped".to_string()
                 };
 
                 modules.push(Module {
-                    id: id.clone(),
+                    id: module_id,
                     name,
                     description,
                     version,
                     author,
                     category,
                     icon,
+                    preview,
                     path: path.to_string_lossy().to_string(),
                     installed: true,
                     local: true,
@@ -201,6 +206,150 @@ pub async fn get_module_status(module_id: &str) -> String {
         "running".to_string()
     } else {
         "stopped".to_string()
+    }
+}
+
+async fn resolve_module_preview(
+    module_path: &Path,
+    preview: Option<ModulePreview>,
+) -> Option<ModulePreview> {
+    let mut preview = preview?;
+    apply_localized_module_preview(module_path, &mut preview);
+    let Some(image) = preview.image.as_deref().map(str::trim) else {
+        return Some(preview);
+    };
+    if image.is_empty() || image.starts_with("data:") || image.starts_with("https://") {
+        return Some(preview);
+    }
+
+    match read_module_preview_image(module_path, image).await {
+        Ok(data_url) => {
+            preview.image = Some(data_url);
+        }
+        Err(error) => {
+            tracing::warn!(
+                module_path = %module_path.display(),
+                image,
+                "Failed to load module preview image: {error}"
+            );
+            preview.image = None;
+        }
+    }
+
+    Some(preview)
+}
+
+fn apply_localized_module_preview(module_path: &Path, preview: &mut ModulePreview) {
+    let Some(i18n_dir) = preview
+        .i18n
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    else {
+        return;
+    };
+    if i18n_dir.contains("..") {
+        tracing::warn!("Ignoring module preview i18n path with parent traversal");
+        return;
+    }
+
+    let i18n_path = Path::new(i18n_dir);
+    if i18n_path.is_absolute() {
+        tracing::warn!("Ignoring absolute module preview i18n path");
+        return;
+    }
+
+    let language = crate::infrastructure::config::settings::get_language_sync();
+    let translations = load_preview_translations(module_path, i18n_path, &language)
+        .or_else(|| load_preview_translations(module_path, i18n_path, "en"));
+    let Some(translations) = translations else {
+        return;
+    };
+
+    if let Some(title) = translations
+        .get(PREVIEW_TITLE_KEY)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        preview.title = Some(title.to_string());
+    }
+
+    if let Some(description) = translations
+        .get(PREVIEW_DESCRIPTION_KEY)
+        .and_then(serde_json::Value::as_str)
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        preview.description = Some(description.to_string());
+    }
+}
+
+fn load_preview_translations(
+    module_path: &Path,
+    i18n_path: &Path,
+    language: &str,
+) -> Option<serde_json::Map<String, serde_json::Value>> {
+    let language = language.trim().to_ascii_lowercase();
+    let safe_language = match language.as_str() {
+        "en" | "ru" | "zh" => language,
+        other if other.starts_with("en-") => "en".to_string(),
+        other if other.starts_with("ru-") => "ru".to_string(),
+        other if other.starts_with("zh-") => "zh".to_string(),
+        _ => return None,
+    };
+
+    let path = module_path
+        .join(i18n_path)
+        .join(format!("{safe_language}.json"));
+    let content = std::fs::read_to_string(path).ok()?;
+    serde_json::from_str::<serde_json::Value>(&content)
+        .ok()?
+        .as_object()
+        .cloned()
+}
+
+async fn read_module_preview_image(module_path: &Path, image: &str) -> Result<String, AppError> {
+    let relative_path = Path::new(image);
+    if relative_path.is_absolute() || image.contains("..") {
+        return Err(AppError::Validation(
+            "Preview image must be a relative module path".to_string(),
+        ));
+    }
+
+    let image_path = module_path.join(relative_path);
+    let metadata = fs::metadata(&image_path)
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
+    if !metadata.is_file() || metadata.len() > MODULE_PREVIEW_IMAGE_MAX_BYTES {
+        return Err(AppError::Validation(
+            "Preview image is missing or too large".to_string(),
+        ));
+    }
+
+    let mime = preview_image_mime(&image_path)?;
+    let bytes = fs::read(&image_path)
+        .await
+        .map_err(|error| AppError::Io(error.to_string()))?;
+    Ok(format!("data:{mime};base64,{}", STANDARD.encode(bytes)))
+}
+
+fn preview_image_mime(path: &Path) -> Result<&'static str, AppError> {
+    match path
+        .extension()
+        .and_then(|extension| extension.to_str())
+        .unwrap_or_default()
+        .to_ascii_lowercase()
+        .as_str()
+    {
+        "png" => Ok("image/png"),
+        "jpg" | "jpeg" => Ok("image/jpeg"),
+        "webp" => Ok("image/webp"),
+        "gif" => Ok("image/gif"),
+        "svg" => Ok("image/svg+xml"),
+        _ => Err(AppError::Validation(
+            "Unsupported preview image format".to_string(),
+        )),
     }
 }
 

@@ -114,7 +114,6 @@ export class ConsoleLogNormalizer {
         const knownLabels: Readonly<Record<string, string>> = {
             ai: 'AI',
             api: 'API',
-            bot: 'Bot',
             cpu: 'CPU',
             frontend: 'Frontend',
             gpu: 'GPU',

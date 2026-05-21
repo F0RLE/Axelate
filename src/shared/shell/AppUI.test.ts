@@ -654,7 +654,7 @@ describe('AppUI lifecycle', () => {
         };
         const serviceApp = {
             id: 'telegram-bot',
-            name: 'Telegram Bot',
+            name: 'Parser',
             type: 'local',
             installed: true,
         } as IApp;

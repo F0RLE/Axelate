@@ -79,15 +79,15 @@ describe('ModuleSettingsCustomUiController', () => {
         const harness = createHarness({ sessionToken: 'session-z9x8y' });
 
         await harness.controller.render(harness.container, {
-            id: 'telegram-bot',
-            name: 'Telegram Bot',
+            id: 'sample-integration',
+            name: 'Sample Integration',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
         });
 
         expect(harness.invoke).toHaveBeenCalledWith('create_module_settings_session', {
-            moduleId: 'telegram-bot',
+            moduleId: 'sample-integration',
         });
 
         const frame = harness.container.querySelector('iframe');
@@ -95,7 +95,7 @@ describe('ModuleSettingsCustomUiController', () => {
         expect(frame?.getAttribute('src')).toContain(
             'module-settings://localhost/session/session-z9x8y/host/index.html?',
         );
-        expect(frame?.getAttribute('src')).toContain('moduleId=telegram-bot');
+        expect(frame?.getAttribute('src')).toContain('moduleId=sample-integration');
         expect(frame?.getAttribute('src')).toContain('language=ru');
         expect(frame?.getAttribute('src')).toContain('theme=dark');
         expect(harness.modal.classList.contains('module-settings-modal-custom-ui')).toBe(true);
@@ -111,8 +111,8 @@ describe('ModuleSettingsCustomUiController', () => {
         const harness = createHarness({ isTauri: false });
 
         await harness.controller.render(harness.container, {
-            id: 'telegram-bot',
-            name: 'Telegram Bot',
+            id: 'sample-integration',
+            name: 'Sample Integration',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -127,8 +127,8 @@ describe('ModuleSettingsCustomUiController', () => {
         const harness = createHarness();
 
         await harness.controller.render(harness.container, {
-            id: 'telegram-bot',
-            name: 'Telegram Bot',
+            id: 'sample-integration',
+            name: 'Sample Integration',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -145,8 +145,8 @@ describe('ModuleSettingsCustomUiController', () => {
         const harness = createHarness();
 
         await harness.controller.render(harness.container, {
-            id: 'telegram-bot',
-            name: 'Telegram Bot',
+            id: 'sample-integration',
+            name: 'Sample Integration',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -164,8 +164,8 @@ describe('ModuleSettingsCustomUiController', () => {
         const harness = createHarness();
 
         await harness.controller.render(harness.container, {
-            id: 'telegram-bot',
-            name: 'Telegram Bot',
+            id: 'sample-integration',
+            name: 'Sample Integration',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',
@@ -187,8 +187,8 @@ describe('ModuleSettingsCustomUiController', () => {
         const harness = createHarness();
 
         await harness.controller.render(harness.container, {
-            id: 'telegram-bot',
-            name: 'Telegram Bot',
+            id: 'sample-integration',
+            name: 'Sample Integration',
             category: 'automation',
             type: 'local',
             settingsUi: 'settings-ui/index.html',

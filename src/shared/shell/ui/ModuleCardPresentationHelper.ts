@@ -15,11 +15,21 @@ export class ModuleCardPresentationHelper {
     ) {}
 
     public getAppName(app: IApp): string {
+        const previewTitle = app.preview?.title?.trim();
+        if (previewTitle !== undefined && previewTitle !== '') {
+            return previewTitle;
+        }
+
         const key = app.nameKey ?? `ui.launcher.module.${app.id}.name`;
         return this._translate(key, app.name ?? app.id);
     }
 
     public getAppDesc(app: IApp): string {
+        const previewDescription = app.preview?.description?.trim();
+        if (previewDescription !== undefined && previewDescription !== '') {
+            return previewDescription;
+        }
+
         const key = app.descKey ?? `ui.launcher.module.${app.id}.desc`;
         return this._translate(key, app.desc ?? '');
     }
@@ -29,7 +39,17 @@ export class ModuleCardPresentationHelper {
         wrap?: (icon: string) => string,
         fallback = '❓',
     ): string {
-        const icon = app.icon ?? fallback;
+        if (app.preview?.image !== undefined && app.preview.image !== null) {
+            const image = app.preview.image.trim();
+            if (image !== '') {
+                return DOMPurify.sanitize(
+                    `<img class="module-card-preview-image" src="${image}" alt="" aria-hidden="true">`,
+                    this._purifyConfig,
+                );
+            }
+        }
+
+        const icon = app.preview?.sticker ?? app.icon ?? fallback;
         const markup = wrap?.(icon) ?? icon;
         return DOMPurify.sanitize(markup, this._purifyConfig);
     }
