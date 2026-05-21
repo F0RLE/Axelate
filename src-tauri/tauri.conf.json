@@ -38,7 +38,7 @@
             }
         ],
         "security": {
-            "csp": "default-src 'self'; script-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost https://openrouter.ai https://*.openrouter.ai; frame-src 'self'; base-uri 'self'",
+            "csp": "default-src 'self'; script-src 'self' data:; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' ipc: http://ipc.localhost https://openrouter.ai https://*.openrouter.ai; frame-src 'self' module-settings: http://module-settings.localhost https://module-settings.localhost; base-uri 'self'",
             "capabilities": [
                 "default"
             ]
@@ -64,7 +64,7 @@
         "resources": [
             "resources/config",
             "resources/locales",
-            "resources/api_providers.json"
+            "resources/api_providers"
         ],
         "icon": [
             "icons/icon.ico",

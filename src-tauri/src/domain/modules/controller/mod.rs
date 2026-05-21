@@ -122,6 +122,9 @@ pub async fn get_all_modules() -> Vec<Module> {
                 && file_type.is_dir()
             {
                 let id = entry.file_name().to_string_lossy().to_string();
+                if downloader::validate_module_id(&id).is_err() {
+                    continue;
+                }
                 let path = entry.path();
 
                 let (
@@ -188,6 +191,10 @@ pub async fn get_all_modules() -> Vec<Module> {
 
 /// Gets the runtime status of a specific module.
 pub async fn get_module_status(module_id: &str) -> String {
+    if downloader::validate_module_id(module_id).is_err() {
+        return "stopped".to_string();
+    }
+
     let controller = Controller::new();
     let module_path = downloader::get_module_path(module_id);
     if controller.is_running(module_id, &module_path).await {

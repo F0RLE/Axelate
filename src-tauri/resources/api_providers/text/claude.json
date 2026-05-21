@@ -1,0 +1,95 @@
+{
+  "id": "claude",
+  "name": "Claude",
+  "description": "Advanced AI for analysis and creativity.",
+  "descKey": "ui.launcher.app.claude.desc",
+  "icon": "✱",
+  "type": "api",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "models": [
+    {
+      "name": "Claude Opus 4.7",
+      "desc": "Anthropic's strongest model for coding and long-running professional tasks, built for agentic workflows across large codebases and multi-step execution.",
+      "descKey": "ui.claude.model.opus46.desc",
+      "tier": "strong",
+      "releaseDate": "2026-04-16",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "input_per_1m": 5,
+        "output_per_1m": 25,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 4,
+        "logic": 10,
+        "creative": 10
+      },
+      "capabilities": {
+        "reasoning": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "anthropic/claude-opus-4.7"
+      },
+      "id": "claude-opus-4.7"
+    },
+    {
+      "name": "Claude Sonnet 4.6",
+      "desc": "Anthropic's most capable Sonnet-class model yet, with frontier performance across coding, agents, web QA, and workflow automation.",
+      "descKey": "ui.claude.model.46sonnet.desc",
+      "tier": "medium",
+      "releaseDate": "2026-02-17",
+      "contextWindow": 1000000,
+      "maxOutputTokens": 128000,
+      "pricing": {
+        "input_per_1m": 3,
+        "output_per_1m": 15,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 8,
+        "logic": 9,
+        "creative": 8
+      },
+      "capabilities": {
+        "reasoning": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "anthropic/claude-sonnet-4.6"
+      },
+      "id": "claude-sonnet-4.6"
+    },
+    {
+      "name": "Claude Haiku 4.5",
+      "desc": "Anthropic's fastest and most efficient model, delivering near-frontier intelligence at a fraction of the cost and latency of larger Claude models.",
+      "descKey": "ui.claude.model.haiku.desc",
+      "tier": "weak",
+      "releaseDate": "2025-10-15",
+      "contextWindow": 200000,
+      "maxOutputTokens": 64000,
+      "pricing": {
+        "input_per_1m": 1,
+        "output_per_1m": 5,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 10,
+        "logic": 6,
+        "creative": 5
+      },
+      "capabilities": {
+        "reasoning": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "anthropic/claude-haiku-4.5"
+      },
+      "id": "claude-haiku-4.5"
+    }
+  ]
+}

@@ -1,9 +1,9 @@
 use crate::domain::modules::controller::script_runtime;
 use crate::domain::modules::controller::{Controller, process};
 use crate::domain::modules::lifecycle::{CommandDefinition, ModuleManifest};
+use crate::domain::modules::paths as module_paths;
 use crate::errors::AppError;
 use crate::models::ControlResponse;
-use crate::utils::paths::LOG_DIR;
 use std::fs::OpenOptions;
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -90,7 +90,7 @@ impl<'a> LifecycleExecutor<'a> {
 
         // 4. Spawn process
         let child = if script_runtime::supports_manifest(manifest) {
-            script_runtime::spawn_process(self.module_path, manifest).await?
+            script_runtime::spawn_process(&self.module_id, self.module_path, manifest).await?
         } else {
             // 3. Prepare Logging (runtime.log) with basic capping
             let log_path = self.module_log_path();
@@ -201,10 +201,7 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     fn module_log_path(&self) -> PathBuf {
-        LOG_DIR
-            .join("Engines")
-            .join(&self.module_id)
-            .join("runtime.log")
+        module_paths::runtime_log_path(&self.module_id)
     }
 
     fn persist_pid(&self, pid: usize) {
@@ -296,12 +293,9 @@ impl<'a> LifecycleExecutor<'a> {
     }
 
     fn resolve_script_entry_path(&self, manifest: &ModuleManifest) -> Option<std::path::PathBuf> {
-        let entry = manifest.entry.as_ref()?.trim();
-        if entry.is_empty() || !script_runtime::supports_manifest(manifest) {
-            return None;
-        }
-
-        Some(self.module_path.join(entry))
+        script_runtime::resolve_entry_path(self.module_path, manifest)
+            .ok()
+            .flatten()
     }
 
     async fn reconcile_existing_script_processes(&self, entry_path: &Path) -> Option<usize> {

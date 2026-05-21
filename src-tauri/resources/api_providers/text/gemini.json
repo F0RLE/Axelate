@@ -1,0 +1,101 @@
+{
+  "id": "gemini",
+  "name": "Gemini",
+  "description": "Multimodality and massive context.",
+  "descKey": "ui.launcher.app.gemini.desc",
+  "icon": "✨",
+  "type": "api",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "models": [
+    {
+      "name": "Gemini 3.1 Pro Preview",
+      "desc": "Google's frontier reasoning model with enhanced software engineering performance, improved agentic reliability, and more efficient token usage across complex workflows.",
+      "descKey": "ui.gemini.model.v31pro.desc",
+      "tier": "strong",
+      "releaseDate": "2026-02-19",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65536,
+      "pricing": {
+        "input_per_1m": 2,
+        "output_per_1m": 12,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 6,
+        "logic": 10,
+        "creative": 10
+      },
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "multimodal": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "google/gemini-3.1-pro-preview"
+      },
+      "id": "gemini-3.1-pro"
+    },
+    {
+      "name": "Gemini 3 Flash Preview",
+      "desc": "High-speed, high-value thinking model for agentic workflows, multi-turn chat, and coding assistance with substantially lower latency.",
+      "descKey": "ui.gemini.model.flash.desc",
+      "tier": "medium",
+      "releaseDate": "2025-12-17",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65500,
+      "pricing": {
+        "input_per_1m": 0.5,
+        "output_per_1m": 3,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 10,
+        "logic": 8,
+        "creative": 8
+      },
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "multimodal": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "google/gemini-3-flash-preview"
+      },
+      "id": "gemini-3-flash"
+    },
+    {
+      "name": "Gemini 3.1 Flash Lite Preview",
+      "desc": "Google's high-efficiency model for high-volume workloads, balancing strong quality with lower cost and latency.",
+      "descKey": "ui.gemini.model.flashlite.desc",
+      "tier": "weak",
+      "releaseDate": "2026-03-03",
+      "contextWindow": 1048576,
+      "maxOutputTokens": 65500,
+      "pricing": {
+        "input_per_1m": 0.25,
+        "output_per_1m": 1.5,
+        "currency": "USD"
+      },
+      "stats": {
+        "speed": 10,
+        "logic": 7,
+        "creative": 7
+      },
+      "capabilities": {
+        "reasoning": true,
+        "vision": true,
+        "multimodal": true,
+        "streaming": true,
+        "functionCalling": true
+      },
+      "apiModels": {
+        "text": "google/gemini-3.1-flash-lite-preview"
+      },
+      "id": "gemini-3.1-flash-lite"
+    }
+  ]
+}

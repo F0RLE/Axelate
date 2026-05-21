@@ -31,12 +31,18 @@ export const commands = {
 	getConsoleOverview: () => typedError<ConsoleOverview, AppError>(__TAURI_INVOKE("get_console_overview")),
 	// Clears all stored log entries
 	clearLogs: () => typedError<null, AppError>(__TAURI_INVOKE("clear_logs")),
+	// Returns the root folder where launcher logs are stored.
+	getLogDir: () => typedError<string, AppError>(__TAURI_INVOKE("get_log_dir")),
+	// Opens the root folder where launcher logs are stored.
+	openLogDir: () => typedError<null, AppError>(__TAURI_INVOKE("open_log_dir")),
 	// Adds a single log entry to the log store
 	addLog: (msg: string, source: string, level: string) => typedError<null, AppError>(__TAURI_INVOKE("add_log", { msg, source, level })),
 	// Adds multiple log entries in batch from frontend
 	logBatch: (logs: BatchLogEntry[]) => typedError<null, AppError>(__TAURI_INVOKE("log_batch", { logs })),
 	// Downloads and verifies a module from a Git repository
-	downloadModule: (moduleId: string, repoUrl: string, expectedHash: string | null, dlType: string | null) => typedError<null, AppError>(__TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash, dlType })),
+	downloadModule: (moduleId: string, repoUrl: string, expectedHash: string | null, dlType: string | null) => typedError<string, AppError>(__TAURI_INVOKE("download_module", { moduleId, repoUrl, expectedHash, dlType })),
+	// Resumes a paused module download using backend-owned request metadata.
+	resumeDownload: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("resume_download", { moduleId })),
 	// Checks if a module is already installed locally
 	checkModuleInstalled: (moduleId: string) => typedError<boolean, AppError>(__TAURI_INVOKE("check_module_installed", { moduleId })),
 	// Retrieves the filesystem path to a module's directory
@@ -63,6 +69,8 @@ export const commands = {
 	controlModule: (request: ControlRequest) => typedError<ControlResponse, AppError>(__TAURI_INVOKE("control_module", { request })),
 	// Retrieves runtime status of a specific module
 	getModuleStatus: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_status", { moduleId })),
+	// Creates a scoped settings-session token for a module-owned custom settings UI.
+	createModuleSettingsSession: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("create_module_settings_session", { moduleId })),
 	// Minimizes the application window
 	minimizeWindow: () => typedError<null, AppError>(__TAURI_INVOKE("minimize_window")),
 	// Maximizes or unmaximizes the window
@@ -260,7 +268,7 @@ export type AppConfig = AppConfig_Serialize | AppConfig_Deserialize;
 export type AppConfig_Deserialize = {
 	// Configuration version
 	version: string,
-	// Available AI providers (loaded from api_providers.json)
+	// Available AI providers (loaded from resources/api_providers)
 	apiProviders: ApiProvider[],
 	// Catalog of available apps/services (local + cloud virtual modules)
 	catalog: ConfigCatalog_Deserialize,
@@ -270,7 +278,7 @@ export type AppConfig_Deserialize = {
 export type AppConfig_Serialize = {
 	// Configuration version
 	version: string,
-	// Available AI providers (loaded from api_providers.json)
+	// Available AI providers (loaded from resources/api_providers)
 	apiProviders: ApiProvider[],
 	// Catalog of available apps/services (local + cloud virtual modules)
 	catalog: ConfigCatalog_Serialize,

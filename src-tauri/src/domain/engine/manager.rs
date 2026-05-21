@@ -276,9 +276,7 @@ impl EngineManager {
         }
 
         // Pipe engine stdout/stderr to files in logs directory
-        let log_dir = crate::utils::paths::LOG_DIR
-            .join("Engines")
-            .join(&config.engine_id);
+        let log_dir = crate::utils::paths::ENGINE_LOGS_DIR.join(&config.engine_id);
         let _ = std::fs::create_dir_all(&log_dir);
 
         let stdout_path = log_dir.join("stdout.log");

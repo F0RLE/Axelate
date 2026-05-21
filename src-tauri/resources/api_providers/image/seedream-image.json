@@ -1,0 +1,44 @@
+{
+  "id": "seedream-image",
+  "name": "Seedream",
+  "description": "ByteDance Seed image models via OpenRouter.",
+  "descKey": "ui.launcher.app.seedream_image.desc",
+  "icon": "🌱",
+  "type": "api",
+  "baseUrl": "https://openrouter.ai/api/v1",
+  "capabilities": [
+    "image"
+  ],
+  "models": [
+    {
+      "name": "Seedream 4.5",
+      "desc": "ByteDance Seedream 4.5 with stronger edit consistency, improved portrait refinement, better small-text rendering, and stronger multi-image composition via OpenRouter.",
+      "descKey": "ui.seedream.image.seedream45.desc",
+      "tier": "medium",
+      "releaseDate": "2025-12-23",
+      "contextWindow": 4096,
+      "maxOutputTokens": 4096,
+      "pricing": {
+        "input_per_1m": 0.04,
+        "output_per_1m": 0,
+        "currency": "USD",
+        "notes": "$0.04 / image"
+      },
+      "stats": {
+        "speed": 8,
+        "logic": 8,
+        "creative": 9
+      },
+      "capabilities": {
+        "vision": true,
+        "multimodal": true,
+        "streaming": true
+      },
+      "apiModels": {
+        "image": "bytedance-seed/seedream-4.5"
+      },
+      "id": "bytedance-seed/seedream-4.5"
+    }
+  ],
+  "modelAliases": {}
+}
