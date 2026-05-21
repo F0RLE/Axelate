@@ -225,12 +225,51 @@ describe('ModuleSettingsCustomUiController', () => {
         expect(status?.getAttribute('data-state')).toBe('error');
         expect(status?.textContent).toContain('Failed to load module settings UI.');
     });
+
+    it('rejects invalid host session tokens before assigning the iframe URL', async () => {
+        const harness = createHarness({ sessionToken: '../bad-token' });
+
+        await harness.controller.render(harness.container, {
+            id: 'sample-integration',
+            name: 'Sample Integration',
+            category: 'automation',
+            type: 'local',
+            settingsUi: 'settings-ui/index.html',
+        });
+
+        expect(harness.container.querySelector('iframe')).toBeNull();
+        expect(harness.container.textContent).toContain('Failed to load module settings UI.');
+    });
+
+    it('ignores host messages from a different origin', async () => {
+        const harness = createHarness();
+
+        await harness.controller.render(harness.container, {
+            id: 'sample-integration',
+            name: 'Sample Integration',
+            category: 'automation',
+            type: 'local',
+            settingsUi: 'settings-ui/index.html',
+        });
+
+        const frame = harness.container.querySelector('iframe');
+        dispatchHostMessage(frame, 'host-ready', '', 'https://example.com');
+
+        const status = harness.container.querySelector('.module-settings-webui-status');
+        expect(status?.classList.contains('hidden')).toBe(false);
+    });
 });
 
-function dispatchHostMessage(frame: HTMLIFrameElement | null, type: string, message = ''): void {
+function dispatchHostMessage(
+    frame: HTMLIFrameElement | null,
+    type: string,
+    message = '',
+    origin = 'module-settings://localhost',
+): void {
     globalThis.dispatchEvent(
         new MessageEvent('message', {
             source: frame?.contentWindow ?? null,
+            origin,
             data: {
                 channel: 'axelate:module-settings-host',
                 type,

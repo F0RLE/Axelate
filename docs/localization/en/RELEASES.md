@@ -54,8 +54,8 @@ The release tag must match all project manifests:
 Example:
 
 ```text
-tag: v0.1.5
-manifest version: 0.1.5
+tag: v0.2.0
+manifest version: 0.2.0
 ```
 
 Pre-release tags are allowed when the manifest versions match:
@@ -70,8 +70,8 @@ manifest version: 0.1.6-alpha.1
 Create and push a tag from the release commit:
 
 ```bash
-git tag v0.1.5
-git push origin v0.1.5
+git tag v0.2.0
+git push origin v0.2.0
 ```
 
 GitHub Actions then runs `Release Build`.

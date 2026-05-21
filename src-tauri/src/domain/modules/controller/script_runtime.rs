@@ -219,6 +219,7 @@ async fn spawn_runtime_command(
     mut command: Command,
     runtime_name: &str,
 ) -> Result<Child, AppError> {
+    let runtime_label = runtime_name.to_string();
     let module_runtime_root = module_paths::runtime_root(module_id);
     let module_log_dir = module_paths::log_dir(module_id);
     tokio::fs::create_dir_all(&module_runtime_root)
@@ -260,7 +261,7 @@ async fn spawn_runtime_command(
 
     command.spawn().map_err(|e| AppError::Internal {
         request_id: None,
-        message: format!("Failed to spawn {runtime_name} module runtime: {e}"),
+        message: format!("Failed to spawn {runtime_label} module runtime: {e}"),
     })
 }
 
