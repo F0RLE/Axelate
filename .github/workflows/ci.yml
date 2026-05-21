@@ -136,3 +136,60 @@ jobs:
         with:
           name: rust-lcov
           path: src-tauri/lcov.info
+
+  check-cross-platform:
+    name: Cross-platform Compatibility (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 35
+    continue-on-error: true
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install Linux system dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libxdo-dev
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "26.1.0"
+          cache: "npm"
+          cache-dependency-path: src/package-lock.json
+
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          toolchain: 1.95.0
+
+      - name: Rust Cache
+        uses: Swatinem/rust-cache@65012b490220f477f20ab979e35ae732e6de4e68 # node24
+        continue-on-error: true
+        with:
+          workspaces: "src-tauri -> target"
+          cache-targets: false
+
+      - name: Install Dependencies
+        run: |
+          cd src
+          npm ci
+
+      - name: Frontend Type Check
+        run: |
+          cd src
+          npm run typecheck
+
+      - name: Backend Target Check
+        run: |
+          cd src-tauri
+          cargo check --all-targets --all-features
