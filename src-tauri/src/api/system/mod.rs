@@ -4,6 +4,7 @@ pub mod bootstrap;
 pub mod config;
 /// Health check commands
 pub mod health;
+mod log_targets;
 /// Logging commands
 pub mod logs;
 
