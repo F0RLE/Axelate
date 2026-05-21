@@ -229,6 +229,40 @@ describe('AISettingsRenderer', () => {
         expect(settingsService.getSecureKeyMeta).toHaveBeenCalledWith(CUSTOM_TEXT_PROVIDER_ID);
     });
 
+    it('labels built-in providers as OpenRouter and custom text as a separate provider', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+
+        await aiSettingsRenderer.render(container, {
+            id: 'gpt',
+            name: 'OpenAI',
+            apiProviderData: { models },
+        } as never);
+
+        expect(container.textContent).toContain('OpenRouter API key');
+        expect(container.textContent).toContain('Built-in cloud cards use OpenRouter.');
+        expect(container.textContent).not.toContain('Custom provider API key');
+        expect(container.querySelector('.ai-api-endpoint-card')).toBeNull();
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            apiProviderData: { models: [] },
+        } as never);
+
+        expect(container.textContent).toContain('Custom provider API key');
+        expect(container.textContent).toContain('Uses a custom provider key.');
+        expect(container.textContent).not.toContain('Built-in cloud cards use OpenRouter.');
+        expect(
+            container.querySelector('.ai-api-endpoint-card[data-provider="openrouter"]'),
+        ).not.toBeNull();
+        expect(
+            container.querySelector('.ai-api-endpoint-card[data-provider="openai"]'),
+        ).not.toBeNull();
+        expect(
+            container.querySelector('.ai-api-endpoint-card[data-provider="custom"]'),
+        ).not.toBeNull();
+    });
+
     it('validates custom provider keys against the selected API endpoint', async () => {
         vi.useFakeTimers();
         const container = document.getElementById('root') as HTMLElement;

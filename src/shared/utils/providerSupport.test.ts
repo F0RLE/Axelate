@@ -12,6 +12,11 @@ describe('providerSupport', () => {
         expect(getSharedCloudSecretService()).toBe('cloud_api_key');
         expect(resolveProviderSecretService('gpt')).toBe('cloud_api_key');
         expect(resolveProviderSecretService('gemini')).toBe('cloud_api_key');
+        expect(resolveProviderSecretService('claude')).toBe('cloud_api_key');
+        expect(resolveProviderSecretService('deepseek')).toBe('cloud_api_key');
+        expect(resolveProviderSecretService('gpt-image')).toBe('cloud_api_key');
+        expect(resolveProviderSecretService('gemini-image')).toBe('cloud_api_key');
+        expect(resolveProviderSecretService('seedream-image')).toBe('cloud_api_key');
     });
 
     it('keeps custom text provider keys separate from the shared cloud secret', () => {

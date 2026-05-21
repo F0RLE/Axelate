@@ -706,6 +706,47 @@ describe('ConsoleUI lifecycle', () => {
         expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
     });
 
+    it('should render an empty console when the selected level has no matching logs', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn().mockReturnValue(
+                normalizeLogs([
+                    {
+                        level: 'INFO',
+                        message: '[NavigationService] Navigating to: settings',
+                        source: 'frontend',
+                        timestamp: 1,
+                    },
+                    {
+                        level: 'DEBUG',
+                        message: '[NavigationUI] Page modules',
+                        source: 'frontend',
+                        timestamp: 2,
+                    },
+                ]),
+            ),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
+        await flushPromises();
+
+        const errorButton = document.querySelector(
+            '.console-filter-chip[data-level="ERROR"]',
+        ) as HTMLButtonElement;
+        errorButton.click();
+
+        const pane = document.getElementById('logs-general') as HTMLElement;
+        expect(pane.textContent).toBe('No logs match selected levels');
+        expect(pane.querySelector('.log-entry-card')).toBeNull();
+        expect(pane.textContent).not.toContain('Page settings');
+        expect(pane.textContent).not.toContain('Page modules');
+    });
+
     it('should allow multi-select level filters with ctrl or shift click', async () => {
         const service = createServiceMock({
             getLogsForView: vi.fn().mockReturnValue(

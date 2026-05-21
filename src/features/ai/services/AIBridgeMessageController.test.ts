@@ -161,6 +161,29 @@ function createImageController() {
 }
 
 describe('AIBridgeMessageController custom providers', () => {
+    it('routes built-in cloud text providers through their OpenRouter catalog base URL', async () => {
+        const { controller, transport, manager, context } = createTextController();
+        manager.activeProviderId = 'gpt';
+        manager.model = 'openai/gpt-5.5';
+        manager.getProviderBaseUrl.mockReturnValue('https://openrouter.ai/api/v1');
+        context.aiSettings.getInternetAccessEnabled.mockReturnValue(true);
+
+        await controller.sendMessage('What is the latest release today?', 'chat', [], []);
+
+        expect(context.aiSettings.getThinkingLevel).toHaveBeenCalledWith('gpt');
+        expect(context.aiSettings.getInternetAccessEnabled).toHaveBeenCalledWith('gpt');
+        expect(manager.getProviderBaseUrl).toHaveBeenCalledWith('gpt');
+        expect(transport.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                provider: 'gpt',
+                model: 'openai/gpt-5.5',
+                cloud_api_base_url: 'https://openrouter.ai/api/v1',
+                thinking_level: 'high',
+                web_search: { enabled: true },
+            }),
+        );
+    });
+
     it('routes custom text providers through the custom backend slot without changing model ids', async () => {
         const { controller, transport } = createTextController();
 
