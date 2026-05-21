@@ -4,6 +4,9 @@ use crate::domain::engine::config::{build_default_engine_config, merge_user_engi
 use crate::domain::engine::manager::canonical_engine_id;
 use crate::infrastructure::config::engine_settings::load_engine_config_map;
 
+/// Default base URL for cloud API requests (OpenAI-compatible endpoint).
+const DEFAULT_CLOUD_BASE_URL: &str = "https://openrouter.ai/api/v1";
+
 #[derive(Clone, Copy)]
 pub(super) enum LocalEngineAccess {
     AutoStart,
@@ -54,7 +57,14 @@ pub(super) async fn prepare_chat_dispatch(
         }
     }
 
-    let mut base_url = "https://openrouter.ai/api/v1".to_string();
+    let cloud_base_url_override = request
+        .cloud_api_base_url
+        .as_deref()
+        .map(str::trim)
+        .filter(|url| !url.is_empty());
+    let mut base_url = cloud_base_url_override
+        .unwrap_or(DEFAULT_CLOUD_BASE_URL)
+        .to_string();
     let mut effective_model = request.model.clone();
     let mut model_max_tokens: Option<u32> = None;
     let mut is_local_engine = false;
@@ -79,6 +89,7 @@ pub(super) async fn prepare_chat_dispatch(
         resolve_cloud_provider_request(
             request,
             config_service,
+            cloud_base_url_override,
             &mut base_url,
             &mut effective_model,
             &mut model_max_tokens,
@@ -334,6 +345,7 @@ async fn prepend_local_system_prompt(
 fn resolve_cloud_provider_request(
     request: &ChatRequest,
     config_service: &crate::domain::system::config_service::ConfigService,
+    base_url_override: Option<&str>,
     base_url: &mut String,
     effective_model: &mut String,
     model_max_tokens: &mut Option<u32>,
@@ -348,7 +360,8 @@ fn resolve_cloud_provider_request(
         let resolution = resolve_cloud_provider_values(
             &request.provider,
             &request.model,
-            "https://openrouter.ai/api/v1",
+            DEFAULT_CLOUD_BASE_URL,
+            base_url_override,
             provider,
             custom_models.as_ref(),
         );
@@ -362,13 +375,19 @@ fn resolve_cloud_provider_values(
     provider_id: &str,
     request_model: &str,
     default_base_url: &str,
+    base_url_override: Option<&str>,
     provider: &crate::models::config::ApiProvider,
     custom_models: Option<&crate::models::custom_models::CustomModelConfig>,
 ) -> CloudProviderResolution {
-    let base_url = provider
-        .base_url
-        .clone()
-        .unwrap_or_else(|| default_base_url.to_string());
+    let base_url = base_url_override.map_or_else(
+        || {
+            provider
+                .base_url
+                .clone()
+                .unwrap_or_else(|| default_base_url.to_string())
+        },
+        str::to_string,
+    );
     let mut effective_model = request_model.to_string();
     let mut model_max_tokens = None;
 
@@ -527,6 +546,7 @@ mod tests {
             "gpt",
             "ui-model",
             "https://fallback.test/v1",
+            None,
             &provider(),
             None,
         );
@@ -545,6 +565,7 @@ mod tests {
             "gpt",
             "raw-model",
             "https://fallback.test/v1",
+            None,
             &provider,
             None,
         );
@@ -552,6 +573,22 @@ mod tests {
         assert_eq!(resolution.base_url, "https://fallback.test/v1");
         assert_eq!(resolution.effective_model, "raw-model");
         assert_eq!(resolution.model_max_tokens, None);
+    }
+
+    #[test]
+    fn resolve_cloud_provider_values_prefers_explicit_base_url_override() {
+        let resolution = resolve_cloud_provider_values(
+            "gpt",
+            "ui-model",
+            "https://fallback.test/v1",
+            Some("https://api.openai.com/v1"),
+            &provider(),
+            None,
+        );
+
+        assert_eq!(resolution.base_url, "https://api.openai.com/v1");
+        assert_eq!(resolution.effective_model, "provider-text-model");
+        assert_eq!(resolution.model_max_tokens, Some(16_384));
     }
 
     #[test]
@@ -570,6 +607,7 @@ mod tests {
             "gpt",
             "ui-model",
             "https://fallback.test/v1",
+            None,
             &provider(),
             Some(&custom_models),
         );

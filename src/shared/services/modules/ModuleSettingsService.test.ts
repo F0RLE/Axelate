@@ -15,6 +15,7 @@ function createMockStore(): UiStateStore {
         selected_modules: {},
         zoom_level: 1,
         selected_ai_models: {},
+        ai_api_base_urls: {},
         resolution_zoom: {},
         sound_enabled: true,
         ai_thinking_level: {},

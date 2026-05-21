@@ -10,8 +10,15 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAIModelData } from '../types/aiTypes';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { isCustomProviderId } from '@/shared/utils/customProviderSupport';
-import { SHARED_CLOUD_KEY_PROVIDER_ID } from '@/shared/utils/providerSupport';
+import {
+    CUSTOM_TEXT_PROVIDER_ID,
+    isCustomProviderId,
+} from '@/shared/utils/customProviderSupport';
+import {
+    getSharedCloudSecretService,
+    resolveProviderSecretService,
+    SHARED_CLOUD_KEY_PROVIDER_ID,
+} from '@/shared/utils/providerSupport';
 import { bindAISettingsInteractions } from './AISettingsInteractionBinder';
 import { AISettingsViewPolicy } from './AISettingsViewPolicy';
 import { AISettingsKeyController } from './AISettingsKeyController';
@@ -166,6 +173,8 @@ class AISettingsRenderer extends BaseComponent {
             appId,
             models,
             savedModel,
+            apiBaseUrl: this._getApiBaseUrl(app),
+            showApiEndpointSelector: appId === CUSTOM_TEXT_PROVIDER_ID,
             showModelStats: this._viewPolicy.shouldShowModelStats(appId),
             showCustomModelComposer: isCustomProviderId(appId),
             translate: t,
@@ -255,6 +264,7 @@ class AISettingsRenderer extends BaseComponent {
             selectModel: (modelKey) => this.selectModel(appId, modelKey),
             submitCustomModel: async () => this._submitCustomModel(appId),
             removeCustomModel: async (modelKey) => this._removeCustomModel(appId, modelKey),
+            setApiBaseUrl: (baseUrl) => this._setApiBaseUrl(appId, baseUrl),
             setThinkingLevel: (level: ThinkingLevel) => {
                 this._aiSettings?.setThinkingLevel(appId, level);
             },
@@ -292,7 +302,12 @@ class AISettingsRenderer extends BaseComponent {
             `#${appId}-api-key-input`,
         );
         const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-check-btn`);
-        await this._keyController.checkKey(input, btn, this._getKeyProviderId(appId));
+        await this._keyController.checkKey(
+            input,
+            btn,
+            this._getKeyProviderId(appId),
+            this._getValidationBaseUrl(appId),
+        );
     }
 
     private async _removeClearedStoredKey(
@@ -485,6 +500,39 @@ class AISettingsRenderer extends BaseComponent {
         return parts.join(' ');
     }
 
+    private _getApiBaseUrl(app: IApp): string {
+        const providerBaseUrl =
+            typeof app.apiProviderData?.['baseUrl'] === 'string'
+                ? app.apiProviderData['baseUrl']
+                : 'https://openrouter.ai/api/v1';
+        return this._aiSettings?.getApiBaseUrl(app.id, providerBaseUrl) ?? providerBaseUrl;
+    }
+
+    private _setApiBaseUrl(appId: string, baseUrl: string): void {
+        const saved = this._aiSettings?.setApiBaseUrl(appId, baseUrl) ?? false;
+        const translate = this._getTranslator();
+        if (saved) {
+            this._showToast(
+                translate('ui.settings.api_endpoint_saved', 'API endpoint saved'),
+                'success',
+            );
+            return;
+        }
+
+        this._showToast(
+            translate('ui.settings.api_endpoint_invalid', 'Use an HTTPS OpenAI-compatible URL'),
+            'warning',
+        );
+    }
+
+    private _getValidationBaseUrl(appId: string): string | undefined {
+        if (appId !== CUSTOM_TEXT_PROVIDER_ID) {
+            return undefined;
+        }
+
+        return this._aiSettings?.getApiBaseUrl(appId);
+    }
+
     private async _rerenderActiveApp(): Promise<void> {
         if (this._activeRenderTarget === null) {
             return;
@@ -493,16 +541,19 @@ class AISettingsRenderer extends BaseComponent {
         await this.render(this._activeRenderTarget.container, this._activeRenderTarget.app);
     }
 
-    private _getKeyProviderId(_appId: string): string {
-        return SHARED_CLOUD_KEY_PROVIDER_ID;
+    private _getKeyProviderId(appId: string): string {
+        const secretService = resolveProviderSecretService(appId);
+        return secretService !== null && secretService !== getSharedCloudSecretService()
+            ? appId
+            : SHARED_CLOUD_KEY_PROVIDER_ID;
     }
 
     private _getKeyProviderUrl(providerId: string): string {
-        if (providerId === SHARED_CLOUD_KEY_PROVIDER_ID) {
-            return 'https://openrouter.ai/settings/keys';
-        }
-
-        return '#';
+        return (
+            {
+                [SHARED_CLOUD_KEY_PROVIDER_ID]: 'https://openrouter.ai/settings/keys',
+            }[providerId] ?? '#'
+        );
     }
 
     private _queryActiveElement<T extends Element>(selector: string): T | null {

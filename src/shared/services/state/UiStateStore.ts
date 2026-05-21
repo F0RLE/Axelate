@@ -26,6 +26,7 @@ export interface IUIState {
     last_page?: string;
     zoom_level: number;
     selected_ai_models: Record<string, string>;
+    ai_api_base_urls: Record<string, string>;
     resolution_zoom: Record<string, number>;
     sound_enabled: boolean;
     ai_thinking_level: Record<string, ThinkingLevel>;
@@ -48,6 +49,7 @@ const DEFAULT_UI_STATE: IUIState = {
     selected_modules: {},
     zoom_level: 1,
     selected_ai_models: {},
+    ai_api_base_urls: {},
     resolution_zoom: {},
     sound_enabled: true,
     ai_thinking_level: {},
@@ -230,6 +232,7 @@ export class UiStateStore {
             card_widths: this._normalizeStringRecord(state.card_widths),
             selected_modules: this._normalizeObjectRecord(state.selected_modules),
             selected_ai_models: this._normalizeStringRecord(state.selected_ai_models),
+            ai_api_base_urls: this._normalizeUrlRecord(state.ai_api_base_urls),
             resolution_zoom: Object.fromEntries(
                 Object.entries(resolutionZoom).map(([key, zoom]) => [key, this._clampZoom(zoom)]),
             ),
@@ -274,6 +277,24 @@ export class UiStateStore {
                     return typeof item === 'string';
                 },
             ),
+        );
+    }
+
+    private _normalizeUrlRecord(value: unknown): Record<string, string> {
+        if (value === null || typeof value !== 'object' || Array.isArray(value)) {
+            return {};
+        }
+
+        return Object.fromEntries(
+            Object.entries(value as Record<string, unknown>)
+                .map(([key, item]): [string, string] => [
+                    key,
+                    typeof item === 'string' ? item.trim() : '',
+                ])
+                .filter((entry) => {
+                    const [, item] = entry;
+                    return item.startsWith('https://') || item.startsWith('http://localhost');
+                }),
         );
     }
 

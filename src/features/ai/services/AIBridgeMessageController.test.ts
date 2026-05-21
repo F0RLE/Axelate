@@ -33,6 +33,7 @@ function createTextController() {
         model: string;
         sessionId: string;
         maxOutputTokens: number | undefined;
+        getProviderBaseUrl: ReturnType<typeof vi.fn>;
         refreshActiveApiKey: ReturnType<typeof vi.fn>;
         isActive: ReturnType<typeof vi.fn>;
     } = {
@@ -41,6 +42,7 @@ function createTextController() {
         model: 'deepseek/deepseek-r1-0528',
         sessionId: 'session-1',
         maxOutputTokens: 4096,
+        getProviderBaseUrl: vi.fn(() => undefined),
         refreshActiveApiKey: vi.fn().mockResolvedValue(undefined),
         isActive: vi.fn(() => true),
     };
@@ -110,6 +112,7 @@ function createImageController() {
         model: 'black-forest-labs/flux.2-max',
         sessionId: 'session-image',
         maxOutputTokens: undefined,
+        getProviderBaseUrl: vi.fn(() => undefined),
         refreshActiveApiKey: vi.fn().mockResolvedValue(undefined),
         isActive: vi.fn(() => true),
     };
@@ -158,14 +161,14 @@ function createImageController() {
 }
 
 describe('AIBridgeMessageController custom providers', () => {
-    it('routes custom text providers through the text backend provider without changing model ids', async () => {
+    it('routes custom text providers through the custom backend slot without changing model ids', async () => {
         const { controller, transport } = createTextController();
 
         await controller.sendMessage('Привет', 'chat', [], []);
 
         expect(transport.send).toHaveBeenCalledWith(
             expect.objectContaining({
-                provider: 'gpt',
+                provider: CUSTOM_TEXT_PROVIDER_ID,
                 model: 'deepseek/deepseek-r1-0528',
                 thinking_level: 'high',
             }),
@@ -185,9 +188,23 @@ describe('AIBridgeMessageController custom providers', () => {
         );
         expect(transport.send).toHaveBeenCalledWith(
             expect.objectContaining({
-                provider: 'gpt',
+                provider: CUSTOM_TEXT_PROVIDER_ID,
                 thinking_level: 'none',
                 web_search: { enabled: true },
+            }),
+        );
+    });
+
+    it('passes provider base URLs to OpenAI-compatible text requests', async () => {
+        const { controller, transport, manager } = createTextController();
+        manager.getProviderBaseUrl.mockReturnValue('https://api.openai.com/v1');
+
+        await controller.sendMessage('Hello', 'chat', [], []);
+
+        expect(manager.getProviderBaseUrl).toHaveBeenCalledWith(CUSTOM_TEXT_PROVIDER_ID);
+        expect(transport.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                cloud_api_base_url: 'https://api.openai.com/v1',
             }),
         );
     });
@@ -229,6 +246,7 @@ describe('AIBridgeMessageController custom providers', () => {
                 model: 'deepseek/deepseek-r1-0528',
                 sessionId: 'session-1',
                 maxOutputTokens: 4096,
+                getProviderBaseUrl: vi.fn(() => undefined),
                 refreshActiveApiKey: vi.fn().mockResolvedValue(undefined),
                 isActive: vi.fn(() => true),
             } as never,
@@ -409,5 +427,18 @@ describe('AIBridgeMessageController custom providers', () => {
         expect(onLongActivityStart).toHaveBeenCalledOnce();
         expect(onLongActivityEnd).toHaveBeenCalledOnce();
         expect(transport.sendSilent).toHaveBeenCalledOnce();
+    });
+
+    it('passes provider base URLs to silent prompt preparation requests', async () => {
+        const { controller, transport, manager } = createTextController();
+        manager.getProviderBaseUrl.mockReturnValue('https://api.groq.com/openai/v1');
+
+        await controller.prepareImagePrompt('rewrite image prompt');
+
+        expect(transport.sendSilent).toHaveBeenCalledWith(
+            expect.objectContaining({
+                cloud_api_base_url: 'https://api.groq.com/openai/v1',
+            }),
+        );
     });
 });

@@ -664,6 +664,7 @@ mod tests {
             request_id: Some("req-1".to_string()),
             session_id: Some("session-1".to_string()),
             web_search: None,
+            cloud_api_base_url: None,
         }
     }
 

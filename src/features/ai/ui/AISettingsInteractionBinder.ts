@@ -12,6 +12,7 @@ type AISettingsInteractionBinderDeps = {
     selectModel: (modelKey: string) => void;
     submitCustomModel: () => Promise<void>;
     removeCustomModel: (modelKey: string) => Promise<void>;
+    setApiBaseUrl: (baseUrl: string) => void;
     setThinkingLevel: (level: ThinkingLevel) => void;
     getSelectedModel: () => string;
     setInternetAccessEnabled: (enabled: boolean) => void;
@@ -53,6 +54,66 @@ export function bindAISettingsInteractions(deps: AISettingsInteractionBinderDeps
     addListener(container.querySelector(`#${appId}-key-check-btn`), 'click', () => {
         void deps.checkKey();
     });
+
+    const endpointGrid = container.querySelector(`#${appId}-api-endpoint-grid`);
+    if (endpointGrid !== null) {
+        const buttons = Array.from(
+            endpointGrid.querySelectorAll<HTMLElement>('.ai-api-endpoint-card'),
+        );
+        const customInput = container.querySelector<HTMLInputElement>(
+            `#${appId}-api-custom-url-input`,
+        );
+
+        const updateEndpoint = (target: HTMLElement): void => {
+            const value = target.dataset['baseUrl'];
+            if (value === undefined || value === '') {
+                return;
+            }
+
+            deps.setApiBaseUrl(value);
+            buttons.forEach((button) => {
+                const selected = button === target;
+                button.classList.toggle('selected', selected);
+                button.setAttribute('aria-checked', String(selected));
+            });
+            if (customInput !== null) {
+                customInput.value = value;
+            }
+        };
+
+        buttons.forEach((button) => {
+            button.addEventListener(
+                'click',
+                (event) => updateEndpoint(event.currentTarget as HTMLElement),
+                { signal },
+            );
+            button.addEventListener(
+                'keydown',
+                (event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                        event.preventDefault();
+                        updateEndpoint(event.currentTarget as HTMLElement);
+                    }
+                },
+                { signal },
+            );
+        });
+
+        const saveCustomEndpoint = (): void => {
+            const value = customInput?.value.trim() ?? '';
+            if (value !== '') {
+                deps.setApiBaseUrl(value);
+            }
+        };
+
+        addListener(customInput, 'blur', saveCustomEndpoint);
+        addListener(customInput, 'keydown', (event) => {
+            if ((event as KeyboardEvent).key === 'Enter') {
+                event.preventDefault();
+                saveCustomEndpoint();
+            }
+        });
+    }
 
     const submitCustomModel = (event?: Event): void => {
         event?.preventDefault();

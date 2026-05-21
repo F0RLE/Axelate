@@ -36,14 +36,23 @@ export function constructChatRequest(
         providerId: string;
         model: string;
         apiKey: string | null;
+        cloudApiBaseUrl?: string | undefined;
         sessionId?: string;
         thinkingLevel?: RequestThinkingLevel;
         maxTokens?: number | undefined;
         webSearchEnabled?: boolean;
     },
 ): IChatRequest {
-    const { providerId, model, apiKey, sessionId, thinkingLevel, maxTokens, webSearchEnabled } =
-        config;
+    const {
+        providerId,
+        model,
+        apiKey,
+        cloudApiBaseUrl,
+        sessionId,
+        thinkingLevel,
+        maxTokens,
+        webSearchEnabled,
+    } = config;
     const request: IChatRequest = {
         provider: providerId,
         model,
@@ -62,6 +71,11 @@ export function constructChatRequest(
         api_key: apiKey,
         attachments,
     };
+
+    const normalizedCloudApiBaseUrl = cloudApiBaseUrl?.trim();
+    if (normalizedCloudApiBaseUrl !== undefined && normalizedCloudApiBaseUrl !== '') {
+        request.cloud_api_base_url = normalizedCloudApiBaseUrl;
+    }
 
     const normalizedSessionId = sessionId?.trim();
     if (normalizedSessionId !== undefined && normalizedSessionId !== '') {

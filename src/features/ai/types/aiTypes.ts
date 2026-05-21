@@ -72,6 +72,7 @@ export interface IChatRequest {
     model: string;
     messages: { role: string; content: ChatContent; thought_signature?: string | undefined }[];
     api_key: string | null;
+    cloud_api_base_url?: string;
     request_id?: string;
     thinking_level?: 'none' | 'off' | 'low' | 'medium' | 'high';
     max_tokens?: number | undefined;

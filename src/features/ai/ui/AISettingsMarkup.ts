@@ -6,6 +6,15 @@ import type { AISettingsViewPolicy } from './AISettingsViewPolicy';
 
 type TranslateFunc = (key: string, fallback: string) => string;
 
+const API_ENDPOINT_PRESETS = [
+    { id: 'openrouter', label: 'OpenRouter', baseUrl: 'https://openrouter.ai/api/v1' },
+    { id: 'openai', label: 'OpenAI', baseUrl: 'https://api.openai.com/v1' },
+    { id: 'groq', label: 'Groq', baseUrl: 'https://api.groq.com/openai/v1' },
+    { id: 'mistral', label: 'Mistral', baseUrl: 'https://api.mistral.ai/v1' },
+    { id: 'together', label: 'Together', baseUrl: 'https://api.together.xyz/v1' },
+    { id: 'xai', label: 'xAI', baseUrl: 'https://api.x.ai/v1' },
+] as const;
+
 interface IAIModelPricing {
     input?: number;
     output?: number;
@@ -103,6 +112,68 @@ export function renderInternetAccessSection(
                     <div class="thinking-option-card internet-access-card ${!isEnabled ? 'selected' : ''}" role="radio" aria-checked="${String(!isEnabled)}" tabindex="0" data-value="off">
                         <div class="thinking-option-title" data-i18n="ui.common.off">${translate('ui.common.off', 'Off')}</div>
                     </div>
+                </div>
+            </div>
+        </section>
+    `;
+}
+
+export function renderApiEndpointSection(
+    appId: string,
+    selectedBaseUrl: string,
+    translate: TranslateFunc,
+): string {
+    const normalizedSelected = selectedBaseUrl.trim().replace(/\/+$/u, '');
+    const isPresetSelected = API_ENDPOINT_PRESETS.some(
+        (preset) => preset.baseUrl === normalizedSelected,
+    );
+
+    return `
+        <section id="${appId}-api-endpoint-section" class="ai-api-endpoint-section" aria-labelledby="${appId}-api-endpoint-title">
+            <div class="ai-content-panel">
+                <div class="settings-card-header-center">
+                    <h3 id="${appId}-api-endpoint-title">🔌 <span data-i18n="ui.settings.api_endpoint">${translate('ui.settings.api_endpoint', 'API Endpoint')}</span></h3>
+                </div>
+                <div id="${appId}-api-endpoint-grid" class="ai-api-endpoint-grid" role="radiogroup" aria-label="${translate('ui.settings.api_endpoint', 'API Endpoint')}">
+                    ${API_ENDPOINT_PRESETS.map((preset) => {
+                        const selected = preset.baseUrl === normalizedSelected;
+                        return `
+                            <div
+                                class="ai-api-endpoint-card ${selected ? 'selected' : ''}"
+                                role="radio"
+                                aria-checked="${String(selected)}"
+                                tabindex="0"
+                                data-provider="${preset.id}"
+                                data-base-url="${preset.baseUrl}"
+                            >
+                                <div class="ai-api-endpoint-name">${preset.label}</div>
+                                <div class="ai-api-endpoint-url">${preset.baseUrl.replace(/^https:\/\//u, '')}</div>
+                            </div>
+                        `;
+                    }).join('')}
+                    <div
+                        class="ai-api-endpoint-card ${isPresetSelected ? '' : 'selected'}"
+                        role="radio"
+                        aria-checked="${String(!isPresetSelected)}"
+                        tabindex="0"
+                        data-provider="custom"
+                        data-base-url="${DOMPurify.sanitize(normalizedSelected, PURIFY_CONFIG)}"
+                    >
+                        <div class="ai-api-endpoint-name" data-i18n="ui.settings.api_endpoint_custom">${translate('ui.settings.api_endpoint_custom', 'Custom')}</div>
+                        <div class="ai-api-endpoint-url" data-i18n="ui.settings.api_endpoint_custom_desc">${translate('ui.settings.api_endpoint_custom_desc', 'OpenAI-compatible URL')}</div>
+                    </div>
+                </div>
+                <div class="ai-key-input-row ai-api-custom-url-row">
+                    <input
+                        id="${appId}-api-custom-url-input"
+                        class="ai-api-custom-url-input"
+                        type="text"
+                        spellcheck="false"
+                        autocomplete="off"
+                        value="${DOMPurify.sanitize(normalizedSelected, PURIFY_CONFIG)}"
+                        placeholder="https://api.provider.com/v1"
+                        aria-label="${translate('ui.settings.api_endpoint_custom_url', 'Custom API endpoint URL')}"
+                    />
                 </div>
             </div>
         </section>

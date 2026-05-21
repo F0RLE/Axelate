@@ -82,6 +82,9 @@ pub struct ChatRequest {
     /// Optional web search controls for cloud/API providers
     #[serde(default)]
     pub web_search: Option<WebSearchOptions>,
+    /// Optional override for the cloud API base URL (e.g. "https://api.openai.com/v1")
+    #[serde(default)]
+    pub cloud_api_base_url: Option<String>,
 }
 
 /// AI chat response

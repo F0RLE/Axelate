@@ -1,7 +1,7 @@
 import type { IApp } from '@/shared/types/coreTypes';
 
-export const CUSTOM_TEXT_PROVIDER_ID = 'openrouter-custom-text';
-export const CUSTOM_IMAGE_PROVIDER_ID = 'openrouter-custom-image';
+export const CUSTOM_TEXT_PROVIDER_ID = 'custom-text';
+export const CUSTOM_IMAGE_PROVIDER_ID = 'custom-image';
 
 type CustomProviderSpec = {
     readonly id: string;
@@ -21,7 +21,7 @@ const CUSTOM_PROVIDER_SPECS: readonly CustomProviderSpec[] = [
         backendProviderId: 'gpt',
         name: 'Custom',
         nameKey: 'ui.launcher.app.custom_text.name',
-        desc: 'Use any OpenRouter text model by pasting its model ID manually.',
+        desc: 'Use any text model by pasting its model ID manually.',
         descKey: 'ui.launcher.app.custom_text.desc',
         icon: '🔤',
     },
@@ -31,7 +31,7 @@ const CUSTOM_PROVIDER_SPECS: readonly CustomProviderSpec[] = [
         backendProviderId: 'gpt-image',
         name: 'Custom',
         nameKey: 'ui.launcher.app.custom_image.name',
-        desc: 'Use any OpenRouter image model by pasting its model ID manually.',
+        desc: 'Use any image model by pasting its model ID manually.',
         descKey: 'ui.launcher.app.custom_image.desc',
         icon: '🪄',
     },

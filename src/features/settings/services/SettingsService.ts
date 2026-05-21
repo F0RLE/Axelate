@@ -207,11 +207,16 @@ export class SettingsService {
     /**
      * Validate API Key using Backend Command.
      */
-    public async validateApiKey(provider: string, key: string): Promise<boolean> {
+    public async validateApiKey(
+        provider: string,
+        key: string,
+        baseUrl?: string | undefined,
+    ): Promise<boolean> {
         try {
             return await this._tauri.invoke<boolean>('validate_api_key', {
                 provider,
                 key,
+                baseUrl: baseUrl ?? null,
             });
         } catch (e) {
             this._tracer.error('[SettingsService] API Key validation failed:', e);
@@ -222,10 +227,14 @@ export class SettingsService {
     /**
      * Validates the stored secure API key entirely on the backend.
      */
-    public async validateStoredApiKey(provider: string): Promise<boolean> {
+    public async validateStoredApiKey(
+        provider: string,
+        baseUrl?: string | undefined,
+    ): Promise<boolean> {
         try {
             return await this._tauri.invoke<boolean>('validate_stored_api_key', {
                 provider,
+                baseUrl: baseUrl ?? null,
             });
         } catch (e) {
             this._tracer.error('[SettingsService] Stored API key validation failed:', e);

@@ -227,13 +227,54 @@ fn configured_provider_secret_service(
             provider_config
                 .api_key_env
                 .as_deref()
-                .unwrap_or("openrouter_api_key"),
+                .unwrap_or("cloud_api_key"),
         ));
+    }
+
+    // The frontend uses "cloud" as the shared key provider ID for all
+    // cloud providers, but no api_providers entry with id="cloud" exists
+    // (actual providers are "gpt", "gemini", etc.). Fall back to the default
+    // shared secret service so validation and key loading still work.
+    if provider == "cloud" || provider == "openrouter" {
+        return Some(normalize_secret_service_name("cloud_api_key"));
+    }
+
+    if provider == "custom-text" {
+        return Some(normalize_secret_service_name("custom_text_api_key"));
+    }
+
+    if provider == "custom-image" {
+        return Some(normalize_secret_service_name("custom_image_api_key"));
     }
 
     None
 }
 
+fn configured_provider_base_url(config_service: &ConfigService, provider: &str) -> Option<String> {
+    let provider = provider.trim();
+    if provider.is_empty() {
+        return None;
+    }
+
+    if let Ok(config) = config_service.load_full_config()
+        && let Some(provider_config) = config
+            .api_providers
+            .iter()
+            .find(|candidate| candidate.id == provider)
+    {
+        return provider_config
+            .base_url
+            .as_deref()
+            .map(str::trim)
+            .filter(|base_url| !base_url.is_empty())
+            .map(str::to_string);
+    }
+
+    None
+}
+
+/// Tries loading an API key from the primary secret service, falling back to
+/// the legacy name for users who stored keys before the rename.
 async fn load_stored_provider_api_key(
     config_service: &ConfigService,
     provider: &str,
@@ -242,8 +283,16 @@ async fn load_stored_provider_api_key(
         return Ok(None);
     };
 
-    let key = SecureStorage::get_key_async(service).await?;
-    Ok(key.filter(|value| !value.trim().is_empty()))
+    let key = SecureStorage::get_key_async(service.clone()).await?;
+    let key = key.filter(|value| !value.trim().is_empty());
+
+    // Legacy fallback: if the primary name yields nothing, try the old name
+    if key.is_none() && service == "cloud_api_key" {
+        let legacy = SecureStorage::get_key_async("openrouter_api_key".to_string()).await?;
+        return Ok(legacy.filter(|value| !value.trim().is_empty()));
+    }
+
+    Ok(key)
 }
 
 pub(crate) async fn fill_chat_request_api_key(
@@ -479,8 +528,14 @@ pub fn cancel_chat_generation(
 #[tauri::command]
 #[specta::specta]
 /// Validates an API key for the specified provider
-pub async fn validate_api_key(provider: String, key: String) -> Result<bool, AppError> {
-    ai_service::validate_api_key(provider, key).await
+pub async fn validate_api_key(
+    provider: String,
+    key: String,
+    base_url: Option<String>,
+    config_service: State<'_, Arc<ConfigService>>,
+) -> Result<bool, AppError> {
+    let base_url = base_url.or_else(|| configured_provider_base_url(&config_service, &provider));
+    ai_service::validate_api_key(provider, key, base_url).await
 }
 
 #[tauri::command]
@@ -488,10 +543,13 @@ pub async fn validate_api_key(provider: String, key: String) -> Result<bool, App
 /// Validates the stored provider key without exposing it to the frontend
 pub async fn validate_stored_api_key(
     provider: String,
+    base_url: Option<String>,
     config_service: State<'_, Arc<ConfigService>>,
 ) -> Result<bool, AppError> {
     if let Some(key) = load_stored_provider_api_key(&config_service, &provider).await? {
-        return ai_service::validate_api_key(provider, key).await;
+        let base_url =
+            base_url.or_else(|| configured_provider_base_url(&config_service, &provider));
+        return ai_service::validate_api_key(provider, key, base_url).await;
     }
 
     Ok(false)

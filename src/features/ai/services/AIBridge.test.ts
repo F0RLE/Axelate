@@ -1,4 +1,4 @@
-/**
+﻿/**
  * AIBridge Unit Tests — Full Coverage
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -38,6 +38,8 @@ const mockCore = {
     aiSettings: {
         setSelectedAIModel: vi.fn(),
         getSelectedAIModel: vi.fn(),
+        getApiBaseUrl: vi.fn((_appId: string, fallback?: string) => fallback ?? ''),
+        setApiBaseUrl: vi.fn().mockReturnValue(true),
         getThinkingLevel: vi.fn().mockReturnValue('high'),
         getInternetAccessEnabled: vi.fn().mockReturnValue(true),
         getLocalMaxOutputTokens: vi.fn().mockReturnValue(384),
@@ -249,8 +251,7 @@ describe('AIBridge', () => {
         it('should activate provider with valid API key', async () => {
             mockInvoke.mockImplementation(async (cmd: string, args?: Record<string, unknown>) => {
                 await Promise.resolve();
-                if (cmd === 'has_secure_key' && args?.['service'] === 'openrouter_api_key')
-                    return true;
+                if (cmd === 'has_secure_key' && args?.['service'] === 'cloud_api_key') return true;
                 return null;
             });
 
@@ -303,7 +304,7 @@ describe('AIBridge', () => {
 
         it('should NOT fallback to localStorage when backend returns null', async () => {
             mockInvoke.mockResolvedValue(null);
-            localStorage.setItem('openrouter_api_key', 'local-key-123');
+            localStorage.setItem('cloud_api_key', 'local-key-123');
 
             const result = await aiBridge.startProvider('gemini');
 

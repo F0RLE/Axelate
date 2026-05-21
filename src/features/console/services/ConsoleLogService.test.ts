@@ -123,7 +123,7 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'Platform' },
-                    { id: 'module:openrouter-custom-text', label: 'Custom' },
+                    { id: 'module:custom-text', label: 'Custom' },
                     { id: 'module:axelate-telegram-parser', label: 'Parser' },
                 ],
                 status_items: [],
@@ -132,7 +132,7 @@ describe('ConsoleLogService', () => {
 
         await expect(service.getAvailableViews()).resolves.toEqual([
             { id: 'general', label: 'Platform' },
-            { id: 'module:openrouter-custom-text', label: 'Custom' },
+            { id: 'module:custom-text', label: 'Custom' },
             { id: 'module:axelate-telegram-parser', label: 'Parser' },
         ]);
     });

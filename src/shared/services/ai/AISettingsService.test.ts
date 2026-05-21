@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+﻿import { describe, it, expect, beforeEach } from 'vitest';
 import { AISettingsService } from './AISettingsService';
 import type { UiStateStore } from '../state/UiStateStore';
 
@@ -18,6 +18,18 @@ describe('AISettingsService', () => {
         expect(service.getSelectedAIModel('gemini')).toBe('gemini-pro');
     });
 
+    it('should get and set OpenAI-compatible API base URLs', () => {
+        expect(service.getApiBaseUrl('gpt')).toBe('https://openrouter.ai/api/v1');
+
+        expect(service.setApiBaseUrl('gpt', ' https://api.openai.com/v1/ ')).toBe(true);
+        expect(service.getApiBaseUrl('gpt')).toBe('https://api.openai.com/v1');
+    });
+
+    it('should reject unsafe API base URLs', () => {
+        expect(service.setApiBaseUrl('gpt', 'http://evil.test/v1')).toBe(false);
+        expect(service.getApiBaseUrl('gpt')).toBe('https://openrouter.ai/api/v1');
+    });
+
     it('should get thinking level (default off for cloud providers)', () => {
         expect(service.getThinkingLevel('gemini')).toBe('off');
     });
@@ -33,7 +45,7 @@ describe('AISettingsService', () => {
 
     it('should disable internet access by default for cloud providers', () => {
         expect(service.getInternetAccessEnabled('gpt')).toBe(false);
-        expect(service.getInternetAccessEnabled('openrouter-custom-text')).toBe(false);
+        expect(service.getInternetAccessEnabled('custom-text')).toBe(false);
     });
 
     it('should disable internet access by default for local providers', () => {

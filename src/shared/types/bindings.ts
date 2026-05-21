@@ -157,9 +157,9 @@ export const commands = {
 	/**  Cancels an active streamed chat request by request identifier. */
 	cancelChatGeneration: (requestId: string) => __TAURI_INVOKE<boolean>("cancel_chat_generation", { requestId }),
 	/**  Validates an API key for the specified provider */
-	validateApiKey: (provider: string, key: string) => typedError<boolean, AppError>(__TAURI_INVOKE("validate_api_key", { provider, key })),
+	validateApiKey: (provider: string, key: string, baseUrl: string | null) => typedError<boolean, AppError>(__TAURI_INVOKE("validate_api_key", { provider, key, baseUrl })),
 	/**  Validates the stored provider key without exposing it to the frontend */
-	validateStoredApiKey: (provider: string) => typedError<boolean, AppError>(__TAURI_INVOKE("validate_stored_api_key", { provider })),
+	validateStoredApiKey: (provider: string, baseUrl: string | null) => typedError<boolean, AppError>(__TAURI_INVOKE("validate_stored_api_key", { provider, baseUrl })),
 	/**  Clears chat history for a specific session */
 	clearChatHistory: (sessionId: string) => typedError<null, AppError>(__TAURI_INVOKE("clear_chat_history", { sessionId })),
 	/**  Retrieves chat history for a specific session */
@@ -441,6 +441,8 @@ export type ChatRequest = {
 	session_id: string | null,
 	/**  Optional web search controls for cloud/API providers */
 	web_search?: WebSearchOptions | null,
+	/**  Optional override for the cloud API base URL (e.g. "https://api.openai.com/v1") */
+	cloud_api_base_url?: string | null,
 };
 
 /**  AI chat response */
@@ -1270,6 +1272,8 @@ export type UIState = {
 	zoom_level: number,
 	/**  Selected AI Models (`AppID` -> `ModelKey`) */
 	selected_ai_models: { [key in string]: string },
+	/**  OpenAI-compatible API base URLs by AI provider. */
+	ai_api_base_urls?: { [key in string]: string },
 	/**  Last visited page ID */
 	last_page: string | null,
 	/**
@@ -1376,4 +1380,3 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
         return { status: "error", error: e as any };
     }
 }
-

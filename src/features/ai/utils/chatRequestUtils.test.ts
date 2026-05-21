@@ -175,5 +175,16 @@ describe('chatRequestUtils', () => {
 
             expect(request.session_id).toBeUndefined();
         });
+
+        it('should include a trimmed OpenAI-compatible base URL when provided', () => {
+            const request = constructChatRequest([], mockMessage, [], {
+                providerId: 'gpt',
+                model: 'openai/gpt-5.5',
+                apiKey: null,
+                cloudApiBaseUrl: ' https://api.openai.com/v1 ',
+            });
+
+            expect(request.cloud_api_base_url).toBe('https://api.openai.com/v1');
+        });
     });
 });

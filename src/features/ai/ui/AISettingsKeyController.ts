@@ -131,6 +131,7 @@ export class AISettingsKeyController {
         input: KeyInput | null,
         button: KeyButton | null,
         providerId: string,
+        validationBaseUrl?: string | undefined,
     ): Promise<void> {
         if (input === null || button === null) {
             return;
@@ -165,9 +166,12 @@ export class AISettingsKeyController {
                 this._showToast(t('ui.settings.key_removed', 'API key removed'), 'success');
                 return;
             } else if (shouldValidateTypedKey) {
-                isValid = await this._validateKey(providerId, key);
+                isValid = await this._validateKey(providerId, key, validationBaseUrl);
             } else if (shouldValidateStoredKey) {
-                isValid = await this._requireSettingsService().validateStoredApiKey(providerId);
+                isValid = await this._requireSettingsService().validateStoredApiKey(
+                    providerId,
+                    validationBaseUrl,
+                );
             }
 
             if (isValid) {
@@ -237,14 +241,18 @@ export class AISettingsKeyController {
         return '•'.repeat(count);
     }
 
-    private async _validateKey(providerId: string, key: string): Promise<boolean> {
+    private async _validateKey(
+        providerId: string,
+        key: string,
+        validationBaseUrl?: string | undefined,
+    ): Promise<boolean> {
         const settingsService = this._options.getSettingsService();
         if (!settingsService) {
             return false;
         }
 
         try {
-            return await settingsService.validateApiKey(providerId, key);
+            return await settingsService.validateApiKey(providerId, key, validationBaseUrl);
         } catch (error) {
             this._options.tracer.error('[AISettingsKeyController] Key validation failed:', error);
             return false;

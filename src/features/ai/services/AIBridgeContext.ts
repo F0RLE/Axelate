@@ -15,6 +15,8 @@ export type AIProviderManagerContext = AITransportContext & {
     aiSettings: {
         getSelectedAIModel: (appId: string) => string | undefined;
         setSelectedAIModel: (appId: string, modelKey: string) => void;
+        getApiBaseUrl: (appId: string, fallback?: string) => string;
+        setApiBaseUrl: (appId: string, baseUrl: string) => boolean;
         getThinkingLevel: (appId: string) => ThinkingLevel;
         getInternetAccessEnabled: (appId: string) => boolean;
     };

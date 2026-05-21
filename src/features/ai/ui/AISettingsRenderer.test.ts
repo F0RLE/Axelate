@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('dompurify', () => ({
     default: {
@@ -33,6 +33,8 @@ describe('AISettingsRenderer', () => {
     const aiSettings = {
         getSelectedAIModel: vi.fn(),
         setSelectedAIModel: vi.fn(),
+        getApiBaseUrl: vi.fn(),
+        setApiBaseUrl: vi.fn(),
         getThinkingLevel: vi.fn(),
         setThinkingLevel: vi.fn(),
         getInternetAccessEnabled: vi.fn(),
@@ -113,6 +115,10 @@ describe('AISettingsRenderer', () => {
             return Promise.resolve();
         });
         aiSettings.getSelectedAIModel.mockReturnValue('reasoner');
+        aiSettings.getApiBaseUrl.mockImplementation(
+            (_appId: string, fallback?: string) => fallback ?? 'https://openrouter.ai/api/v1',
+        );
+        aiSettings.setApiBaseUrl.mockReturnValue(true);
         aiSettings.getThinkingLevel.mockReturnValue('medium');
         aiSettings.getInternetAccessEnabled.mockReturnValue(true);
         tauri.invoke.mockResolvedValue(true);
@@ -174,6 +180,7 @@ describe('AISettingsRenderer', () => {
         expect(input.dataset['storedMasked']).toBe('true');
         expect(container.querySelectorAll('.ai-model-card')).toHaveLength(2);
         expect(container.textContent).toContain('Ctx: 128K');
+        expect(container.querySelector('.ai-api-endpoint-card')).toBeNull();
 
         input.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
         input.value = 'new-secret';
@@ -196,6 +203,62 @@ describe('AISettingsRenderer', () => {
         expect(i18nUI.applyTranslations).toHaveBeenCalled();
     });
 
+    it('renders API endpoint presets only for custom text providers', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            apiProviderData: { models: [] },
+        } as never);
+
+        const openAiEndpointCard = container.querySelector(
+            '.ai-api-endpoint-card[data-provider="openai"]',
+        ) as HTMLElement;
+
+        expect(container.textContent).toContain('OpenAI');
+        openAiEndpointCard.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+        expect(aiSettings.setApiBaseUrl).toHaveBeenCalledWith(
+            CUSTOM_TEXT_PROVIDER_ID,
+            'https://api.openai.com/v1',
+        );
+        expect(showToast).toHaveBeenCalledWith(
+            'ui.settings.api_endpoint_saved:API endpoint saved',
+            'success',
+        );
+        expect(settingsService.getSecureKeyMeta).toHaveBeenCalledWith(CUSTOM_TEXT_PROVIDER_ID);
+    });
+
+    it('validates custom provider keys against the selected API endpoint', async () => {
+        vi.useFakeTimers();
+        const container = document.getElementById('root') as HTMLElement;
+        aiSettings.getApiBaseUrl.mockReturnValue('https://api.groq.com/openai/v1');
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            apiProviderData: { models: [] },
+        } as never);
+
+        const input = document.getElementById(
+            `${CUSTOM_TEXT_PROVIDER_ID}-api-key-input`,
+        ) as HTMLInputElement;
+        input.value = 'gsk-valid-key';
+        input.dispatchEvent(new Event('input', { bubbles: true }));
+
+        await aiSettingsRenderer.checkKey(CUSTOM_TEXT_PROVIDER_ID);
+
+        expect(settingsService.validateApiKey).toHaveBeenCalledWith(
+            CUSTOM_TEXT_PROVIDER_ID,
+            'gsk-valid-key',
+            'https://api.groq.com/openai/v1',
+        );
+        expect(settingsService.saveSecureKey).toHaveBeenCalledWith(
+            CUSTOM_TEXT_PROVIDER_ID,
+            'gsk-valid-key',
+        );
+    });
+
     it('reveals stored key on demand and updates selected model stats', async () => {
         const container = document.getElementById('root') as HTMLElement;
         await aiSettingsRenderer.render(container, {
@@ -208,7 +271,7 @@ describe('AISettingsRenderer', () => {
         expect(input.type).toBe('text');
         expect(input.dataset['storedMasked']).toBe('true');
         await aiSettingsRenderer.toggleKeyVisibility('gpt');
-        expect(settingsService.getSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(settingsService.getSecureKey).toHaveBeenCalledWith('cloud');
         expect(input.value).toBe('stored-secret');
         expect(input.dataset['storedMasked']).toBe('true');
         expect(input.dataset['storedRevealed']).toBe('true');
@@ -268,7 +331,7 @@ describe('AISettingsRenderer', () => {
         await aiSettingsRenderer.checkKey('gpt');
         expect(button.classList.contains('success')).toBe(true);
         expect(showToast).toHaveBeenCalledWith('ui.settings.key_valid:Key is valid', 'success');
-        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('openrouter', 'valid-key');
+        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('cloud', 'valid-key');
         expect(input.value).toBe('•••••••••');
         expect(input.dataset['storedMasked']).toBe('true');
 
@@ -281,7 +344,7 @@ describe('AISettingsRenderer', () => {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await Promise.resolve();
         await Promise.resolve();
-        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('cloud');
         expect(showToast).toHaveBeenCalledWith(
             'ui.settings.key_removed:API key removed',
             'success',
