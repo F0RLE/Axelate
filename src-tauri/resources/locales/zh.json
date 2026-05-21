@@ -105,6 +105,8 @@
     "ui.debug.logs_copied": "日志已复制",
     "ui.debug.logs_copy_failed": "复制日志失败",
     "ui.debug.logs_empty": "没有可复制的日志",
+    "ui.debug.logs_filter_empty": "没有匹配所选级别的日志",
+    "ui.debug.logs_none": "暂无日志",
     "ui.deepseek.model.v4_flash.desc": "面向快速推理、高吞吐、推理与编码的效率优化 Mixture-of-Experts 模型",
     "ui.deepseek.model.v4_pro.desc": "面向高级推理、编码和长周期智能体工作流的大规模 Mixture-of-Experts 模型",
     "ui.downloads.no_active": "无活动下载",

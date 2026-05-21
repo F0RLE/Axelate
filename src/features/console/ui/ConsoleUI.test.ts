@@ -741,7 +741,9 @@ describe('ConsoleUI lifecycle', () => {
         errorButton.click();
 
         const pane = document.getElementById('logs-general') as HTMLElement;
-        expect(pane.textContent).toBe('No logs match selected levels');
+        const emptyState = pane.querySelector('#console-filter-empty-state');
+        expect(emptyState).not.toBeNull();
+        expect(emptyState?.textContent).toContain('ui.debug.logs_filter_empty');
         expect(pane.querySelector('.log-entry-card')).toBeNull();
         expect(pane.textContent).not.toContain('Page settings');
         expect(pane.textContent).not.toContain('Page modules');
@@ -817,19 +819,20 @@ describe('ConsoleUI lifecycle', () => {
     it('should replace stale rendered rows with the empty state when filters match nothing', () => {
         const pane = document.createElement('div');
         const staleRow = document.createElement('div');
+        const emptyStateText = 'filtered empty state';
         staleRow.textContent = 'stale debug row';
         pane.append(staleRow);
 
         const helper = new ConsoleLogRenderHelper({
             emptyStateId: 'console-filter-empty-state',
-            getEmptyStateText: () => 'No logs match selected levels',
+            getEmptyStateText: () => emptyStateText,
             getNormalizedLevel: () => 'INFO',
             matchesNormalizedLevel: () => false,
         });
 
         helper.applyFiltersToPane(pane, []);
 
-        expect(pane.textContent).toBe('No logs match selected levels');
+        expect(pane.textContent).toBe(emptyStateText);
         expect(pane.querySelector('.log-entry-card')).toBeNull();
     });
 

@@ -117,8 +117,11 @@ export class ConsoleUI {
             emptyStateId: this._emptyStateId,
             getEmptyStateText: () =>
                 this._viewState.activeLevels.size === ConsoleUI._FILTER_LEVELS.length
-                    ? 'No logs yet'
-                    : 'No logs match selected levels',
+                    ? this._translate('ui.debug.logs_none', 'No logs yet')
+                    : this._translate(
+                          'ui.debug.logs_filter_empty',
+                          'No logs match selected levels',
+                      ),
             getNormalizedLevel: (log) => this._presentationHelper.getNormalizedLevel(log),
             matchesNormalizedLevel: (level) => this._matchesNormalizedLevel(level),
         });

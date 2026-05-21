@@ -105,6 +105,8 @@
     "ui.debug.logs_copied": "Logs copied",
     "ui.debug.logs_copy_failed": "Failed to copy logs",
     "ui.debug.logs_empty": "No logs to copy",
+    "ui.debug.logs_filter_empty": "No logs match selected levels",
+    "ui.debug.logs_none": "No logs yet",
     "ui.deepseek.model.v4_flash.desc": "Efficiency-optimized Mixture-of-Experts model for fast inference, high throughput, reasoning, and coding.",
     "ui.deepseek.model.v4_pro.desc": "Large-scale Mixture-of-Experts model for advanced reasoning, coding, and long-horizon agent workflows.",
     "ui.downloads.no_active": "No active downloads",

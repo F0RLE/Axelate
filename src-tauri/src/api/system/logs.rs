@@ -706,6 +706,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_console_log_targets() {
+        let error = resolve_console_log_target("unknown").unwrap_err();
+
+        assert!(error.to_string().contains("invalid console view id"));
+    }
+
+    #[test]
     fn clears_general_and_nested_console_logs_only() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
@@ -740,6 +747,39 @@ mod tests {
         clear_console_log_target("module:target", &target).unwrap();
 
         assert_eq!(fs::read_to_string(text_file).unwrap(), "keep");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clear_console_log_files_skips_symlinked_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("root");
+        let external = temp.path().join("external.log");
+        let linked_log = root.join("linked.log");
+        let regular_log = root.join("regular.log");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&external, "external").unwrap();
+        fs::write(&regular_log, "regular").unwrap();
+        std::os::unix::fs::symlink(&external, &linked_log).unwrap();
+
+        clear_all_console_log_files(&root).unwrap();
+
+        assert_eq!(fs::read_to_string(external).unwrap(), "external");
+        assert_eq!(fs::read_to_string(regular_log).unwrap(), "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlinked_console_log_roots() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("root");
+        let symlink_root = temp.path().join("linked-root");
+        fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(&root, &symlink_root).unwrap();
+
+        let error = clear_all_console_log_files(&symlink_root).unwrap_err();
+
+        assert!(error.to_string().contains("cannot be a symlink"));
     }
 
     #[tokio::test]

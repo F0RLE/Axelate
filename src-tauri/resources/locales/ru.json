@@ -105,6 +105,8 @@
     "ui.debug.logs_copied": "Логи скопированы",
     "ui.debug.logs_copy_failed": "Не удалось скопировать логи",
     "ui.debug.logs_empty": "Нет логов для копирования",
+    "ui.debug.logs_filter_empty": "Нет логов выбранных уровней",
+    "ui.debug.logs_none": "Логов пока нет",
     "ui.deepseek.model.v4_flash.desc": "Оптимизированная по эффективности Mixture-of-Experts модель для быстрого инференса, высокой пропускной способности, reasoning и кода",
     "ui.deepseek.model.v4_pro.desc": "Крупная Mixture-of-Experts модель для продвинутого reasoning, кода и долгих агентных рабочих процессов",
     "ui.downloads.no_active": "Нет активных загрузок",
