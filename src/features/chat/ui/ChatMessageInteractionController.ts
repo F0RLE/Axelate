@@ -22,7 +22,9 @@ type ChatMessageInteractionControllerDeps = {
     ) => void;
     copyText: (text: string) => Promise<void>;
     getEditMessageHandler: () => ((text: string) => void | Promise<void>) | null;
+    getRegenerateMessageHandler: () => (() => void | Promise<void>) | null;
     setLastEditableUserActionBar: (actionBar: HTMLElement) => void;
+    setLastRegeneratableAssistantActionBar: (actionBar: HTMLElement) => void;
     translate: TTranslateFunction;
     tracer: ChatMessageInteractionLogger;
 };
@@ -43,7 +45,7 @@ export class ChatMessageInteractionController {
         copyBtn.type = 'button';
         copyBtn.className = 'chat-copy-own-btn';
         copyBtn.dataset['copyText'] = content;
-        copyBtn.title = this._deps.translate('ui.launcher.web.copy', 'Copy');
+        this._setButtonLabel(copyBtn, this._deps.translate('ui.launcher.web.copy', 'Copy'));
         copyBtn.innerHTML = DOMPurify.sanitize(`
             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                 <path d="M4 6h2v14H4zm2 14h12v2H6zM18 6h2v14h-2zM6 4h2v2H6zm10 0h2v2h-2zm-6-2h4v2h-4zm0 4h4v2h-4zM8 2h2v6H8zm6 0h2v6h-2z"></path>
@@ -59,7 +61,10 @@ export class ChatMessageInteractionController {
             editBtn.type = 'button';
             editBtn.className = 'chat-edit-own-btn';
             editBtn.dataset['editText'] = content;
-            editBtn.title = this._deps.translate('ui.launcher.web.edit_last', 'Edit last message');
+            this._setButtonLabel(
+                editBtn,
+                this._deps.translate('ui.launcher.web.edit_last', 'Edit last message'),
+            );
             editBtn.innerHTML = DOMPurify.sanitize(`
                 <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
                     <path d="M15 2h4v2h-4zm-2 2h2v2h-2zm-2 2h2v2h-2zM9 8h2v2H9zM7 10h2v2H7zm-2 2h2v2H5zm-2 2h2v6h6v-2H7v-4H5zm10 2h8v2h-8z"></path>
@@ -67,6 +72,23 @@ export class ChatMessageInteractionController {
             `);
             actionBar.appendChild(editBtn);
             this._deps.setLastEditableUserActionBar(actionBar);
+        }
+
+        if (role === 'assistant') {
+            const regenerateBtn = document.createElement('button');
+            regenerateBtn.type = 'button';
+            regenerateBtn.className = 'chat-regenerate-own-btn';
+            this._setButtonLabel(
+                regenerateBtn,
+                this._deps.translate('ui.launcher.web.regenerate', 'Regenerate'),
+            );
+            regenerateBtn.innerHTML = DOMPurify.sanitize(`
+                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor">
+                    <path d="M7 4h10v2H7zm10 2h2v2h-2zM5 6h2v2H5zm-2 2h2v4H3zm16 0h2v8h-2zM5 16h2v2H5zm2 2h10v2H7zm8-8h2v2h-2zm-2 2h2v2h-2zm-2 2h2v2h-2z"></path>
+                </svg>
+            `);
+            actionBar.appendChild(regenerateBtn);
+            this._deps.setLastRegeneratableAssistantActionBar(actionBar);
         }
 
         if (hasImageActions) {
@@ -77,7 +99,38 @@ export class ChatMessageInteractionController {
     }
 
     public async handleCopyClick(event: MouseEvent): Promise<void> {
-        const target = event.target as HTMLElement;
+        if (!(event.target instanceof Element)) {
+            return;
+        }
+
+        const target = event.target;
+        const regenerateBtn = target.closest('.chat-regenerate-own-btn');
+        if (regenerateBtn instanceof HTMLElement) {
+            event.preventDefault();
+            event.stopPropagation();
+
+            if (!regenerateBtn.closest('.is-last-regeneratable')) {
+                return;
+            }
+
+            const handler = this._deps.getRegenerateMessageHandler();
+            if (handler !== null) {
+                try {
+                    await handler();
+                } catch (error) {
+                    this._deps.tracer.error('[ChatUI] Regenerate failed:', error);
+                    this._deps.showToast(
+                        this._deps.translate(
+                            'ui.chat.regenerate_failed',
+                            'Failed to regenerate response',
+                        ),
+                        'error',
+                    );
+                }
+            }
+            return;
+        }
+
         const editBtn = target.closest('.chat-edit-own-btn');
         if (editBtn instanceof HTMLElement) {
             event.preventDefault();
@@ -131,11 +184,15 @@ export class ChatMessageInteractionController {
 
     public refreshTranslations(t: (key: string, fallback?: string) => string): void {
         document.querySelectorAll<HTMLElement>('.chat-copy-own-btn').forEach((btn) => {
-            btn.title = t('ui.launcher.web.copy', 'Copy');
+            this._setButtonLabel(btn, t('ui.launcher.web.copy', 'Copy'));
         });
 
         document.querySelectorAll<HTMLElement>('.chat-edit-own-btn').forEach((btn) => {
-            btn.title = t('ui.launcher.web.edit_last', 'Edit last message');
+            this._setButtonLabel(btn, t('ui.launcher.web.edit_last', 'Edit last message'));
+        });
+
+        document.querySelectorAll<HTMLElement>('.chat-regenerate-own-btn').forEach((btn) => {
+            this._setButtonLabel(btn, t('ui.launcher.web.regenerate', 'Regenerate'));
         });
 
         document.querySelectorAll<HTMLElement>('.code-copy-btn').forEach((btn) => {
@@ -149,6 +206,12 @@ export class ChatMessageInteractionController {
 
     private async _copyToClipboard(text: string): Promise<void> {
         await this._deps.copyText(text);
+    }
+
+    private _setButtonLabel(button: HTMLElement, label: string): void {
+        button.title = label;
+        button.setAttribute('aria-label', label);
+        button.dataset['tooltip'] = label;
     }
 
     private _showCopyResult(btn: HTMLElement, success: boolean): void {

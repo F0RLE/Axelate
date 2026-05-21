@@ -97,7 +97,7 @@ function _releaseSharedEngineSelectListeners(): void {
 
 export function createEngineCustomSelectField(
     runtime: EngineInfoPopoverRuntime,
-    options: { options?: string[] },
+    options: { options?: string[]; optionLabels?: Record<string, string> },
 ): EngineCustomSelectControl {
     const root = document.createElement('div');
     root.className = 'local-engine-select';
@@ -159,11 +159,15 @@ export function createEngineCustomSelectField(
     };
 
     const syncDisplay = () => {
-        valueEl.textContent =
+        const currentValue =
             hiddenInput.value === '' ? (options.options?.[0] ?? '') : hiddenInput.value;
+        if (hiddenInput.value === '' && currentValue !== '') {
+            hiddenInput.value = currentValue;
+        }
+        valueEl.textContent = options.optionLabels?.[currentValue] ?? currentValue;
         menu.querySelectorAll('.local-engine-select-option').forEach((node) => {
             if (node instanceof HTMLButtonElement) {
-                node.classList.toggle('selected', node.textContent === valueEl.textContent);
+                node.classList.toggle('selected', node.dataset['value'] === currentValue);
             }
         });
     };
@@ -172,7 +176,8 @@ export function createEngineCustomSelectField(
         const optionBtn = document.createElement('button');
         optionBtn.type = 'button';
         optionBtn.className = 'local-engine-select-option';
-        optionBtn.textContent = option;
+        optionBtn.dataset['value'] = option;
+        optionBtn.textContent = options.optionLabels?.[option] ?? option;
         optionBtn.addEventListener(
             'click',
             () => {

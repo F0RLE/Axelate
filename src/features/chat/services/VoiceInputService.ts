@@ -1,16 +1,18 @@
 /**
  * @module chat/services/VoiceInputService
- * @description Handles speech recognition for chat input using the Web Speech API
+ * @description Handles native voice recognition through the host bridge.
  */
 
-import type {
-    ISpeechRecognitionEvent,
-    ISpeechRecognitionErrorEvent,
-    ISpeechRecognitionInstance,
-} from '../types/chatTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { IBridge } from '@/shared/types/IBridge';
 
 type VoiceInputLogger = Pick<LoggerService, 'info' | 'error'>;
+
+type NativeVoiceResponse = {
+    text: string;
+    status: string;
+    confidence?: string | null;
+};
 
 export type VoiceResultCallback = (text: string) => void;
 export type VoiceRecordingState = 'idle' | 'starting' | 'listening' | 'stopping';
@@ -28,38 +30,34 @@ type VoiceSessionCallbacks = {
 };
 
 export class VoiceInputService {
-    private _recognition: ISpeechRecognitionInstance | null = null;
     private _state: VoiceRecordingState = 'idle';
-    private _onResult: VoiceResultCallback | null = null;
+    private _sessionId = 0;
     private _onStateChange: VoiceStateCallback | null = null;
     private _onError: VoiceErrorCallback | null = null;
-    private readonly _getCurrentLang: () => string;
-    private _pendingStopReason: VoiceStopReason | null = null;
 
     public constructor(
         private readonly _tracer: VoiceInputLogger,
-        getCurrentLang: () => string = () => document.documentElement.lang || 'en',
-    ) {
-        this._getCurrentLang = getCurrentLang;
-    }
+        private readonly _hostBridge: IBridge,
+        private readonly _getCurrentLang: () => string = () =>
+            document.documentElement.lang || 'en',
+    ) {}
 
     /**
-     * Check if voice input is supported in the current browser
+     * Native voice input is currently available only in the Windows Tauri host.
      */
     public isSupported(): boolean {
-        const win = globalThis as unknown as Record<string, unknown>;
-        return 'webkitSpeechRecognition' in win || 'SpeechRecognition' in win;
+        return this._hostBridge.isTauri() && document.body.dataset['platform'] === 'windows';
     }
 
     /**
-     * Check if currently recording
+     * Check if a native voice request is currently active.
      */
     public isActive(): boolean {
         return this._state !== 'idle';
     }
 
     /**
-     * Start voice recording
+     * Starts one native voice recognition request.
      */
     public start(onResult: VoiceResultCallback, callbacks: VoiceSessionCallbacks = {}): boolean {
         if (this.isActive()) {
@@ -71,120 +69,68 @@ export class VoiceInputService {
             return false;
         }
 
-        this._onResult = onResult;
+        const sessionId = ++this._sessionId;
         this._onStateChange = callbacks.onStateChange ?? null;
         this._onError = callbacks.onError ?? null;
-        this._pendingStopReason = null;
+        this._setState('starting');
+        this._setState('listening');
 
-        try {
-            const win = globalThis as unknown as Record<string, unknown>;
-            const SpeechRecognitionConstructor = (win['webkitSpeechRecognition'] ??
-                win['SpeechRecognition']) as new () => ISpeechRecognitionInstance;
-            const recognition = new SpeechRecognitionConstructor();
-            this._recognition = recognition;
-
-            // Set language with BCP-47 mapping
-            const currentLang = this._getCurrentLang();
-            const langMap: Record<string, string> = {
-                en: 'en-US',
-                ru: 'ru-RU',
-                zh: 'zh-CN',
-            };
-            recognition.lang = langMap[currentLang] ?? currentLang;
-            this._tracer.info(
-                `[VoiceInputService] Target Recognition Lang: ${recognition.lang} (from: ${currentLang})`,
-            );
-            recognition.continuous = true;
-            recognition.interimResults = true;
-
-            recognition.onstart = () => {
-                if (this._recognition !== recognition) {
-                    return;
-                }
-
-                this._setState('listening');
-            };
-
-            recognition.onresult = (event: ISpeechRecognitionEvent) => {
-                let finalText = '';
-                for (let i = event.resultIndex; i < event.results.length; ++i) {
-                    const result = event.results[i];
-                    if (result?.isFinal === true) {
-                        const first = result[0];
-                        if (first) finalText += first.transcript;
-                    }
-                }
-                if (finalText !== '' && this._onResult) {
-                    this._onResult(finalText);
-                }
-            };
-
-            recognition.onend = () => {
-                if (this._recognition !== recognition) {
-                    return;
-                }
-
-                this._finishSession(this._pendingStopReason ?? 'ended');
-            };
-
-            recognition.onerror = (event: ISpeechRecognitionErrorEvent) => {
-                this._tracer.error(`[VoiceInputService] Recognition error: ${event.error}`);
-                const payload: { code: string; message?: string } = {
-                    code: event.error,
-                };
-                if (event.message !== undefined) {
-                    payload.message = event.message;
-                }
-                this._onError?.(payload);
-                this._requestStop('error');
-            };
-
-            this._setState('starting');
-            recognition.start();
-
-            return true;
-        } catch (e) {
-            this._tracer.error(`[VoiceInputService] Error starting recognition: ${String(e)}`);
-            this._onError?.({
-                code: 'startup_failed',
-                message: String(e),
-            });
-            this._finishSession('startup_failed');
-            return false;
-        }
+        void this._recognize(sessionId, onResult);
+        return true;
     }
 
     /**
-     * Stop voice recording
+     * Stops the current frontend session and ignores the pending native result.
      */
     public stop(): void {
-        this._requestStop('user');
-    }
-
-    private _requestStop(reason: VoiceStopReason): void {
-        this._pendingStopReason = reason;
-
-        if (this._recognition === null) {
-            this._finishSession(reason);
+        if (!this.isActive()) {
             return;
         }
 
-        if (this._state !== 'stopping') {
-            this._setState('stopping');
-        }
+        void this._hostBridge.invoke('cancel_voice_recognition').catch((error: unknown) => {
+            this._tracer.error(
+                `[VoiceInputService] Native recognition cancel failed: ${String(error)}`,
+            );
+        });
+        this._sessionId += 1;
+        this._setState('stopping');
+        this._finishSession('user');
+    }
 
+    private async _recognize(sessionId: number, onResult: VoiceResultCallback): Promise<void> {
         try {
-            this._recognition.stop();
-        } catch {
-            this._finishSession(reason);
+            const language = this._getCurrentLang();
+            this._tracer.info(`[VoiceInputService] Native recognition language: ${language}`);
+            const response = await this._hostBridge.invoke<NativeVoiceResponse>(
+                'recognize_voice_once',
+                {
+                    request: { language },
+                },
+            );
+
+            if (this._sessionId !== sessionId) {
+                return;
+            }
+
+            const text = response.text.trim();
+            if (text.length > 0) {
+                onResult(text);
+            }
+            this._finishSession('ended');
+        } catch (error) {
+            if (this._sessionId !== sessionId) {
+                return;
+            }
+
+            const payload = this._toErrorPayload(error);
+            this._tracer.error(`[VoiceInputService] Native recognition error: ${payload.message}`);
+            this._onError?.(payload);
+            this._finishSession(payload.code === 'startup_failed' ? 'startup_failed' : 'error');
         }
     }
 
     private _finishSession(reason: VoiceStopReason): void {
-        this._recognition = null;
-        this._pendingStopReason = null;
         this._setState('idle', reason);
-        this._onResult = null;
         this._onStateChange = null;
         this._onError = null;
     }
@@ -210,5 +156,32 @@ export class VoiceInputService {
         }
 
         this._onStateChange?.(snapshot);
+    }
+
+    private _toErrorPayload(error: unknown): { code: string; message?: string } {
+        if (error instanceof Error) {
+            return {
+                code: this._getErrorCode(error),
+                message: error.message,
+            };
+        }
+
+        if (typeof error === 'object' && error !== null) {
+            const record = error as Record<string, unknown>;
+            const message =
+                typeof record['message'] === 'string' ? record['message'] : String(error);
+            const code = typeof record['code'] === 'string' ? record['code'] : 'recognition_failed';
+            return { code, message };
+        }
+
+        return {
+            code: 'recognition_failed',
+            message: String(error),
+        };
+    }
+
+    private _getErrorCode(error: Error): string {
+        const withCode = error as Error & { code?: unknown };
+        return typeof withCode.code === 'string' ? withCode.code : 'recognition_failed';
     }
 }

@@ -52,7 +52,6 @@ fn convert_module_to_definition(item: &ModuleItem) -> EngineDefinition {
     // Extract numeric defaults from configSchema if present
     let schema = item.raw_config_schema.as_ref();
     let default_port = extract_u16(schema, "port").unwrap_or(8081);
-    let default_gpu_layers = extract_i32(schema, "gpuLayers").unwrap_or(-1);
     let default_context_size = extract_u32(schema, "contextSize").unwrap_or(4096);
 
     EngineDefinition {
@@ -65,7 +64,6 @@ fn convert_module_to_definition(item: &ModuleItem) -> EngineDefinition {
         repo_url: item.repo_url.clone(),
         version: item.version.clone(),
         default_port,
-        default_gpu_layers,
         default_context_size,
         config_schema: item.raw_config_schema.clone(),
         installed: false, // populated at request time by get_engine_definitions
@@ -80,15 +78,6 @@ fn extract_u16(schema: Option<&serde_json::Value>, field: &str) -> Option<u16> {
         .get("default")?
         .as_u64()
         .and_then(|v| u16::try_from(v).ok())
-}
-
-/// Extracts an i32 default from a JSON configSchema field.
-fn extract_i32(schema: Option<&serde_json::Value>, field: &str) -> Option<i32> {
-    schema?
-        .get(field)?
-        .get("default")?
-        .as_i64()
-        .and_then(|v| i32::try_from(v).ok())
 }
 
 /// Extracts a u32 default from a JSON configSchema field.

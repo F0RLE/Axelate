@@ -3,7 +3,7 @@
  * @description Type definitions for the Chat module
  */
 
-import type { ChatContent } from '@/features/ai/types/aiTypes';
+import type { ChatContent, ITokenUsage } from '@/features/ai/types/aiTypes';
 
 /**
  * Roles for chat participants
@@ -61,48 +61,6 @@ export interface IChatResponse {
     model?: string;
     /** Optional reasoning signature returned by backend */
     thought_signature?: string;
-}
-
-/**
- * Event emitted by the Web Speech API on result
- */
-export interface ISpeechRecognitionEvent {
-    /** Index of the result that has changed */
-    resultIndex: number;
-    /** All results currently recognized */
-    results: SpeechRecognitionResultList;
-}
-
-/**
- * Event emitted by the Web Speech API on error
- */
-export interface ISpeechRecognitionErrorEvent {
-    /** The error code or message */
-    error: string;
-    /** Optional detailed message */
-    message?: string;
-}
-
-/**
- * Interface for Web Speech API SpeechRecognition instance
- */
-export interface ISpeechRecognitionInstance {
-    /** Language code (e.g. 'en-US') */
-    lang: string;
-    /** Whether to recognize continuously */
-    continuous: boolean;
-    /** Whether to return interim (non-final) results */
-    interimResults: boolean;
-    /** Callback for when recognition starts */
-    onstart: (() => void) | null;
-    /** Callback for recognition results */
-    onresult: ((_event: ISpeechRecognitionEvent) => void) | null;
-    /** Callback for when recognition errors occur */
-    onerror: ((_event: ISpeechRecognitionErrorEvent) => void) | null;
-    /** Callback for when recognition ends */
-    onend: (() => void) | null;
-    /** Start recognizing */
-    start: () => void;
-    /** Stop recognizing */
-    stop: () => void;
+    /** Token usage calculated by backend provider */
+    usage?: ITokenUsage;
 }

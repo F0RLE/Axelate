@@ -3,7 +3,7 @@
 //! Centralizes default engine config construction and normalization rules so
 //! API and domain services do not duplicate launcher policy.
 
-use crate::domain::engine::types::{EngineConfig, EngineDefinition};
+use crate::domain::engine::types::{EngineComputeMode, EngineConfig, EngineDefinition};
 
 const MIN_LLAMACPP_CONTEXT_SIZE: u32 = 4096;
 
@@ -12,7 +12,7 @@ const MIN_LLAMACPP_CONTEXT_SIZE: u32 = 4096;
 pub fn build_default_engine_config(def: &EngineDefinition) -> EngineConfig {
     normalize_engine_config(EngineConfig {
         engine_id: def.id.clone(),
-        gpu_layers: def.default_gpu_layers,
+        compute_mode: EngineComputeMode::Gpu,
         context_size: def.default_context_size,
         model_path: None,
         vae_path: None,
@@ -31,7 +31,7 @@ pub fn merge_user_engine_config(def: &EngineDefinition, saved: &EngineConfig) ->
     let _ = def;
     normalize_engine_config(EngineConfig {
         engine_id: saved.engine_id.clone(),
-        gpu_layers: saved.gpu_layers,
+        compute_mode: saved.compute_mode,
         context_size: saved.context_size,
         model_path: saved.model_path.clone(),
         vae_path: saved.vae_path.clone(),
@@ -70,7 +70,6 @@ mod tests {
             repo_url: None,
             version: "1.0.0".to_string(),
             default_port: 8081,
-            default_gpu_layers: -1,
             default_context_size: 4096,
             config_schema: None,
             installed: false,
@@ -83,7 +82,7 @@ mod tests {
         let def = sample_definition();
         let saved = EngineConfig {
             engine_id: "sdcpp".to_string(),
-            gpu_layers: 12,
+            compute_mode: EngineComputeMode::Cpu,
             context_size: 8192,
             model_path: Some("C:/models/test.gguf".to_string()),
             vae_path: Some("C:/models/test.vae.safetensors".to_string()),
@@ -93,7 +92,7 @@ mod tests {
 
         let merged = merge_user_engine_config(&def, &saved);
 
-        assert_eq!(merged.gpu_layers, 12);
+        assert_eq!(merged.compute_mode, EngineComputeMode::Cpu);
         assert_eq!(merged.context_size, 8192);
         assert_eq!(merged.model_path.as_deref(), Some("C:/models/test.gguf"));
         assert_eq!(merged.vae_path, None);

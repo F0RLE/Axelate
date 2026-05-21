@@ -22,7 +22,8 @@ import {
 } from './ModuleSettingsEngineSelectField';
 import {
     createEngineExtraArgsField,
-    formatEngineFieldSaveValue,
+    getEngineModelFileFilters,
+    getEngineModelFileName,
     ModuleSettingsEngineInputFactory,
     renderEnginePerformanceModeField,
     syncEnginePromptTextareaHeights,
@@ -43,9 +44,11 @@ type EngineFieldControlOptions = {
     appId: string;
     fileKind?: 'model' | 'vae' | 'llm';
     placeholder?: string;
+    defaultValue?: number | string;
     min?: number;
     max?: number;
     options?: string[];
+    optionLabels?: Record<string, string>;
 };
 type EngineFieldControlResult = {
     input: HTMLElement;
@@ -53,7 +56,6 @@ type EngineFieldControlResult = {
     customSelect: CustomSelectControl | null;
     extraArgsControl: ExtraArgsControl | null;
 };
-type ModelFileFilter = { name: string; extensions: string[] };
 
 const ENGINE_HTML_SANITIZE_OPTIONS: Parameters<typeof DOMPurify.sanitize>[1] = {
     ALLOW_DATA_ATTR: true,
@@ -95,6 +97,7 @@ type ModuleSettingsEngineRendererDeps = {
     getContext: () => IModuleSettingsUIContext;
     registerCleanup: (cleanup: () => void) => void;
     debouncedSave: (key: string, value: string | number | boolean | null) => void;
+    notifySettingsChanged: () => void;
     showSaveIndicator: () => void;
     tracer: Pick<LoggerService, 'error'>;
 };
@@ -155,6 +158,7 @@ export class ModuleSettingsEngineRenderer {
                 this._deps.service.getSettings() as Record<string, string | number | undefined>,
             setConfig: (config) => {
                 void this._deps.engineConfigService.setConfig(config);
+                this._deps.notifySettingsChanged();
             },
             debouncedSave: (key, value) => {
                 this._deps.debouncedSave(key, value);
@@ -165,7 +169,7 @@ export class ModuleSettingsEngineRenderer {
             translate: (key, fallback) => this._translate(key, fallback),
             getModelFileName: (modelPath) => this._getModelFileName(modelPath),
             getModelFileFilters: (fileKind, isImage) =>
-                this._getModelFileFilters(fileKind, isImage),
+                getEngineModelFileFilters(fileKind, isImage),
             tracer: this._deps.tracer,
         };
     }
@@ -183,13 +187,8 @@ export class ModuleSettingsEngineRenderer {
             },
             getModelFileName: (path) => this._getModelFileName(path),
             isTauri: () => this._deps.tauri.isTauri(),
-            addFileBrowseButton: (container, input, isImage) => {
-                this._addFileBrowseButton(
-                    container,
-                    input,
-                    isImage,
-                    (input.dataset['fileKind'] as 'model' | 'vae' | 'llm' | undefined) ?? 'model',
-                );
+            addFileBrowseButton: (container, input, isImage, fileKind) => {
+                this._fieldController.addFileBrowseButton(container, input, isImage, fileKind);
             },
             getExtraArgsInfoText: () =>
                 this._translate('ui.settings.engine.extra_args.info', 'Extra arguments info'),
@@ -280,26 +279,20 @@ export class ModuleSettingsEngineRenderer {
         return DOMPurify.sanitize(rawHtml, ENGINE_HTML_SANITIZE_OPTIONS);
     }
 
-    public _escapeHtml(value: string): string {
-        return this._htmlBuilder.escapeHtml(value);
-    }
-
     private _getModelFileName(modelPath: string): string {
-        if (modelPath.trim() === '') {
-            return this._context.t('ui.settings.engine.model_not_selected', 'Model not selected');
-        }
-        const normalized = modelPath.replaceAll('\\', '/');
-        return normalized.split('/').pop() ?? modelPath;
-    }
-
-    public _getEngineConfigHtml(app: IApp, config: EngineConfig | null): string {
-        return this._htmlBuilder.buildEngineConfigHtml(app, config);
+        return getEngineModelFileName(
+            modelPath,
+            this._context.t('ui.settings.engine.model_not_selected', 'Model not selected'),
+        );
     }
 
     private _createEngineFieldControl(
         options: EngineFieldControlOptions,
     ): EngineFieldControlResult {
         if (options.type === 'select') {
+            if (options.key === 'compute_mode') {
+                return this._createComputeModeControl(options);
+            }
             return this._createSelectFieldControl(options);
         }
 
@@ -308,18 +301,18 @@ export class ModuleSettingsEngineRenderer {
         }
 
         if (options.type === 'textarea') {
-            const input = this._createTextAreaField(options);
+            const input = this._inputFactory.createTextAreaField(options);
             return this._createPlainFieldControl(input);
         }
 
-        const input = this._createTextInputField(options);
+        const input = this._inputFactory.createTextInputField(options);
         return this._createPlainFieldControl(input);
     }
 
     private _createSelectFieldControl(
         options: EngineFieldControlOptions,
     ): EngineFieldControlResult {
-        const customSelect = this._createCustomSelectField(options);
+        const customSelect = createEngineCustomSelectField(this._runtime, options);
         return {
             input: customSelect.root,
             engineInput: customSelect.input,
@@ -328,8 +321,57 @@ export class ModuleSettingsEngineRenderer {
         };
     }
 
+    private _createComputeModeControl(
+        options: EngineFieldControlOptions,
+    ): EngineFieldControlResult {
+        const root = document.createElement('div');
+        root.className = 'local-engine-segmented-control';
+
+        const hiddenInput = document.createElement('input');
+        hiddenInput.type = 'hidden';
+
+        const buttons = (options.options ?? ['gpu', 'cpu']).map((value) => {
+            const button = document.createElement('button');
+            button.type = 'button';
+            button.className = 'local-engine-segmented-option';
+            button.dataset['value'] = value;
+            button.textContent = options.optionLabels?.[value] ?? value.toUpperCase();
+            button.addEventListener('click', () => {
+                hiddenInput.value = value;
+                syncDisplay();
+                hiddenInput.dispatchEvent(new Event('change', { bubbles: true }));
+            });
+            return button;
+        });
+
+        const syncDisplay = () => {
+            const currentValue = hiddenInput.value || String(options.defaultValue ?? 'gpu');
+            buttons.forEach((button) => {
+                const selected = button.dataset['value'] === currentValue;
+                button.classList.toggle('is-selected', selected);
+                button.setAttribute('aria-pressed', String(selected));
+            });
+        };
+
+        root.append(hiddenInput, ...buttons);
+
+        return {
+            input: root,
+            engineInput: hiddenInput,
+            customSelect: {
+                input: hiddenInput,
+                root,
+                syncDisplay,
+                destroy: () => {},
+            },
+            extraArgsControl: null,
+        };
+    }
+
     private _createExtraArgsFieldControl(appId: string): EngineFieldControlResult {
-        const extraArgsControl = this._createExtraArgsField();
+        const extraArgsControl = createEngineExtraArgsField((key, fallback) =>
+            this._translate(key, fallback),
+        );
         this._extraArgsControls.set(appId, extraArgsControl);
         return {
             input: extraArgsControl.root,
@@ -343,30 +385,6 @@ export class ModuleSettingsEngineRenderer {
         return { input, engineInput: input, customSelect: null, extraArgsControl: null };
     }
 
-    public _renderEngineFieldRow(
-        container: HTMLElement,
-        options: {
-            label: string;
-            key: string;
-            type: EngineFieldType;
-            isEngineConfig: boolean;
-            placeholder?: string;
-            defaultValue?: number | string;
-            options?: string[];
-            min?: number;
-            max?: number;
-            isFile?: boolean;
-            isImage?: boolean;
-            description?: string;
-            fullWidth?: boolean;
-            showInfoButton?: boolean;
-            appId: string;
-            config: EngineConfig | null;
-        },
-    ): void {
-        this._fieldRowRenderer.render(container, options);
-    }
-
     private _renderPerformanceModeFieldRow(container: HTMLElement, appId: string): void {
         renderEnginePerformanceModeField(
             container,
@@ -375,10 +393,6 @@ export class ModuleSettingsEngineRenderer {
             (key, fallback) => this._translate(key, fallback),
             (key, value) => this._deps.debouncedSave(key, value),
         );
-    }
-
-    private _createExtraArgsField(): ExtraArgsControl {
-        return createEngineExtraArgsField((key, fallback) => this._translate(key, fallback));
     }
 
     private _appendExtraArgs(appId: string, groups: string[]): number {
@@ -452,23 +466,6 @@ export class ModuleSettingsEngineRenderer {
         popover?.close();
     }
 
-    private _createCustomSelectField(options: { options?: string[] }): CustomSelectControl {
-        return createEngineCustomSelectField(this._runtime, options);
-    }
-
-    private _createTextAreaField(options: { placeholder?: string }): HTMLTextAreaElement {
-        return this._inputFactory.createTextAreaField(options);
-    }
-
-    private _createTextInputField(options: {
-        type: EngineFieldType;
-        placeholder?: string;
-        min?: number;
-        max?: number;
-    }): HTMLInputElement {
-        return this._inputFactory.createTextInputField(options);
-    }
-
     private _setupEngineFieldInitialValue(
         input: EngineInputElement,
         options: {
@@ -496,73 +493,5 @@ export class ModuleSettingsEngineRenderer {
         },
     ): void {
         this._fieldController.setupEvents(input, options);
-    }
-
-    private _addFileBrowseButton(
-        container: HTMLElement,
-        input: HTMLInputElement,
-        isImage: boolean,
-        fileKind: 'model' | 'vae' | 'llm',
-    ): void {
-        this._fieldController.addFileBrowseButton(container, input, isImage, fileKind);
-    }
-
-    private _getModelFileFilters(
-        fileKind: 'model' | 'vae' | 'llm',
-        isImage: boolean,
-    ): ModelFileFilter[] {
-        if (fileKind === 'vae') {
-            return [{ name: 'SafeTensors', extensions: ['safetensors'] }];
-        }
-
-        if (fileKind === 'llm') {
-            return [{ name: 'GGUF Models', extensions: ['gguf'] }];
-        }
-
-        if (isImage) {
-            return [
-                { name: 'SD Models', extensions: ['gguf', 'safetensors'] },
-                { name: 'GGUF Models', extensions: ['gguf'] },
-                { name: 'SafeTensors', extensions: ['safetensors'] },
-            ];
-        }
-
-        return [{ name: 'GGUF Models', extensions: ['gguf'] }];
-    }
-
-    public _parseEngineFieldValue(
-        raw: string,
-        options: {
-            type: EngineFieldType;
-            min?: number;
-            max?: number;
-            defaultValue?: number | string;
-        },
-    ): { value: string | number | null; displayValue: string } {
-        return this._fieldController.parseValue(raw, options);
-    }
-
-    public _formatEngineFieldSaveValue(
-        key: string,
-        value: string | number | null,
-    ): string | number | string[] | null {
-        return formatEngineFieldSaveValue(key, value);
-    }
-
-    public _handleEngineFieldSave(
-        input: EngineInputElement,
-        options: {
-            key: string;
-            type: EngineFieldType;
-            isEngineConfig: boolean;
-            isFile?: boolean;
-            config: EngineConfig | null;
-            min?: number;
-            max?: number;
-            defaultValue?: number | string;
-            appId?: string;
-        },
-    ): void {
-        this._fieldController.handleSave(input, options);
     }
 }

@@ -11,6 +11,7 @@ type EngineFieldRowOptions = {
     placeholder?: string;
     defaultValue?: number | string;
     options?: string[];
+    optionLabels?: Record<string, string>;
     min?: number;
     max?: number;
     isFile?: boolean;
@@ -44,6 +45,7 @@ type EngineFieldRowRendererDeps = {
         container: HTMLElement,
         input: HTMLInputElement,
         isImage: boolean,
+        fileKind: 'model' | 'vae' | 'llm',
     ) => void;
     getExtraArgsInfoText: () => string;
     toggleInfoPopover: (
@@ -58,7 +60,8 @@ export class ModuleSettingsEngineFieldRowRenderer {
 
     public render(container: HTMLElement, options: EngineFieldRowOptions): void {
         const row = document.createElement('div');
-        row.className = `local-engine-field-row${options.fullWidth === true ? ' full-width' : ''}`;
+        const keyClass = options.key.replaceAll('_', '-');
+        row.className = `local-engine-field-row local-engine-field-row--${keyClass}${options.fullWidth === true ? ' full-width' : ''}`;
 
         const labelRow = document.createElement('div');
         labelRow.className = 'local-engine-label-row';
@@ -88,7 +91,6 @@ export class ModuleSettingsEngineFieldRowRenderer {
         if (options.isFile === true && engineInput instanceof HTMLInputElement) {
             engineInput.readOnly = true;
             engineInput.classList.add('local-engine-input--readonly');
-            engineInput.dataset['fileKind'] = options.fileKind ?? 'model';
             engineInput.dataset['fullPath'] = engineInput.value;
             if (engineInput.value.trim() !== '') {
                 engineInput.value = this._deps.getModelFileName(engineInput.value);
@@ -102,6 +104,7 @@ export class ModuleSettingsEngineFieldRowRenderer {
                 inputWrapper,
                 engineInput as HTMLInputElement,
                 options.isImage === true,
+                options.fileKind ?? 'model',
             );
         }
 

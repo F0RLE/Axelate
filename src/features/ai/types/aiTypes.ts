@@ -44,6 +44,12 @@ export interface IChatMessage {
     thought_signature?: string | undefined;
 }
 
+export interface ITokenUsage {
+    prompt_tokens: number;
+    completion_tokens: number;
+    total_tokens: number;
+}
+
 export interface IWebSearchOptions {
     enabled: boolean;
     engine?: 'auto' | 'native' | 'exa' | 'firecrawl' | 'parallel';
@@ -83,6 +89,7 @@ export interface IChatResponse {
     error?: string;
     model?: string;
     thought_signature?: string;
+    usage?: ITokenUsage;
 }
 
 /**
@@ -95,6 +102,7 @@ export interface IBridgeResponse {
     images?: string[];
     thought_signature?: string;
     model?: string;
+    usage?: ITokenUsage;
 }
 
 export interface IImageGenerationRequest {

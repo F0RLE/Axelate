@@ -156,6 +156,7 @@ export class LazyModuleSettingsUiAdapter
             showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => void;
             reopenModuleSettings: (app: IApp) => void;
             closeAppSelection: () => void;
+            onModuleSettingsChanged: (app: IApp) => void;
         },
     ) {
         super();
@@ -188,6 +189,7 @@ export class LazyModuleSettingsUiAdapter
                 showToast: this._deps.showToast,
                 reopenModuleSettings: this._deps.reopenModuleSettings,
                 closeAppSelection: this._deps.closeAppSelection,
+                onModuleSettingsChanged: this._deps.onModuleSettingsChanged,
             },
         );
     }

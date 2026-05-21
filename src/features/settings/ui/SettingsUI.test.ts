@@ -15,6 +15,7 @@ type ModuleSettingsUIPrivate = {
         t: (key: string, defaultValue?: string) => string;
         showToast: ReturnType<typeof vi.fn>;
         i18nUI: { applyTranslations: ReturnType<typeof vi.fn> };
+        currentModule?: Record<string, unknown>;
     };
     _bindEvents: () => void;
     _loadCardWidths: () => void;
@@ -30,6 +31,7 @@ type ModuleSettingsUIPrivate = {
     openModuleSettings: (app: Record<string, unknown>) => Promise<void>;
     _resetDynamicModuleState: () => void;
     destroy: () => void;
+    _onModuleSettingsChanged: ReturnType<typeof vi.fn>;
 };
 
 describe('ModuleSettingsUI lifecycle', () => {
@@ -78,6 +80,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         const navigation = {
             removeBackAction: vi.fn(),
         } as unknown as NavigationService;
+        const onModuleSettingsChanged = vi.fn();
 
         settingsUI = new ModuleSettingsUI(
             service,
@@ -99,6 +102,7 @@ describe('ModuleSettingsUI lifecycle', () => {
                 showToast: vi.fn(),
                 reopenModuleSettings: vi.fn(),
                 closeAppSelection: vi.fn(),
+                onModuleSettingsChanged,
                 eventBus: new EventBus(),
             },
         );
@@ -118,11 +122,12 @@ describe('ModuleSettingsUI lifecycle', () => {
                 applyTranslations: vi.fn(),
             },
         };
+        privateUI._onModuleSettingsChanged = onModuleSettingsChanged;
 
         return privateUI;
     }
 
-    it('should render gpu layers and context size for llamacpp local settings', async () => {
+    it('should render compute mode, context size, and system prompt for llamacpp local settings', async () => {
         const ui = createSettingsUI();
         const container = document.createElement('div');
         (
@@ -132,7 +137,7 @@ describe('ModuleSettingsUI lifecycle', () => {
         )._engineConfigService.getSettingsPayload = vi.fn().mockResolvedValue({
             config: {
                 engine_id: 'llamacpp',
-                gpu_layers: 24,
+                compute_mode: 'gpu',
                 context_size: 8192,
                 model_path: 'C:/models/llama.gguf',
                 extra_args: ['--flash-attn'],
@@ -144,8 +149,19 @@ describe('ModuleSettingsUI lifecycle', () => {
         const labels = Array.from(container.querySelectorAll('.local-engine-field-label')).map(
             (node) => node.textContent,
         );
-        expect(labels).toContain('t:ui.settings.engine.gpu_layers:GPU Layers');
+        expect(labels).toContain('t:ui.settings.engine.compute_mode:Compute Device');
         expect(labels).toContain('t:ui.settings.engine.context_size:Context Window');
+        expect(labels).toContain('t:ui.settings.engine.system_prompt:System Prompt');
+    });
+
+    it('should stop active module lifecycle when module settings change', () => {
+        const ui = createSettingsUI();
+        const app = { id: 'llamacpp', name: 'llama.cpp' };
+        ui._context.currentModule = app;
+
+        ui._debouncedSave('llamacpp_system_prompt', 'Be concise');
+
+        expect(ui._onModuleSettingsChanged).toHaveBeenCalledWith(app);
     });
 
     it('should not render runtime package hint for sdcpp local settings', async () => {
@@ -158,6 +174,8 @@ describe('ModuleSettingsUI lifecycle', () => {
         )._engineConfigService.getSettingsPayload = vi.fn().mockResolvedValue({
             config: {
                 engine_id: 'sdcpp',
+                compute_mode: 'gpu',
+                context_size: 4096,
                 model_path: 'C:/models/sd.safetensors',
                 extra_args: [],
             },

@@ -62,14 +62,36 @@ export class ChatHistoryController {
 
         try {
             const removedText = await this._options.aiBridge.rewindLastTurn();
-            const nextText = removedText ?? fallbackText;
+            if (removedText === null) {
+                this._options.restoreInputText(fallbackText);
+                return;
+            }
 
             this.rewindLocalHistory();
             this._options.renderHistory(this._options.getHistory());
-            this._options.restoreInputText(nextText);
+            this._options.restoreInputText(removedText);
         } catch (error: unknown) {
             this._options.tracer.error('[Chat] Failed to rewind last turn:', error);
             this._options.showEditError();
+        }
+    }
+
+    public async regenerateLastTurn(isSending: boolean): Promise<string | null> {
+        if (isSending) return null;
+
+        try {
+            const removedText = await this._options.aiBridge.rewindLastTurn();
+            if (removedText === null) {
+                return null;
+            }
+
+            this.rewindLocalHistory();
+            this._options.renderHistory(this._options.getHistory());
+            return removedText;
+        } catch (error: unknown) {
+            this._options.tracer.error('[Chat] Failed to regenerate last turn:', error);
+            this._options.showEditError();
+            return null;
         }
     }
 

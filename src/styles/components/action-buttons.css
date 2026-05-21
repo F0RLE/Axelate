@@ -73,63 +73,9 @@
     box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
 }
 
-.btn-success {
-    background: linear-gradient(135deg, var(--success) 0%, var(--success-dark) 100%);
-    color: white;
-    box-shadow: 0 2px 8px rgba(var(--success-raw), 0.2);
-}
-
-.btn-success:hover {
-    filter: brightness(1.1);
-    box-shadow: 0 6px 24px rgba(var(--success-raw), 0.4);
-}
-
-.btn-danger {
-    background: linear-gradient(135deg, var(--danger) 0%, var(--danger-dark) 100%);
-    color: white;
-    box-shadow: 0 2px 8px rgba(var(--danger-raw), 0.2);
-}
-
-.btn-danger:hover {
-    filter: brightness(1.1);
-    box-shadow: 0 6px 24px rgba(var(--danger-raw), 0.4);
-}
-
-.btn-warning {
-    background: linear-gradient(135deg, var(--warning) 0%, var(--warning-dark) 100%);
-    color: #000;
-    font-weight: 700;
-    box-shadow: 0 2px 8px rgba(var(--warning-raw), 0.2);
-}
-
-.btn-warning:hover {
-    background: linear-gradient(135deg, #ffca2c 0%, var(--warning-dark) 100%);
-    box-shadow: 0 6px 24px rgba(var(--warning-raw), 0.4);
-}
-
-/* Icon-only button */
-.btn-icon {
-    width: 36px;
-    height: 36px;
-    padding: 0;
-    border-radius: 10px;
-}
-
-.btn-icon .icon {
-    width: 18px;
-    height: 18px;
-}
-
 /* Small button */
 .btn-sm {
     padding: 0.4rem 0.65rem;
     font-size: 0.75rem;
     border-radius: 8px;
-}
-
-/* Large button */
-.btn-lg {
-    padding: 0.8rem 1.25rem;
-    font-size: 0.95rem;
-    border-radius: 14px;
 }

@@ -12,5 +12,7 @@ pub mod secure;
 pub mod settings;
 /// System information and control commands
 pub mod system;
+/// Native voice input commands
+pub mod voice;
 /// Window management commands
 pub mod window;

@@ -14,8 +14,9 @@ describe('ModuleSettingsEngineFieldCatalog', () => {
         });
 
         expect(catalog.buildTextEngineFields(t).map((field) => field.key)).toEqual([
-            'gpu_layers',
+            'compute_mode',
             'context_size',
+            'llamacpp_system_prompt',
         ]);
 
         const imageGroups = catalog.buildImageEngineGroups(t, 'sdcpp');

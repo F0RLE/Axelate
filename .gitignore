@@ -15,6 +15,7 @@
 /src-tauri/target/
 /src-tauri/gen/
 /src-tauri/check_output.txt
+/src-tauri/lcov.info
 
 # Local caches and temp outputs
 /.cache/

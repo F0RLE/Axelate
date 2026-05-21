@@ -3,10 +3,10 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { AIProviderManager } from '@/features/ai/services/AIProviderManager';
-import type { Core } from '@/app/init';
 import { getMostPowerfulModel, getModelData } from '@/features/ai/utils/catalogHelpers';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { CUSTOM_TEXT_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
+import type { AIProviderManagerContext } from './AIBridgeContext';
 
 // Mock catalogHelpers used internally
 vi.mock('@/features/ai/utils/catalogHelpers', () => ({
@@ -20,22 +20,28 @@ function createMockCore(
         const value = await getKeyFn(key);
         return value !== null && value !== '';
     },
-): Core {
-    return {
+): AIProviderManagerContext {
+    const context: AIProviderManagerContext = {
         tauriProvider: {
+            isTauri: vi.fn().mockReturnValue(true),
+            invoke: vi.fn(),
+            listen: vi.fn(),
             getSecureKey: vi.fn(getKeyFn),
             saveSecureKey: vi.fn().mockResolvedValue(undefined),
             hasSecureKey: vi.fn(hasKeyFn),
         },
         catalog: {
-            getCatalog: vi.fn().mockReturnValue({ ai: [], services: [] }),
+            getCatalog: vi.fn().mockReturnValue({ ai: [] }),
         },
         aiSettings: {
             setAiSessionId: vi.fn(),
             setSelectedAIModel: vi.fn(),
-            getSelectedAIModel: vi.fn().mockReturnValue(null),
+            getSelectedAIModel: vi.fn().mockReturnValue(undefined),
+            getThinkingLevel: vi.fn().mockReturnValue('auto'),
+            getInternetAccessEnabled: vi.fn().mockReturnValue(false),
         },
-    } as unknown as Core;
+    };
+    return context;
 }
 
 describe('AIProviderManager', () => {
@@ -276,7 +282,6 @@ describe('AIProviderManager', () => {
             await manager.startProvider('gemini');
 
             expect(manager.model).toBe('catalog-best-model');
-            vi.mocked(getMostPowerfulModel).mockReturnValue(null as unknown as string);
         });
 
         it('should return null from _getPersistedModel when core is not set (L143 true branch)', async () => {

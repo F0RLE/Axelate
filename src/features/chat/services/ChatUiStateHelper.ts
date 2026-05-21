@@ -57,7 +57,9 @@ export class ChatUiStateHelper {
         if (input) {
             input.disabled = true;
         }
-        if (sendBtn) sendBtn.disabled = true;
+        if (sendBtn) {
+            this._setSendButtonMode(sendBtn, 'stop');
+        }
         if (voiceBtn) voiceBtn.disabled = true;
         if (attachBtn) attachBtn.disabled = true;
         if (contextBtn) contextBtn.disabled = true;
@@ -70,7 +72,9 @@ export class ChatUiStateHelper {
             els.input.disabled = false;
             els.input.focus();
         }
-        if (els.sendBtn) els.sendBtn.disabled = false;
+        if (els.sendBtn) {
+            this._setSendButtonMode(els.sendBtn, 'send');
+        }
         if (els.voiceBtn) els.voiceBtn.disabled = false;
         if (els.attachBtn) els.attachBtn.disabled = false;
         if (els.contextBtn) els.contextBtn.disabled = false;
@@ -112,6 +116,22 @@ export class ChatUiStateHelper {
         if (this._resizeAnimationFrame !== null) {
             globalThis.cancelAnimationFrame(this._resizeAnimationFrame);
             this._resizeAnimationFrame = null;
+        }
+    }
+
+    private _setSendButtonMode(sendBtn: HTMLButtonElement, mode: 'send' | 'stop'): void {
+        const iconUse = sendBtn.querySelector('use');
+        const isStop = mode === 'stop';
+        const title = isStop
+            ? this._deps.i18n.t('ui.launcher.web.stop_generation', 'Stop generation')
+            : this._deps.i18n.t('ui.launcher.web.send', 'Send');
+
+        sendBtn.disabled = false;
+        sendBtn.classList.toggle('is-generating', isStop);
+        sendBtn.title = title;
+        sendBtn.setAttribute('aria-label', title);
+        if (iconUse !== null) {
+            iconUse.setAttribute('href', isStop ? '#icon-stop' : '#icon-send');
         }
     }
 }

@@ -19,6 +19,7 @@
         "shell:allow-open",
         "dialog:allow-open",
         "fs:allow-read-file",
+        "clipboard-manager:allow-read-text",
         "clipboard-manager:allow-write-text"
     ]
 }

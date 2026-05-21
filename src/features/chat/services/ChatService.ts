@@ -100,6 +100,9 @@ export class ChatService {
             if (response.model !== undefined) {
                 result.model = response.model;
             }
+            if (response.usage !== undefined) {
+                result.usage = response.usage;
+            }
             return result;
         } catch (e: unknown) {
             const errorMsg = e instanceof Error ? e.message : 'Unknown error';

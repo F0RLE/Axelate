@@ -39,13 +39,6 @@
     -webkit-backdrop-filter: none;
 }
 
-/* Flat shell used by the launcher frame/sidebar core. No outer glow, no hard border. */
-.launcher-frame-surface {
-    background: rgba(var(--background-raw), 0.065) !important;
-    box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.018) !important;
-    border: none !important;
-}
-
 .settings-card:nth-child(1) {
     animation-delay: 0.1s;
 }
@@ -182,10 +175,6 @@ body.resizing * {
 
 .resizable-card[data-card-width='full'] {
     grid-column: 1 / -1;
-}
-
-.resizable-card.animating {
-    animation: cardResize 0.5s cubic-bezier(0.4, 0, 0.2, 1) forwards;
 }
 
 @keyframes cardResize {

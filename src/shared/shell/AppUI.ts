@@ -232,6 +232,7 @@ export class AppUI {
      * @param {number} [duration=3000] - Duration in milliseconds.
      * @param {string|null} [title=null] - Optional toast title.
      * @param {string|null} [id=null] - Optional unique ID to prevent duplicates.
+     * @param {Function|null} [onClick=null] - Optional click handler.
      */
     public showToast(
         message: string,
@@ -239,8 +240,9 @@ export class AppUI {
         duration = 3000,
         title: string | null = null,
         id: string | null = null,
+        onClick: (() => void) | null = null,
     ): void {
-        this._toastManager.show(message, type, duration, title, id);
+        this._toastManager.show(message, type, duration, title, id, onClick);
     }
 
     // --- Action Feedback ---

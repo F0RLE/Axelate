@@ -557,6 +557,7 @@ async fn handle_text_request(
         &context.sessions,
         &context.config_service,
         &context.engine_manager,
+        &context.settings_service,
     )
     .await?;
 

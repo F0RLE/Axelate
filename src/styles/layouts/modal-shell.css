@@ -309,40 +309,6 @@
     }
 }
 
-.module-settings-content .form-group {
-    margin-bottom: 1.5rem;
-    /* Use global fadeInLeft */
-    animation: fadeInLeft 0.4s var(--ease-smooth) backwards;
-}
-
-.module-settings-content .form-group:nth-child(1) {
-    animation-delay: 0.05s;
-}
-
-.module-settings-content .form-group:nth-child(2) {
-    animation-delay: 0.1s;
-}
-
-.module-settings-content .form-group:nth-child(3) {
-    animation-delay: 0.15s;
-}
-
-.module-settings-content .form-group:nth-child(4) {
-    animation-delay: 0.2s;
-}
-
-.module-settings-content .form-group:nth-child(5) {
-    animation-delay: 0.25s;
-}
-
-.module-settings-content .form-label {
-    display: block;
-    font-size: 0.9rem;
-    font-weight: 600;
-    margin-bottom: 0.5rem;
-    color: var(--text-primary);
-}
-
 .module-settings-content .form-input {
     width: 100%;
     padding: 0.75rem;
@@ -358,12 +324,6 @@
     outline: none;
     border-color: var(--border-color);
     box-shadow: none;
-}
-
-.module-settings-content .form-textarea {
-    min-height: 100px;
-    font-family: var(--app-font-family);
-    resize: vertical;
 }
 
 .modal-title {
@@ -438,29 +398,6 @@
     color: white;
 }
 
-/* SD reinstall progress */
-.progress-animated {
-    position: relative;
-    width: 100%;
-    height: 10px;
-    background: var(--bg-light);
-    border-radius: 8px;
-    overflow: hidden;
-}
-
-.progress-animated .bar {
-    position: absolute;
-    height: 100%;
-    width: 40%;
-    background: linear-gradient(90deg, #d3a93a, #ffde7a, #d3a93a);
-    box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
-    border-radius: 8px;
-    /* Use optimized global animation */
-    animation: progressIndeterminate 1.5s infinite linear;
-    /* Reset left/width for transform-based animation */
-    left: 0;
-}
-
 @keyframes waveFlow {
     0% {
         background-position: 0% 50%;
@@ -473,11 +410,6 @@
     100% {
         background-position: 0% 50%;
     }
-}
-
-.sysmon-fill-gold {
-    background: linear-gradient(90deg, #d3a93a, #ffde7a, #d3a93a);
-    box-shadow: 0 0 12px rgba(255, 215, 0, 0.6);
 }
 
 .modal-btn-primary:hover {

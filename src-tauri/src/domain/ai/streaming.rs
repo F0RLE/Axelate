@@ -120,16 +120,34 @@ struct StreamingAccumulator {
     buffer: String,
     final_usage: Option<TokenUsage>,
     saw_terminal_chunk: bool,
+    chunks_emitted: u32,
+    started_at: std::time::Instant,
+    first_chunk_after: Option<std::time::Duration>,
 }
 
 impl StreamingAccumulator {
-    const fn new() -> Self {
+    fn new() -> Self {
         Self {
             full_content: String::new(),
             buffer: String::new(),
             final_usage: None,
             saw_terminal_chunk: false,
+            chunks_emitted: 0,
+            started_at: std::time::Instant::now(),
+            first_chunk_after: None,
         }
+    }
+
+    fn record_chat_chunk(&mut self, content: &str) {
+        if content.is_empty() {
+            return;
+        }
+
+        if self.first_chunk_after.is_none() {
+            self.first_chunk_after = Some(self.started_at.elapsed());
+        }
+        self.chunks_emitted = self.chunks_emitted.saturating_add(1);
+        self.full_content.push_str(content);
     }
 }
 
@@ -220,6 +238,7 @@ impl OpenAiCompatibleProvider {
                 .post(endpoint)
                 .header("Authorization", format!("Bearer {api_key}"))
                 .header("Content-Type", "application/json")
+                .header("Accept", resolve_accept_header(payload))
                 .header("HTTP-Referer", "https://github.com/F0RLE/Axelate")
                 .header("X-Title", "Axelate")
                 .header("X-Request-Id", request_id)
@@ -282,6 +301,18 @@ fn retry_delay(attempt: u32, status: StatusCode) -> std::time::Duration {
 
 fn is_local_base_url(base_url: &str) -> bool {
     base_url.contains("localhost") || base_url.contains("127.0.0.1")
+}
+
+fn resolve_accept_header(payload: &serde_json::Map<String, serde_json::Value>) -> &'static str {
+    if payload
+        .get("stream")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+    {
+        "text/event-stream"
+    } else {
+        "application/json"
+    }
 }
 
 fn resolve_api_key(req: &ChatRequest, base_url: &str) -> Result<String, crate::errors::AppError> {
@@ -458,10 +489,7 @@ fn parse_non_stream_response(
     message_id: String,
     model: String,
 ) -> ChatResponse {
-    let usage = body
-        .get("usage")
-        .cloned()
-        .and_then(|value| serde_json::from_value::<TokenUsage>(value).ok());
+    let usage = extract_token_usage(body);
 
     let reply_text = body
         .get("choices")
@@ -660,7 +688,7 @@ impl AiProvider for OpenAiCompatibleProvider {
             }
         }
 
-        if !saw_done && !state.saw_terminal_chunk {
+        if !saw_done && !state.saw_terminal_chunk && state.full_content.trim().is_empty() {
             return Ok(ChatResponse {
                 id: message_id,
                 ok: false,
@@ -672,11 +700,32 @@ impl AiProvider for OpenAiCompatibleProvider {
             });
         }
 
+        if !saw_done && !state.saw_terminal_chunk {
+            tracing::warn!(
+                request_id = %request_id,
+                message_id = %message_id,
+                chunks = state.chunks_emitted,
+                "AI stream ended without completion marker after emitting content"
+            );
+        }
+
         // Final event
         sink.emit(StreamEvent::Done {
             message_id: message_id.clone(),
             usage: state.final_usage.clone(),
         });
+
+        tracing::info!(
+            request_id = %request_id,
+            message_id = %message_id,
+            chunks = state.chunks_emitted,
+            first_chunk_ms = state
+                .first_chunk_after
+                .map(|duration| duration.as_millis())
+                .unwrap_or_default(),
+            total_ms = state.started_at.elapsed().as_millis(),
+            "AI stream completed"
+        );
 
         Ok(ChatResponse {
             id: message_id,
@@ -775,38 +824,47 @@ fn handle_stream_json_line(
         return StreamChunkResult::Error(message);
     }
 
-    if let Some(usage_val) = json.get("usage")
-        && let Ok(usage) = serde_json::from_value::<TokenUsage>(usage_val.clone())
-    {
+    if let Some(usage) = extract_token_usage(&json) {
         state.final_usage = Some(usage);
     }
 
-    let Some(choice) = json
+    let choice = json
         .get("choices")
         .and_then(|choices| choices.as_array())
-        .and_then(|choices| choices.first())
-    else {
-        return StreamChunkResult::Continue;
-    };
+        .and_then(|choices| choices.first());
 
-    if let Some(message) = choice.get("error").and_then(extract_error_message) {
-        return StreamChunkResult::Error(message);
-    }
-
-    if let Some(finish_reason) = choice.get("finish_reason").and_then(|value| value.as_str()) {
-        if finish_reason.eq_ignore_ascii_case("error") {
-            return StreamChunkResult::Error(
-                extract_error_message(choice)
-                    .unwrap_or_else(|| "AI provider reported a streaming error".to_string()),
-            );
+    if let Some(choice) = choice {
+        if let Some(message) = choice.get("error").and_then(extract_error_message) {
+            return StreamChunkResult::Error(message);
         }
 
-        if !finish_reason.trim().is_empty() {
-            state.saw_terminal_chunk = true;
+        if let Some(finish_reason) = choice.get("finish_reason").and_then(|value| value.as_str()) {
+            if finish_reason.eq_ignore_ascii_case("error") {
+                return StreamChunkResult::Error(
+                    extract_error_message(choice)
+                        .unwrap_or_else(|| "AI provider reported a streaming error".to_string()),
+                );
+            }
+
+            if !finish_reason.trim().is_empty() {
+                state.saw_terminal_chunk = true;
+            }
         }
     }
 
-    let delta = choice.get("delta");
+    if json
+        .get("stop")
+        .and_then(serde_json::Value::as_bool)
+        .unwrap_or(false)
+        || json
+            .get("done")
+            .and_then(serde_json::Value::as_bool)
+            .unwrap_or(false)
+    {
+        state.saw_terminal_chunk = true;
+    }
+
+    let delta = choice.and_then(|value| value.get("delta"));
 
     if let Some(reasoning) = delta
         .and_then(|d| d.get("reasoning_content"))
@@ -823,11 +881,34 @@ fn handle_stream_json_line(
         });
     }
 
-    if let Some(content) = delta
+    let content = delta
         .and_then(|d| d.get("content"))
         .and_then(extract_stream_text)
-    {
-        state.full_content.push_str(&content);
+        .or_else(|| {
+            choice
+                .and_then(|value| value.get("text"))
+                .and_then(extract_stream_text)
+                .or_else(|| {
+                    choice
+                        .and_then(|value| value.get("content"))
+                        .and_then(extract_stream_text)
+                })
+        })
+        .or_else(|| json.get("content").and_then(extract_stream_text))
+        .or_else(|| {
+            json.get("message")
+                .and_then(|message| message.get("content"))
+                .and_then(extract_stream_text)
+        })
+        .or_else(|| json.get("response").and_then(extract_stream_text))
+        .or_else(|| {
+            json.get("token")
+                .and_then(|token| token.get("text"))
+                .and_then(extract_stream_text)
+        });
+
+    if let Some(content) = content {
+        state.record_chat_chunk(&content);
         sink.emit(StreamEvent::ChatChunk {
             message_id: message_id.to_string(),
             content,
@@ -859,6 +940,81 @@ fn extract_stream_text(value: &serde_json::Value) -> Option<String> {
             .map(ToOwned::to_owned),
         _ => None,
     }
+}
+
+fn extract_token_usage(json: &serde_json::Value) -> Option<TokenUsage> {
+    let usage = json.get("usage").unwrap_or(json);
+    let timings = json.get("timings");
+
+    let prompt_tokens = read_usage_count(
+        usage,
+        timings,
+        &[
+            "prompt_tokens",
+            "input_tokens",
+            "prompt_eval_count",
+            "prompt_n",
+        ],
+    );
+    let completion_tokens = read_usage_count(
+        usage,
+        timings,
+        &[
+            "completion_tokens",
+            "output_tokens",
+            "eval_count",
+            "predicted_n",
+        ],
+    );
+    let total_tokens = read_usage_count(usage, timings, &["total_tokens"])
+        .or_else(|| (prompt_tokens.is_some() || completion_tokens.is_some()).then_some(0))
+        .map(|total| {
+            if total > 0 {
+                total
+            } else {
+                prompt_tokens.unwrap_or(0) + completion_tokens.unwrap_or(0)
+            }
+        });
+
+    match (prompt_tokens, completion_tokens, total_tokens) {
+        (None, None, None) => None,
+        (prompt_tokens, completion_tokens, total_tokens) => Some(TokenUsage {
+            prompt_tokens: prompt_tokens.unwrap_or(0),
+            completion_tokens: completion_tokens.unwrap_or(0),
+            total_tokens: total_tokens.unwrap_or(0),
+        }),
+    }
+}
+
+fn read_usage_count(
+    usage: &serde_json::Value,
+    timings: Option<&serde_json::Value>,
+    keys: &[&str],
+) -> Option<u32> {
+    keys.iter()
+        .find_map(|key| usage.get(*key).and_then(json_number_to_u32))
+        .or_else(|| {
+            timings.and_then(|timings| {
+                keys.iter()
+                    .find_map(|key| timings.get(*key).and_then(json_number_to_u32))
+            })
+        })
+}
+
+fn json_number_to_u32(value: &serde_json::Value) -> Option<u32> {
+    value
+        .as_u64()
+        .and_then(|value| u32::try_from(value).ok())
+        .or_else(|| {
+            value.as_f64().and_then(|value| {
+                let rounded = value.round();
+                if rounded.is_finite() && rounded >= 0.0 && rounded <= f64::from(u32::MAX) {
+                    rounded.to_string().parse::<u32>().ok()
+                } else {
+                    None
+                }
+            })
+        })
 }
 
 fn extract_stream_error_message(json: &serde_json::Value) -> Option<String> {
@@ -1060,6 +1216,70 @@ mod tests {
         assert!(matches!(
             events.first(),
             Some(StreamEvent::ChatChunk { content, .. }) if content == "hello"
+        ));
+    }
+
+    #[test]
+    fn process_stream_chunk_normalizes_ollama_usage() {
+        let sink = TestSink::default();
+        let mut state = StreamingAccumulator::new();
+        let chunk = b"data: {\"message\":{\"content\":\"hello\"},\"done\":true,\"prompt_eval_count\":7,\"eval_count\":11}\n\n";
+
+        let result = process_stream_chunk(chunk, "msg-1", &sink, &mut state);
+
+        assert!(matches!(result, StreamChunkResult::Continue));
+        assert_eq!(state.full_content, "hello");
+        assert!(state.saw_terminal_chunk);
+        let usage = state.final_usage.expect("usage");
+        assert_eq!(usage.prompt_tokens, 7);
+        assert_eq!(usage.completion_tokens, 11);
+        assert_eq!(usage.total_tokens, 18);
+
+        let events = sink.events.lock().expect("sink events");
+        assert!(matches!(
+            events.first(),
+            Some(StreamEvent::ChatChunk { content, .. }) if content == "hello"
+        ));
+    }
+
+    #[test]
+    fn process_stream_chunk_normalizes_llama_cpp_timings_usage() {
+        let sink = TestSink::default();
+        let mut state = StreamingAccumulator::new();
+        let chunk =
+            b"data: {\"content\":\"done\",\"stop\":true,\"timings\":{\"prompt_n\":5,\"predicted_n\":13}}\n\n";
+
+        let result = process_stream_chunk(chunk, "msg-1", &sink, &mut state);
+
+        assert!(matches!(result, StreamChunkResult::Continue));
+        let usage = state.final_usage.expect("usage");
+        assert_eq!(usage.prompt_tokens, 5);
+        assert_eq!(usage.completion_tokens, 13);
+        assert_eq!(usage.total_tokens, 18);
+    }
+
+    #[test]
+    fn process_stream_chunk_supports_llama_style_top_level_content() {
+        let sink = TestSink::default();
+        let mut state = StreamingAccumulator::new();
+        let chunk = b"data: {\"content\":\"hello\",\"stop\":false}\n\ndata: {\"content\":\" world\",\"stop\":true}\n\n";
+
+        let result = process_stream_chunk(chunk, "msg-1", &sink, &mut state);
+
+        assert!(matches!(result, StreamChunkResult::Continue));
+        assert_eq!(state.full_content, "hello world");
+        assert!(state.saw_terminal_chunk);
+        assert_eq!(state.chunks_emitted, 2);
+
+        let events = sink.events.lock().expect("sink events");
+        assert_eq!(events.len(), 2);
+        assert!(matches!(
+            events.first(),
+            Some(StreamEvent::ChatChunk { content, .. }) if content == "hello"
+        ));
+        assert!(matches!(
+            events.get(1),
+            Some(StreamEvent::ChatChunk { content, .. }) if content == " world"
         ));
     }
 }

@@ -15,6 +15,10 @@ type TauriRuntime = {
     openExternal: (url: string) => void;
 };
 
+type BrowserClipboardHost = {
+    clipboard?: Pick<Clipboard, 'writeText'>;
+};
+
 function createDefaultTauriRuntime(): TauriRuntime {
     return {
         hasTauriGlobals: () => {
@@ -29,6 +33,7 @@ function createDefaultTauriRuntime(): TauriRuntime {
 
 export class TauriProvider implements IBridge {
     private _isTauriDetected: boolean | null = null;
+    private _clipboardReadAccessDepth = 0;
 
     constructor(
         private readonly _tracer: LoggerService,
@@ -176,9 +181,47 @@ export class TauriProvider implements IBridge {
 
     public async writeToClipboard(text: string): Promise<void> {
         if (this.isTauri()) {
-            await this.invoke('plugin:clipboard-manager|write_text', { text });
-        } else {
-            this._tracer.info(`[Mock Clipboard] Write: ${text}`);
+            try {
+                await this.invoke('plugin:clipboard-manager|write_text', { text });
+                return;
+            } catch (error) {
+                try {
+                    if (await this._writeBrowserClipboard(text)) {
+                        return;
+                    }
+                } catch {
+                    /* Preserve the original Tauri clipboard error. */
+                }
+                throw error;
+            }
+        }
+
+        if (await this._writeBrowserClipboard(text)) {
+            return;
+        }
+
+        this._tracer.info(`[Mock Clipboard] Write requested (${String(text.length)} chars)`);
+    }
+
+    public async readClipboardText(): Promise<string | null> {
+        if (!this.isTauri()) {
+            return null;
+        }
+
+        if (this._clipboardReadAccessDepth <= 0) {
+            this._tracer.warn('[TauriProvider] Blocked clipboard read outside approved UI flow');
+            return null;
+        }
+
+        return await this.invoke<string>('plugin:clipboard-manager|read_text');
+    }
+
+    public async withClipboardReadAccess<T>(callback: () => Promise<T>): Promise<T> {
+        this._clipboardReadAccessDepth += 1;
+        try {
+            return await callback();
+        } finally {
+            this._clipboardReadAccessDepth = Math.max(0, this._clipboardReadAccessDepth - 1);
         }
     }
 
@@ -188,6 +231,25 @@ export class TauriProvider implements IBridge {
         } else {
             this._tracer.info(`[Mock Shell] Open URL: ${url}`);
             this._runtime.openExternal(url);
+        }
+    }
+
+    private async _writeBrowserClipboard(text: string): Promise<boolean> {
+        const navigator = (globalThis as { navigator?: BrowserClipboardHost }).navigator;
+        if (navigator === undefined) {
+            return false;
+        }
+
+        const clipboard = navigator.clipboard;
+        if (clipboard === undefined) {
+            return false;
+        }
+
+        try {
+            await clipboard.writeText(text);
+            return true;
+        } catch {
+            return false;
         }
     }
 

@@ -20,10 +20,7 @@ import type {
     DeferredUiController,
     ModuleSettingsUiController,
 } from './CoreUiContracts';
-import {
-    restoreSelectedAiProvider,
-    restoreSelectedModules as restoreSelectedModulesState,
-} from './CoreStateRestore';
+import { restoreSelectedModules as restoreSelectedModulesState } from './CoreStateRestore';
 
 type RuntimeLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 type BootstrapSafetyRevealArgs = {
@@ -150,7 +147,7 @@ export async function showInitialPage(args: ShowInitialPageArgs): Promise<void> 
     await args.navigationUI.showPage(pageId, null, true, true);
 
     if (pageId === 'chat') {
-        args.chatController.init();
+        await args.chatController.init();
     }
 }
 
@@ -177,19 +174,12 @@ export function restoreSelectedModules(args: {
     moduleSettings: Parameters<typeof restoreSelectedModulesState>[0]['moduleSettings'];
     catalog: Parameters<typeof restoreSelectedModulesState>[0]['catalog'];
     appUI: Parameters<typeof restoreSelectedModulesState>[0]['appUI'];
-    aiBridge: Parameters<typeof restoreSelectedAiProvider>[0]['aiBridge'];
 }): void {
-    const restoredSelections = restoreSelectedModulesState({
+    restoreSelectedModulesState({
         tracer: args.tracer,
         moduleSettings: args.moduleSettings,
         catalog: args.catalog,
         appUI: args.appUI,
-    });
-
-    restoreSelectedAiProvider({
-        tracer: args.tracer,
-        aiBridge: args.aiBridge,
-        restoredSelections,
     });
 }
 

@@ -37,6 +37,17 @@ pub enum EngineKind {
     },
 }
 
+/// Preferred compute backend for a local engine.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum EngineComputeMode {
+    /// Let the engine use available GPU devices automatically.
+    #[default]
+    Gpu,
+    /// Force CPU execution and disable GPU offload.
+    Cpu,
+}
+
 /// Static engine definition (from local_modules.json)
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 pub struct EngineDefinition {
@@ -65,9 +76,6 @@ pub struct EngineDefinition {
     /// Default port (extracted from configSchema.port.default)
     #[serde(default = "default_port")]
     pub default_port: u16,
-    /// Default GPU layers (-1 = all, extracted from configSchema.gpuLayers.default)
-    #[serde(default = "default_gpu_layers")]
-    pub default_gpu_layers: i32,
     /// Default context window size (extracted from configSchema.contextSize.default)
     #[serde(default = "default_context_size")]
     pub default_context_size: u32,
@@ -91,9 +99,9 @@ fn default_version() -> String {
 pub struct EngineConfig {
     /// Engine identifier (matches EngineDefinition.id)
     pub engine_id: String,
-    /// Number of GPU layers (-1 = all)
-    #[serde(default = "default_gpu_layers")]
-    pub gpu_layers: i32,
+    /// Preferred compute backend.
+    #[serde(default)]
+    pub compute_mode: EngineComputeMode,
     /// Context window size
     #[serde(default = "default_context_size")]
     pub context_size: u32,
@@ -168,10 +176,6 @@ pub struct SlotStatus {
 
 const fn default_port() -> u16 {
     8081
-}
-
-const fn default_gpu_layers() -> i32 {
-    -1
 }
 
 const fn default_context_size() -> u32 {

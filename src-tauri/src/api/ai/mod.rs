@@ -11,11 +11,13 @@ use crate::errors::AppError;
 use crate::infrastructure::config::ui_state::UiStateService;
 use crate::infrastructure::crypto::secure_storage::SecureStorage;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
+use dashmap::DashMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 use tauri::ipc::Channel;
 use tauri::{Manager, State, Window};
+use tokio::sync::oneshot;
 
 #[cfg(target_os = "windows")]
 use windows::Win32::Foundation::HWND;
@@ -98,12 +100,26 @@ fn resolve_existing_path_within_root(
 }
 
 #[derive(Debug, Clone, serde::Serialize, specta::Type)]
+#[serde(rename_all = "snake_case")]
+/// Kind of streaming payload delivered to frontend chat channels.
+pub enum StreamPayloadKind {
+    /// A visible assistant text fragment.
+    ChatChunk,
+    /// A reasoning/thinking text fragment.
+    ThoughtChunk,
+    /// End-of-stream marker after all chunks have been delivered.
+    Done,
+}
+
+#[derive(Debug, Clone, serde::Serialize, specta::Type)]
 /// Streaming payload delivered from the backend to the frontend chat channels.
 pub struct StreamChunkPayload {
     /// Correlates the chunk with the originating frontend request.
     pub request_id: String,
     /// Identifies the assistant message currently being streamed.
     pub message_id: String,
+    /// Describes how the frontend should handle this stream event.
+    pub kind: StreamPayloadKind,
     /// The incremental text fragment emitted by the model.
     pub content: String,
 }
@@ -113,6 +129,32 @@ struct TauriStreamSink {
     request_id: String,
     chat_channel: Channel<StreamChunkPayload>,
     thought_channel: Channel<StreamChunkPayload>,
+}
+
+#[derive(Debug, Default)]
+/// Tracks active chat requests that can be cancelled by the frontend.
+pub struct ChatCancellationRegistry {
+    requests: DashMap<String, oneshot::Sender<()>>,
+}
+
+impl ChatCancellationRegistry {
+    fn register(&self, request_id: &str) -> oneshot::Receiver<()> {
+        let (tx, rx) = oneshot::channel();
+        if let Some(old_tx) = self.requests.insert(request_id.to_string(), tx) {
+            let _ = old_tx.send(());
+        }
+        rx
+    }
+
+    fn cancel(&self, request_id: &str) -> bool {
+        self.requests
+            .remove(request_id)
+            .is_some_and(|(_, tx)| tx.send(()).is_ok())
+    }
+
+    fn clear(&self, request_id: &str) {
+        self.requests.remove(request_id);
+    }
 }
 
 impl StreamSink for TauriStreamSink {
@@ -125,6 +167,7 @@ impl StreamSink for TauriStreamSink {
                 let payload = StreamChunkPayload {
                     request_id: self.request_id.clone(),
                     message_id,
+                    kind: StreamPayloadKind::ChatChunk,
                     content,
                 };
                 let _ = self.chat_channel.send(payload);
@@ -136,11 +179,20 @@ impl StreamSink for TauriStreamSink {
                 let payload = StreamChunkPayload {
                     request_id: self.request_id.clone(),
                     message_id,
+                    kind: StreamPayloadKind::ThoughtChunk,
                     content,
                 };
                 let _ = self.thought_channel.send(payload);
             }
-            StreamEvent::Done { .. } => {}
+            StreamEvent::Done { message_id, .. } => {
+                let payload = StreamChunkPayload {
+                    request_id: self.request_id.clone(),
+                    message_id,
+                    kind: StreamPayloadKind::Done,
+                    content: String::new(),
+                };
+                let _ = self.chat_channel.send(payload);
+            }
         }
     }
 }
@@ -459,6 +511,7 @@ fn image_open_directory(path: &Path, folder_only: bool) -> Result<PathBuf, AppEr
 #[tauri::command]
 #[specta::specta]
 /// Sends a chat message to the AI provider and streams the response
+#[allow(clippy::too_many_arguments)]
 pub async fn send_chat_message(
     request: ChatRequest,
     chat_channel: Channel<StreamChunkPayload>,
@@ -466,14 +519,63 @@ pub async fn send_chat_message(
     sessions: State<'_, Arc<ChatSessionManager>>,
     config_service: State<'_, Arc<ConfigService>>,
     engine_manager: State<'_, Arc<EngineManager>>,
+    settings_service: State<'_, crate::infrastructure::config::settings::SettingsService>,
+    cancellation_registry: State<'_, ChatCancellationRegistry>,
 ) -> Result<ChatResponse, AppError> {
     let mut request = request;
     let request_id = ensure_request_id(&mut request);
-    fill_chat_request_api_key(&mut request, &config_service).await?;
+    let streamed_message_id = uuid::Uuid::new_v4().to_string();
+    let cancellation = cancellation_registry.register(&request_id);
+    let model = request.model.clone();
+    if let Err(error) = fill_chat_request_api_key(&mut request, &config_service).await {
+        cancellation_registry.clear(&request_id);
+        return Err(error);
+    }
 
-    let sink = create_stream_sink(request_id, chat_channel, thought_channel);
-    ai_service::process_chat_request(request, &sessions, &config_service, &engine_manager, sink)
-        .await
+    let sink = create_stream_sink(request_id.clone(), chat_channel, thought_channel);
+    let cancel_sink = Arc::clone(&sink);
+
+    let result = tokio::select! {
+        result = ai_service::process_chat_request_with_message_id(
+            request,
+            &sessions,
+            &config_service,
+            &engine_manager,
+            settings_service.inner(),
+            sink,
+            streamed_message_id.clone(),
+        ) => result,
+        _ = cancellation => {
+            tracing::info!(request_id = %request_id, "AI request cancelled by frontend");
+            cancel_sink.emit(StreamEvent::Done {
+                message_id: streamed_message_id,
+                usage: None,
+            });
+            Ok(ChatResponse {
+                id: request_id.clone(),
+                ok: false,
+                reply: None,
+                error: Some("AI request cancelled".to_string()),
+                model: Some(model),
+                thought_signature: None,
+                usage: None,
+            })
+        }
+    };
+
+    cancellation_registry.clear(&request_id);
+    result
+}
+
+#[tauri::command]
+#[specta::specta]
+/// Cancels an active streamed chat request by request identifier.
+#[allow(clippy::needless_pass_by_value)]
+pub fn cancel_chat_generation(
+    request_id: String,
+    cancellation_registry: State<'_, ChatCancellationRegistry>,
+) -> bool {
+    cancellation_registry.cancel(&request_id)
 }
 
 #[tauri::command]
