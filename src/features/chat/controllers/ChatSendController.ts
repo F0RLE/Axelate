@@ -35,7 +35,7 @@ type ChatSendControllerOptions = {
     getHistory: () => IChatMessage[];
     pushUserMessage: (content: IChatMessage['content']) => void;
     createStreamingHandle: (typingId: string) => StreamingMessageHandle;
-    createImageHandle: (text: string, onRegenerate: () => Promise<void>) => ImageGenerationHandle;
+    createImageHandle: () => ImageGenerationHandle;
     showTyping: (typingId: string) => void;
     registerReplaceChunk: (
         listenerId: string,
@@ -55,7 +55,6 @@ type ChatSendControllerOptions = {
     cleanupStreamingState: (listenerId: string, typingId: string) => void;
     stopImagePreviewPolling: () => void;
     startImagePreviewPolling: (handle: ImageGenerationHandle) => void;
-    restoreInputText: (text: string) => void;
     isImageProvider: (providerId: string | null) => boolean;
     lockUi: (input: HTMLTextAreaElement | null) => {
         input: HTMLTextAreaElement | null;
@@ -76,6 +75,11 @@ type UiLock = ReturnType<ChatSendControllerOptions['lockUi']>;
 export class ChatSendController {
     private readonly _autoStartHelper: ChatAutoStartHelper;
     private readonly _sendFlow: ChatSendFlow;
+    private readonly _activeStreamingStates = new Map<
+        string,
+        { listenerId: string; typingId: string }
+    >();
+    private _isDestroyed = false;
 
     constructor(private readonly _options: ChatSendControllerOptions) {
         this._autoStartHelper = new ChatAutoStartHelper({
@@ -90,7 +94,17 @@ export class ChatSendController {
         });
     }
 
-    public destroy(): void {}
+    public destroy(): void {
+        if (this._isDestroyed) return;
+        this._isDestroyed = true;
+
+        for (const state of this._activeStreamingStates.values()) {
+            this._options.cleanupStreamingState(state.listenerId, state.typingId);
+        }
+        this._activeStreamingStates.clear();
+        this._options.stopImagePreviewPolling();
+        this._options.setSending(false);
+    }
 
     public validateInput(text: string): boolean {
         return text !== '' || this._options.fileHandler.hasFiles();
@@ -101,7 +115,7 @@ export class ChatSendController {
     }
 
     public async sendChat(input: HTMLTextAreaElement | null): Promise<boolean> {
-        if (this._options.isSending()) return false;
+        if (this._isDestroyed || this._options.isSending()) return false;
 
         const text = input?.value.trim() ?? '';
 
@@ -112,9 +126,11 @@ export class ChatSendController {
         const isImageProvider = this._options.isImageProvider(activeProviderId);
 
         this._options.setSending(true);
+        this._activeStreamingStates.set(listenerId, { listenerId, typingId });
 
         try {
             const sendPlan = await this._sendFlow.prepare(text);
+            if (this._wasDestroyed()) return false;
 
             this._options.clearInput();
             this._options.addContextTokens(sendPlan.tokenCount);
@@ -129,13 +145,8 @@ export class ChatSendController {
                 return streamingHandle;
             };
 
-            const queueRegenerate = async (): Promise<void> => {
-                this._options.restoreInputText(text);
-                await this.sendChat(input);
-            };
-
             if (isImageProvider) {
-                imageHandle = this._options.createImageHandle(text, queueRegenerate);
+                imageHandle = this._options.createImageHandle();
                 this._options.startImagePreviewPolling(imageHandle);
             } else {
                 streamingHandle = ensureStreamingHandle();
@@ -156,17 +167,35 @@ export class ChatSendController {
                 sendPlan.attachments,
             );
 
-            this._options.cleanupStreamingState(listenerId, typingId);
+            this._cleanupStreamingState(listenerId, typingId);
+            if (this._wasDestroyed()) return false;
+
             await this._options.handleResponse(response, streamingHandle, imageHandle);
             return true;
         } catch (error: unknown) {
-            this._options.cleanupStreamingState(listenerId, typingId);
-            this._options.handleError(error);
+            this._cleanupStreamingState(listenerId, typingId);
+            if (!this._wasDestroyed()) {
+                this._options.handleError(error);
+            }
             return false;
         } finally {
-            this._options.unlockUi(uiElements);
+            if (!this._wasDestroyed()) {
+                this._options.unlockUi(uiElements);
+            }
             this._options.setSending(false);
         }
+    }
+
+    private _wasDestroyed(): boolean {
+        return this._isDestroyed;
+    }
+
+    private _cleanupStreamingState(listenerId: string, typingId: string): void {
+        if (!this._activeStreamingStates.delete(listenerId)) {
+            return;
+        }
+
+        this._options.cleanupStreamingState(listenerId, typingId);
     }
 
     public async tryAutoStartAi(prompt?: string): Promise<boolean> {

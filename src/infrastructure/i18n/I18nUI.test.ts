@@ -23,7 +23,7 @@ describe('I18nUI', () => {
                 <button id="current-lang-trigger" aria-expanded="false">
                     <span class="flag-icon flag-gb"></span>
                 </button>
-                <div id="lang-menu-items" class="lang-menu-items open">
+                <div id="lang-menu-items" class="lang-menu-items open" aria-hidden="false">
                     <button class="lang-btn" data-lang="ru"></button>
                     <button class="lang-btn" data-lang="en"></button>
                 </div>
@@ -78,12 +78,15 @@ describe('I18nUI', () => {
         ui.updateSwitcherUI();
 
         const triggerFlag = document.querySelector('#current-lang-trigger .flag-icon');
-        const ruButton = document.querySelector('.lang-btn[data-lang="ru"]') as HTMLElement;
-        const enButton = document.querySelector('.lang-btn[data-lang="en"]') as HTMLElement;
+        const ruButton = document.querySelector('.lang-btn[data-lang="ru"]') as HTMLButtonElement;
+        const enButton = document.querySelector('.lang-btn[data-lang="en"]') as HTMLButtonElement;
 
         expect(triggerFlag?.className).toContain('flag-ru');
         expect(ruButton.style.display).toBe('none');
+        expect(ruButton.disabled).toBe(true);
+        expect(ruButton.tabIndex).toBe(-1);
         expect(enButton.style.display).toBe('flex');
+        expect(enButton.tabIndex).toBe(0);
     });
 
     it('toggles topbar and sidebar language menus', () => {
@@ -91,6 +94,12 @@ describe('I18nUI', () => {
         ui.toggleSidebarLangMenu();
 
         expect(document.getElementById('lang-menu-items')?.classList.contains('open')).toBe(false);
+        expect(document.getElementById('lang-menu-items')?.getAttribute('aria-hidden')).toBe(
+            'true',
+        );
+        expect(
+            (document.querySelector('.lang-btn[data-lang="en"]') as HTMLButtonElement).tabIndex,
+        ).toBe(-1);
         expect(document.getElementById('current-lang-trigger')?.getAttribute('aria-expanded')).toBe(
             'false',
         );
@@ -106,8 +115,14 @@ describe('I18nUI', () => {
         expect(service.loadTranslations).toHaveBeenCalledWith('ru');
         expect(document.documentElement.lang).toBe('ru');
         expect(document.getElementById('lang-menu-items')?.classList.contains('open')).toBe(false);
+        expect(document.getElementById('current-lang-trigger')?.getAttribute('aria-expanded')).toBe(
+            'false',
+        );
         expect(document.getElementById('sidebar-lang-menu')?.classList.contains('open')).toBe(
             false,
+        );
+        expect(document.getElementById('sidebar-lang-trigger')?.getAttribute('aria-expanded')).toBe(
+            'false',
         );
 
         ui.selectLangInModal('en');
@@ -125,6 +140,12 @@ describe('I18nUI', () => {
     it('closes the open language menu on outside click and cleans up on destroy', () => {
         document.body.dispatchEvent(new MouseEvent('click', { bubbles: true }));
         expect(document.getElementById('lang-menu-items')?.classList.contains('open')).toBe(false);
+        expect(document.getElementById('lang-menu-items')?.getAttribute('aria-hidden')).toBe(
+            'true',
+        );
+        expect(document.getElementById('current-lang-trigger')?.getAttribute('aria-expanded')).toBe(
+            'false',
+        );
 
         document.getElementById('lang-menu-items')?.classList.add('open');
         ui.destroy();

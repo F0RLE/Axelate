@@ -48,9 +48,16 @@ export class SidebarNavigationRenderer {
             button.classList.add('console-trigger');
         }
         button.dataset['page'] = page.id;
+        button.dataset['i18nTitle'] = page.i18nKey;
+        button.dataset['i18nAriaLabel'] = page.i18nKey;
+        button.title = page.defaultLabel;
+        button.setAttribute('aria-label', page.defaultLabel);
 
         const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
         svg.setAttribute('class', 'icon');
+        svg.setAttribute('viewBox', '0 0 24 24');
+        svg.setAttribute('aria-hidden', 'true');
+        svg.setAttribute('focusable', 'false');
 
         const use = document.createElementNS('http://www.w3.org/2000/svg', 'use');
         use.setAttribute('href', page.icon);
@@ -73,5 +80,6 @@ export class SidebarNavigationRenderer {
         button.classList.add('hidden');
         button.setAttribute('aria-hidden', 'true');
         button.setAttribute('tabindex', '-1');
+        button.disabled = true;
     }
 }

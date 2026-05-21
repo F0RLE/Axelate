@@ -281,6 +281,29 @@ describe('AIBridge', () => {
             expect(aiBridge.getActiveProvider()?.id).toBe('gpt');
         });
 
+        it('should not stop local engine slots when switching to a cloud provider', async () => {
+            mockStoredApiKey();
+
+            await aiBridge.startProvider('gemini');
+
+            expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine_slot', expect.any(Object));
+            expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine', expect.any(Object));
+        });
+
+        it('should stop conflicting local engine slots only for local providers', async () => {
+            mockInvoke.mockImplementation(async (cmd: string) => {
+                await Promise.resolve();
+                if (cmd === 'get_engine_config') return { context_size: 4096 };
+                return null;
+            });
+
+            await aiBridge.startProvider('llamacpp');
+
+            expect(mockInvoke).toHaveBeenCalledWith('stop_engine_slot', {
+                capability: 'image',
+            });
+        });
+
         it('should NOT fallback to localStorage when backend returns null', async () => {
             mockInvoke.mockResolvedValue(null);
             localStorage.setItem('openrouter_api_key', 'local-key-123');
@@ -320,6 +343,16 @@ describe('AIBridge', () => {
 
             const state = aiBridge.getState();
             expect(state.activeProviderId).toBeNull();
+        });
+
+        it('should not stop local engine processes when stopping a cloud provider', async () => {
+            mockStoredApiKey();
+            await aiBridge.startProvider('gemini');
+            mockInvoke.mockClear();
+
+            aiBridge.stopProvider();
+
+            expect(mockInvoke).not.toHaveBeenCalledWith('stop_engine', expect.any(Object));
         });
 
         it('should preserve UI listeners on stop so a later provider restart can reuse them', async () => {

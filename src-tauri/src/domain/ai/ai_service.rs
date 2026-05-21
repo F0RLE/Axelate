@@ -136,6 +136,12 @@ async fn process_chat_request_with_local_engine_access(
     sink: Arc<dyn StreamSink>,
     local_engine_access: LocalEngineAccess,
 ) -> Result<ChatResponse, crate::errors::AppError> {
+    let _local_workload_guard = if engine_manager.has_definition(&request.provider).await {
+        Some(engine_manager.acquire_local_workload().await)
+    } else {
+        None
+    };
+
     let execution = prepare_request_execution(
         &request,
         sessions,
@@ -179,6 +185,12 @@ async fn process_chat_request_non_stream_with_local_engine_access(
     engine_manager: &crate::domain::engine::manager::EngineManager,
     local_engine_access: LocalEngineAccess,
 ) -> Result<ChatResponse, crate::errors::AppError> {
+    let _local_workload_guard = if engine_manager.has_definition(&request.provider).await {
+        Some(engine_manager.acquire_local_workload().await)
+    } else {
+        None
+    };
+
     let execution = prepare_request_execution(
         &request,
         sessions,

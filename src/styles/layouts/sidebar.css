@@ -352,6 +352,7 @@
     margin-right: 0;
     width: 32px;
     height: 32px;
+    display: block;
 }
 
 #sidebar.auto-compact .nav-btn {
@@ -368,10 +369,6 @@
 #sidebar.collapsed .sidebar-lang-switcher {
     justify-content: center;
     margin-bottom: 1rem;
-}
-
-.sidebar-bottom .nav-btn:last-child {
-    margin-bottom: 0;
 }
 
 /* Language Switcher in Sidebar */
@@ -587,6 +584,7 @@
     position: static;
     width: 22px;
     height: 22px;
+    display: block;
     flex-shrink: 0;
 }
 

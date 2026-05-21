@@ -130,6 +130,9 @@ describe('WindowUI lifecycle', () => {
                 .setSoundEnabled,
         ).toHaveBeenCalledWith(false);
         expect(document.getElementById('sound-toggle-btn')?.classList.contains('muted')).toBe(true);
+        expect(document.getElementById('sound-toggle-btn')?.getAttribute('aria-pressed')).toBe(
+            'true',
+        );
 
         ui.updateMaximizeIcon(true);
         expect(document.body.classList.contains('maximized')).toBe(true);

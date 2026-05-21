@@ -354,11 +354,17 @@ export class GeneralSettingsRenderer {
         if (visible) {
             element.removeAttribute('aria-hidden');
             element.removeAttribute('tabindex');
+            if (element instanceof HTMLButtonElement) {
+                element.disabled = false;
+            }
             return;
         }
 
         element.setAttribute('aria-hidden', 'true');
         element.setAttribute('tabindex', '-1');
+        if (element instanceof HTMLButtonElement) {
+            element.disabled = true;
+        }
     }
 
     /**

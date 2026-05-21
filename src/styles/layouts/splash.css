@@ -4,6 +4,7 @@
     align-items: center;
     gap: 1.5rem;
     position: relative;
+    text-align: center;
 }
 
 .splash-logo-container {
@@ -57,7 +58,7 @@
 .splash-title {
     font-size: 3rem;
     font-weight: 700;
-    letter-spacing: -0.05em;
+    letter-spacing: 0;
     font-family: 'Monocraft', monospace;
     background: linear-gradient(135deg, #fff 0%, #a0a0a0 100%);
     background-clip: text;

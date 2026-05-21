@@ -57,7 +57,7 @@ export function createChatStreamingMessage(
     textNode.className = 'markdown-body';
     const statusNode = document.createElement('div');
     statusNode.className = 'chat-streaming-status';
-    statusNode.innerHTML = '<div class="typing-dots"><span></span><span></span><span></span></div>';
+    statusNode.textContent = deps.translate('ui.chat.streaming_text', 'Model is typing...');
     bubble.appendChild(statusNode);
     bubble.appendChild(textNode);
 

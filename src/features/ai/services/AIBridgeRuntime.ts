@@ -72,6 +72,10 @@ export class AIBridgeRuntime {
             return;
         }
 
+        if (args.providerPolicy.isCloudProvider(args.providerId)) {
+            return;
+        }
+
         const isImageProvider = args.providerPolicy.isImageProvider(args.providerId);
         const isManagedLocalImageEngine = args.providerPolicy.isManagedLocalImageEngine(
             args.providerId,

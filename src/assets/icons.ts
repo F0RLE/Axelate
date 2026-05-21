@@ -227,17 +227,17 @@ export const svgIcons = `
                 viewBox="0 0 24 24"
                 fill="currentColor"
             >
-                <path d="M4 6h16v2H4zm0 14h16v2H4zM2 8h2v12H2zm18 0h2v12h-2z"></path>
-                <path d="M11 4h2v4h-2zm-3 6h2v2H8zm6 0h4v2h-4zm-1-8h4v2h-4zM0 12h2v2H0zm22 0h2v2h-2zm-12 4h4v2h-4zm-2-2h2v2H8zm6 0h2v2h-2z"></path>
+                <path d="M7 5h10v2H7zm0 12h10v2H7zM5 7h2v10H5zm12 0h2v10h-2z"></path>
+                <path d="M3 9h2v2H3zm0 4h2v2H3zm16-4h2v2h-2zm0 4h2v2h-2zM9 3h2v2H9zm4 0h2v2h-2zm-4 16h2v2H9zm4 0h2v2h-2z"></path>
+                <path d="M9 9h2v2H9zm4 0h2v2h-2zm-2 4h2v2h-2zm-2-2h2v2H9zm4 0h2v2h-2z"></path>
             </symbol>
             <symbol
                 id="icon-services"
                 viewBox="0 0 24 24"
                 fill="currentColor"
             >
-                <path d="M4 2h16v2H4zM2 4h2v16H2zm2 7h16v2H4zm16-7h2v16h-2z"></path>
-                <path d="M11 4h2v18h-2z"></path>
-                <path d="M4 20h16v2H4z"></path>
+                <path d="M8 2h2v4h4V2h2v4h2v6h-2v4h-3v4h-2v-4H8v-4H6V6h2z"></path>
+                <path d="M8 8v2h8V8zm2 10h4v2h-4zm0 2h4v2h-4z"></path>
             </symbol>
             <symbol
                 id="icon-minimize"

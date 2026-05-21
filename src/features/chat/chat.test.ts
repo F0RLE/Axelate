@@ -283,13 +283,10 @@ describe('ChatController', () => {
         ).toHaveBeenCalledWith([
             {
                 role: 'user',
-                content: [
-                    { type: 'text', text: 'Look here' },
-                    {
-                        type: 'image_url',
-                        image_url: { url: 'data:image/png;base64,ZmFrZQ==' },
-                    },
-                ],
+                content: 'Look here',
+                opts: {
+                    images: [{ mime: 'image/png', data_base64: 'ZmFrZQ==' }],
+                },
             },
         ]);
     });

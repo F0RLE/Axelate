@@ -14,9 +14,13 @@
                     <button
                         id="clear-chat-btn"
                         class="chat-clear-btn"
+                        type="button"
                         title="Clear Chat"
+                        aria-label="Clear Chat"
+                        data-i18n-title="ui.launcher.web.chat_clear_title"
+                        data-i18n-aria-label="ui.launcher.web.chat_clear_title"
                     >
-                        <svg class="icon">
+                        <svg class="icon" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                             <use href="#icon-trash"></use>
                         </svg>
                         <span
@@ -49,15 +53,24 @@
                                 type="file"
                                 multiple
                                 class="hidden"
+                                tabindex="-1"
+                                aria-hidden="true"
                             />
                             <div class="chat-input-edge chat-input-edge--left">
                                 <button
                                     id="chat-attach-btn"
                                     class="chat-action-btn chat-action-btn--edge"
+                                    type="button"
                                     title="Attach"
+                                    aria-label="Attach"
+                                    data-i18n-title="ui.launcher.web.attach"
+                                    data-i18n-aria-label="ui.launcher.web.attach"
                                 >
                                     <svg
                                         class="icon icon-chat"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden="true"
+                                        focusable="false"
                                     >
                                         <use href="#icon-plus"></use>
                                     </svg>
@@ -70,11 +83,13 @@
                                     placeholder="Ask something..."
                                     rows="1"
                                     data-i18n-placeholder="ui.launcher.web.chat_placeholder_ask"
+                                    aria-describedby="chat-input-placeholder"
                                 ></textarea>
                                 <div
                                     id="chat-input-placeholder"
                                     class="chat-input-placeholder mono"
                                     data-i18n="ui.launcher.web.chat_placeholder_ask"
+                                    aria-hidden="true"
                                 >
                                     Ask something...
                                 </div>
@@ -83,10 +98,17 @@
                                 <button
                                     id="chat-voice-btn"
                                     class="chat-action-btn chat-action-btn--edge"
+                                    type="button"
                                     title="Voice"
+                                    aria-label="Voice"
+                                    data-i18n-title="ui.launcher.web.voice"
+                                    data-i18n-aria-label="ui.launcher.web.voice"
                                 >
                                     <svg
                                         class="icon icon-chat"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden="true"
+                                        focusable="false"
                                     >
                                         <use href="#icon-mic"></use>
                                     </svg>
@@ -94,10 +116,17 @@
                                 <button
                                     id="chat-send-btn"
                                     class="chat-action-btn chat-action-btn--edge primary"
+                                    type="button"
                                     title="Send"
+                                    aria-label="Send"
+                                    data-i18n-title="ui.launcher.web.send"
+                                    data-i18n-aria-label="ui.launcher.web.send"
                                 >
                                     <svg
                                         class="icon icon-chat"
+                                        viewBox="0 0 24 24"
+                                        aria-hidden="true"
+                                        focusable="false"
                                     >
                                         <use href="#icon-send"></use>
                                     </svg>

@@ -158,8 +158,6 @@ export class SidebarUI extends BaseComponent {
         }
 
         logoArea.style.cursor = 'pointer';
-        logoArea.setAttribute('role', 'button');
-        logoArea.setAttribute('tabindex', '0');
         logoArea.setAttribute('aria-label', 'Toggle Sidebar');
         logoArea.setAttribute('aria-expanded', (!this._isCollapsed).toString());
 

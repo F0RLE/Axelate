@@ -176,11 +176,14 @@ export class ChatUI {
         this._editMessageHandler = handler;
     }
 
-    public renderHistory(messages: Array<{ role: IChatRole; content: unknown }>): void {
+    public renderHistory(
+        messages: Array<{ role: IChatRole; content: unknown; opts?: Record<string, unknown> }>,
+    ): void {
         this.clear();
         for (const message of messages) {
             this.appendMessage(message.role, message.content, {
                 skipAnimation: true,
+                ...(message.opts ?? {}),
             });
         }
         this.revealLatestMessage();
@@ -268,7 +271,6 @@ export class ChatUI {
 
     public createImageGenerationMessage(opts: {
         onCancel: () => void | Promise<void>;
-        onRegenerate: () => void | Promise<void>;
     }): ImageGenerationMessageHandle {
         this._prepareContainer();
         return createChatImageGenerationMessage({

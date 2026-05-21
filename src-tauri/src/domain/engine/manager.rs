@@ -1,18 +1,18 @@
 //! Engine lifecycle manager
 //!
 //! Owns active local engine processes. Handles start, stop,
-//! health checks, and hot-swap (unload one engine before loading another).
+//! health checks, and hot-swap (unload the current engine before loading another).
 //!
-//! Supports **multiple capability slots** — e.g. a text engine and an
-//! image engine can run simultaneously, each occupying its own slot.
-//! Within a slot, only one engine is loaded at a time (hot-swap).
+//! Axelate runs one local engine process at a time by default. Heavy text and
+//! image engines compete for the same VRAM/RAM budget, so starts are serialized
+//! and a new engine replaces any currently active engine.
 
 use std::collections::HashMap;
 use std::fs::File;
 use std::path::PathBuf;
 use std::sync::Arc;
 use tokio::process::{Child, Command};
-use tokio::sync::Mutex;
+use tokio::sync::{Mutex, OwnedMutexGuard};
 use tracing::{error, info, warn};
 
 use crate::errors::AppError;
@@ -50,6 +50,10 @@ struct RunningEngine {
 pub struct EngineManager {
     /// Running engines keyed by primary capability
     slots: Arc<Mutex<HashMap<Capability, RunningEngine>>>,
+    /// Serializes start/stop transitions so engine launches cannot overlap.
+    lifecycle_lock: Arc<Mutex<()>>,
+    /// Serializes local inference work so one engine is not stopped mid-request by another.
+    workload_lock: Arc<Mutex<()>>,
     /// Known engine definitions (loaded from registry)
     definitions: Arc<Mutex<Vec<EngineDefinition>>>,
     /// Event emitter for frontend progress notifications
@@ -67,6 +71,8 @@ impl EngineManager {
     pub fn new(emitter: Arc<dyn EngineEventEmitter>) -> Self {
         Self {
             slots: Arc::new(Mutex::new(HashMap::new())),
+            lifecycle_lock: Arc::new(Mutex::new(())),
+            workload_lock: Arc::new(Mutex::new(())),
             definitions: Arc::new(Mutex::new(Vec::new())),
             emitter,
         }
@@ -154,6 +160,15 @@ impl EngineManager {
             .collect()
     }
 
+    /// Acquires exclusive access to local inference work.
+    ///
+    /// Hold this guard for the full request, not just engine startup. Without it,
+    /// a second local request can hot-swap the running engine while the first
+    /// request is still generating.
+    pub async fn acquire_local_workload(&self) -> OwnedMutexGuard<()> {
+        Arc::clone(&self.workload_lock).lock_owned().await
+    }
+
     /// Returns the active preview file path for the image engine when supported.
     pub async fn active_image_preview_path(&self) -> Option<PathBuf> {
         let slots = self.slots.lock().await;
@@ -170,9 +185,10 @@ impl EngineManager {
     }
 
     /// Start an engine in its primary capability slot.
-    /// If another engine occupies that slot, stops it first (hot-swap).
-    /// Other slots are left untouched.
+    /// If any other local engine is running, stops it first. This keeps the
+    /// launcher on a single active local engine by default.
     pub async fn start(&self, config: EngineConfig) -> Result<EngineStatus, AppError> {
+        let _lifecycle_guard = self.lifecycle_lock.lock().await;
         let definition = self.find_definition(&config.engine_id).await?;
         let primary_cap = definition
             .capabilities
@@ -198,14 +214,15 @@ impl EngineManager {
             }
         }
 
-        // Hot-swap: stop existing engine in this slot (if different)
-        let old = self.slots.lock().await.remove(&primary_cap);
-        if let Some(old) = old {
+        // Hot-swap: stop every active engine before starting the next one.
+        let old_engines: Vec<(Capability, RunningEngine)> =
+            self.slots.lock().await.drain().collect();
+        for (old_cap, old) in old_engines {
             info!(
                 from = %old.definition.id,
                 to = %config.engine_id,
-                slot = ?primary_cap,
-                "Hot-swapping engine in slot"
+                slot = ?old_cap,
+                "Hot-swapping active engine"
             );
             self.emitter
                 .emit_swapping(&old.definition.id, &config.engine_id);
@@ -369,6 +386,7 @@ impl EngineManager {
 
     /// Stop all running engines
     pub async fn stop(&self) -> Result<(), AppError> {
+        let _lifecycle_guard = self.lifecycle_lock.lock().await;
         let engines: Vec<(Capability, RunningEngine)> = self.slots.lock().await.drain().collect();
         for (cap, engine) in engines {
             info!(engine = %engine.definition.id, slot = ?cap, "Stopping engine");
@@ -379,6 +397,7 @@ impl EngineManager {
 
     /// Stop engine in a specific capability slot
     pub async fn stop_slot(&self, capability: Capability) -> Result<(), AppError> {
+        let _lifecycle_guard = self.lifecycle_lock.lock().await;
         let engine = self.slots.lock().await.remove(&capability);
         if let Some(engine) = engine {
             info!(engine = %engine.definition.id, slot = ?capability, "Stopping engine in slot");
