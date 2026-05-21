@@ -121,14 +121,17 @@ jobs:
         continue-on-error: true  # Don't fail CI, but report issues
 
       - name: Install Coverage Tool
+        if: github.event_name == 'workflow_dispatch'
         run: cargo install cargo-llvm-cov --locked --quiet
 
       - name: Generate Rust Coverage Report
+        if: github.event_name == 'workflow_dispatch'
         run: |
           cd src-tauri
           cargo llvm-cov --workspace --all-features --lcov --output-path lcov.info
 
       - name: Upload Rust Coverage Artifact
+        if: github.event_name == 'workflow_dispatch'
         uses: actions/upload-artifact@v7
         with:
           name: rust-lcov
