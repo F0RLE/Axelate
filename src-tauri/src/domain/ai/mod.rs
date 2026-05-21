@@ -23,6 +23,7 @@ mod session_context;
 mod session_persistence;
 /// AI streaming abstractions and provider implementations
 pub mod streaming;
+mod streaming_chunks;
 /// AI Data Transfer Objects (DTOs)
 pub mod types;
 // Re-export public surface so existing callers need no changes
