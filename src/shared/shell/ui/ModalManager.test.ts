@@ -111,7 +111,7 @@ describe('ModalManager lifecycle', () => {
         expect(closeSpy).toHaveBeenCalledTimes(1);
     });
 
-    it('should cancel pending filter transition when the modal closes', () => {
+    it('should switch filters without leaving transient list styles', () => {
         vi.useFakeTimers();
 
         modalManager = createManager((capability) =>
@@ -148,7 +148,7 @@ describe('ModalManager lifecycle', () => {
 
         const listEl = document.getElementById('app-modal-list') as HTMLElement;
 
-        expect(populateSpy).toHaveBeenCalledTimes(1);
+        expect(populateSpy).toHaveBeenCalledTimes(2);
         expect(listEl.style.opacity).toBe('');
         expect(listEl.style.transform).toBe('');
     });

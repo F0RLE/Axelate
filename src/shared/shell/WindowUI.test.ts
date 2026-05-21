@@ -60,6 +60,7 @@ describe('WindowUI lifecycle', () => {
             toggleMaximize: vi.fn().mockResolvedValue(undefined),
             setSize: vi.fn().mockResolvedValue(undefined),
             changeZoom: vi.fn().mockResolvedValue(1),
+            persistZoom: vi.fn().mockResolvedValue(undefined),
             getZoom: vi.fn().mockReturnValue(1),
             getConfig: vi.fn().mockReturnValue(null),
         } as unknown as WindowService;
@@ -225,9 +226,10 @@ describe('WindowUI lifecycle', () => {
         });
 
         document.getElementById('splash-screen')?.classList.add('hidden');
+        document.body.classList.add('ui-hidden');
         (uiLocal as unknown as { _checkWidth: () => void })._checkWidth();
-        expect(dialog.showModal).toHaveBeenCalled();
-        expect(document.body.classList.contains('ui-hidden')).toBe(true);
+        expect(dialog.showModal).not.toHaveBeenCalled();
+        expect(document.body.classList.contains('ui-hidden')).toBe(false);
 
         const maximizeEvent = new KeyboardEvent('keydown', {
             key: 'F11',
@@ -377,6 +379,7 @@ describe('WindowUI lifecycle', () => {
         const service = (ui as unknown as { _service: WindowService })._service as unknown as {
             setMonitoringPaused: ReturnType<typeof vi.fn>;
             changeZoom: ReturnType<typeof vi.fn>;
+            persistZoom: ReturnType<typeof vi.fn>;
         };
         ui.init();
 
@@ -419,6 +422,10 @@ describe('WindowUI lifecycle', () => {
         await Promise.resolve();
         vi.advanceTimersByTime(20);
         expect(service.changeZoom).toHaveBeenCalledWith(0.07);
+        await vi.advanceTimersByTimeAsync(9_999);
+        expect(service.persistZoom).not.toHaveBeenCalled();
+        await vi.advanceTimersByTimeAsync(1);
+        expect(service.persistZoom).toHaveBeenCalledTimes(1);
 
         service.changeZoom.mockRejectedValueOnce(new Error('zoom failed'));
         document.dispatchEvent(
@@ -559,7 +566,7 @@ describe('WindowUI lifecycle', () => {
 
         globalThis.dispatchEvent(new Event('resize'));
         vi.advanceTimersByTime(250);
-        expect(dialog.open).toBe(true);
+        expect(dialog.open).not.toBe(true);
         expect(service.checkResolutionChange).toHaveBeenCalled();
         await (
             uiLocal as unknown as {
@@ -571,7 +578,7 @@ describe('WindowUI lifecycle', () => {
         Object.defineProperty(globalThis, 'innerWidth', { configurable: true, value: 2000 });
         Object.defineProperty(globalThis, 'innerHeight', { configurable: true, value: 1200 });
         (uiLocal as unknown as { _checkWidth: () => void })._checkWidth();
-        expect(dialog.close).toHaveBeenCalled();
+        expect(dialog.showModal).not.toHaveBeenCalled();
 
         service.isMaximized.mockRejectedValueOnce(new Error('policy failed'));
         await (
@@ -579,7 +586,7 @@ describe('WindowUI lifecycle', () => {
         )._performResizeCheck();
     });
 
-    it('should account for active css zoom when checking warnings', () => {
+    it('should not show warning when zoom is capped to fit the viewport', () => {
         document.body.innerHTML = `
             <div id="splash-screen" class="hidden"></div>
             <dialog id="global-width-warning"></dialog>
@@ -600,7 +607,7 @@ describe('WindowUI lifecycle', () => {
             thresholds: { warningWidth: 800, warningHeight: 600 },
         });
         service.getZoom.mockReturnValue(1);
-        document.documentElement.style.setProperty('--app-zoom', '2.000');
+        document.documentElement.style.setProperty('--app-zoom', '1.125');
 
         const dialog = document.getElementById('global-width-warning') as HTMLDialogElement;
         dialog.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
@@ -612,7 +619,7 @@ describe('WindowUI lifecycle', () => {
 
         uiLocal.init();
 
-        expect(dialog.showModal).toHaveBeenCalled();
+        expect(dialog.showModal).not.toHaveBeenCalled();
     });
 
     it('should not double-count native zoom when checking warnings', () => {

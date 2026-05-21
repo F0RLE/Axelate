@@ -9,6 +9,7 @@ export type WindowZoomSettingsStore = {
 
 export type WindowZoomApplyOptions = {
     syncNativeZoom?: boolean;
+    effectiveZoom?: number;
 };
 
 type WindowZoomRuntime = {
@@ -34,12 +35,16 @@ export class WindowServiceZoom {
 
     public async setZoom(zoom: number, options: WindowZoomApplyOptions = {}): Promise<number> {
         const nextZoom = Math.max(this._deps.minZoom, Math.min(this._deps.maxZoom, zoom));
-        const shouldSyncNativeZoom = options.syncNativeZoom ?? true;
+        const effectiveZoom = Math.max(
+            this._deps.minZoom,
+            Math.min(this._deps.maxZoom, options.effectiveZoom ?? nextZoom),
+        );
+        const shouldSyncNativeZoom = options.syncNativeZoom ?? false;
 
         if (shouldSyncNativeZoom && this._deps.bridge.isTauri()) {
             try {
                 await this._deps.bridge.invoke('set_webview_zoom', {
-                    zoom: nextZoom,
+                    zoom: effectiveZoom,
                 });
             } catch (error) {
                 this._deps.tracer.error(`[WindowService] Zoom error: ${String(error)}`);
@@ -47,7 +52,9 @@ export class WindowServiceZoom {
         }
 
         this._deps.runtime.setAppZoomCss(
-            shouldSyncNativeZoom && this._deps.bridge.isTauri() ? '1.000' : nextZoom.toFixed(3),
+            shouldSyncNativeZoom && this._deps.bridge.isTauri()
+                ? '1.000'
+                : effectiveZoom.toFixed(3),
         );
 
         const settingsStore = this._deps.getSettingsStore();
@@ -61,6 +68,30 @@ export class WindowServiceZoom {
         }
 
         return nextZoom;
+    }
+
+    public async persistZoom(zoom: number): Promise<void> {
+        const nextZoom = Math.max(this._deps.minZoom, Math.min(this._deps.maxZoom, zoom));
+
+        if (this._deps.bridge.isTauri()) {
+            try {
+                await this._deps.bridge.invoke('save_current_resolution_zoom', {
+                    zoom: nextZoom,
+                });
+            } catch (error) {
+                this._deps.tracer.error(`[WindowService] Zoom persist error: ${String(error)}`);
+            }
+        }
+
+        const settingsStore = this._deps.getSettingsStore();
+        if (settingsStore !== null) {
+            const screen = this._deps.runtime.getScreenSize();
+            settingsStore.setZoomLevel(nextZoom);
+            settingsStore.setResolutionZoom(
+                `${screen.width.toString()}x${screen.height.toString()}`,
+                nextZoom,
+            );
+        }
     }
 
     public async getInitialZoomWithFallback(fallback: number): Promise<number> {

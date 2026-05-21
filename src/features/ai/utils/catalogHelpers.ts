@@ -57,6 +57,22 @@ export function getModelsFromProvider(
     return providerData?.models ?? [];
 }
 
+export function getModelPriceRank(model: IAIModelData): number {
+    const inputPrice = model.pricing?.input_per_1m ?? 0;
+    const outputPrice = model.pricing?.output_per_1m ?? 0;
+    return inputPrice + outputPrice;
+}
+
+export function sortModelsByPrice(models: IAIModelData[]): IAIModelData[] {
+    return models
+        .map((model, index) => ({ model, index }))
+        .sort((left, right) => {
+            const priceDiff = getModelPriceRank(right.model) - getModelPriceRank(left.model);
+            return priceDiff !== 0 ? priceDiff : left.index - right.index;
+        })
+        .map(({ model }) => model);
+}
+
 /**
  * Locates specific model data records within the provider's context.
  *
@@ -105,7 +121,7 @@ export function getApiModelId(
 }
 
 export function getMostPowerfulModel(catalog: IAICatalogApp[], providerId: string): string {
-    const models = getModelsFromProvider(catalog, providerId);
+    const models = sortModelsByPrice(getModelsFromProvider(catalog, providerId));
     return models[0]?.id ?? '';
 }
 

@@ -127,7 +127,6 @@
     "ui.gemini.stats.speed": "Скорость",
     "ui.gemini.status.retry": "Лимит запросов. Повтор через {seconds}с...",
     "ui.gpt.key_check_btn": "Проверить",
-    "ui.gpt.model.gpt54.desc": "Лучшая модель для агентных задач, кодинга и профессиональных сценариев",
     "ui.gpt.model.gpt54mini.desc": "Самая сильная mini-модель для кодинга, computer use и субагентов",
     "ui.gpt.model.gpt54nano.desc": "Самая доступная модель класса GPT-5.4 для простых массовых задач",
     "ui.gpt.image.gpt5_image.desc": "OpenAI GPT-5 Image с более сильным reasoning, премиальной генерацией изображений и детальным редактированием",
@@ -226,7 +225,6 @@
     "ui.launcher.web.downloads_subtitle": "Управление загрузками моделей и модулей",
     "ui.launcher.web.eta_label": "Осталось",
     "ui.launcher.web.edit_last": "Изменить последнее сообщение",
-    "ui.launcher.web.expand_window": "Разверните окно, чтобы увидеть нормальное отображение интерфейса",
     "ui.launcher.web.home": "Главное меню",
     "ui.launcher.web.home_title": "Главное меню",
     "ui.launcher.web.information": "Информация",
@@ -470,5 +468,7 @@
     "ui.launcher.engine.sdcpp.name": "Stable Diffusion.cpp",
     "ui.launcher.engine.sdcpp.desc": "Лёгкий движок генерации изображений.",
     "ui.launcher.engine.comfyui.name": "ComfyUI",
-    "ui.launcher.engine.comfyui.desc": "Нодовый движок workflow для изображений с упором на максимальное качество и контроль."
+    "ui.launcher.engine.comfyui.desc": "Нодовый движок workflow для изображений с упором на максимальное качество и контроль.",
+    "ui.gpt.model.gpt55.desc": "Фронтирная модель для сложных профессиональных задач с более сильным reasoning, высокой надёжностью и лучшей токен-эффективностью",
+    "ui.gpt.model.gpt55pro.desc": "Модель повышенной мощности для глубокого reasoning и точности в сложных high-stakes задачах"
 }

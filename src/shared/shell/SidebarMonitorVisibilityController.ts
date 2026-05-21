@@ -10,6 +10,10 @@ type SidebarMonitorLogger = {
     debug: (message: string) => void;
 };
 
+type SidebarMonitorUpdateOptions = {
+    availableHeight?: number;
+};
+
 export class SidebarMonitorVisibilityController {
     private _minMonitorHeight = 0;
 
@@ -19,8 +23,11 @@ export class SidebarMonitorVisibilityController {
         this._minMonitorHeight = elements.monitor.offsetHeight || 300;
     }
 
-    public update(elements: SidebarMonitorElements): void {
-        const sidebarHeight = elements.sidebar.clientHeight;
+    public update(
+        elements: SidebarMonitorElements,
+        options: SidebarMonitorUpdateOptions = {},
+    ): boolean {
+        const sidebarHeight = options.availableHeight ?? elements.sidebar.clientHeight;
         const requiredSpace = this._calculateRequiredSpace(elements);
         const overflowAllowancePx = Math.max(32, Math.round(elements.bottom.offsetHeight * 0.6));
         const spaceDeficit = requiredSpace - sidebarHeight;
@@ -34,7 +41,7 @@ export class SidebarMonitorVisibilityController {
             elements.monitor.classList.add('adaptive-hidden');
             elements.sidebar.classList.add('monitor-hidden');
             this._tracer.debug('[SidebarUI] Hiding monitor due to overflow or insufficient space');
-            return;
+            return false;
         }
 
         if (
@@ -45,7 +52,10 @@ export class SidebarMonitorVisibilityController {
             elements.monitor.classList.remove('adaptive-hidden');
             elements.sidebar.classList.remove('monitor-hidden');
             this._tracer.debug('[SidebarUI] Showing monitor (space restored)');
+            return true;
         }
+
+        return isVisible;
     }
 
     private _calculateRequiredSpace(elements: SidebarMonitorElements): number {

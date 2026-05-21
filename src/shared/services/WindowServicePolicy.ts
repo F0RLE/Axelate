@@ -75,7 +75,7 @@ export class WindowServicePolicy {
             this._deps.getCurrentZoom(),
         );
         if (zoom !== null) {
-            await this._deps.setZoom(zoom, { syncNativeZoom: true });
+            await this._deps.setZoom(zoom);
         }
     }
 }

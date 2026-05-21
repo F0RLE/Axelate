@@ -138,6 +138,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         window_settings::save_maximized_state,
         window_settings::save_zoom_level,
         window_settings::set_webview_zoom,
+        window_settings::save_current_resolution_zoom,
         window_settings::get_webview_zoom,
         window_settings::get_resolution_zoom,
         window_settings::get_window_config,

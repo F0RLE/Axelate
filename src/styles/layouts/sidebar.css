@@ -20,6 +20,9 @@
     -webkit-app-region: no-drag;
     z-index: auto;
     box-sizing: border-box;
+    transition:
+        width 0.28s var(--ease-smooth),
+        padding 0.28s var(--ease-smooth);
 }
 
 /* ... */
@@ -41,7 +44,9 @@
     padding: 0;
     transition:
         background 0.2s ease,
-        opacity 0.2s ease;
+        opacity 0.2s ease,
+        padding 0.28s var(--ease-smooth),
+        margin 0.28s var(--ease-smooth);
 }
 
 .logo-icon-wrapper {
@@ -57,8 +62,10 @@
     opacity: 0;
     visibility: hidden;
     transition:
-        opacity 0.2s ease,
-        visibility 0.2s;
+        opacity 0.28s var(--ease-smooth),
+        transform 0.28s var(--ease-smooth),
+        visibility 0.28s;
+    transform: scale(0.96);
 }
 
 .status-under-icon {
@@ -323,6 +330,7 @@
     justify-content: center;
     align-items: center;
     height: 60px; /* Explicit height for compact button area */
+    transform: scale(1);
 }
 
 /* Hover highlight removed as per request */
@@ -352,7 +360,9 @@
 
 #sidebar.collapsed .nav-btn:hover {
     transform: none;
-    background: rgba(138, 43, 226, 0.2); /* Optional: keep the background change but no movement */
+    background: rgba(255, 255, 255, 0.018);
+    color: #ffffff;
+    border: none !important;
 }
 
 #sidebar.collapsed .sidebar-lang-switcher {
@@ -430,6 +440,17 @@
     margin-bottom: 0 !important;
 }
 
+#sidebar .main-menu,
+#sidebar .bottom-menu,
+#sidebar .nav-section {
+    transition:
+        margin 0.28s var(--ease-smooth),
+        padding 0.28s var(--ease-smooth),
+        width 0.28s var(--ease-smooth),
+        gap 0.28s var(--ease-smooth),
+        transform 0.28s var(--ease-smooth);
+}
+
 #system-monitor {
     margin: 0 !important;
     border: none !important;
@@ -482,6 +503,8 @@
         opacity 0.2s cubic-bezier(0.4, 0, 0.2, 1),
         margin 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         padding 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        gap 0.3s cubic-bezier(0.4, 0, 0.2, 1),
+        justify-content 0.3s cubic-bezier(0.4, 0, 0.2, 1),
         background 0.2s ease,
         border-color 0.2s ease,
         box-shadow 0.2s ease,
@@ -583,10 +606,19 @@
     overflow: hidden;
     white-space: nowrap;
     text-overflow: ellipsis;
+    transform-origin: left center;
+    transition:
+        opacity 0.24s var(--ease-smooth),
+        width 0.28s var(--ease-smooth),
+        margin 0.28s var(--ease-smooth),
+        transform 0.28s var(--ease-smooth),
+        visibility 0.28s;
 }
 
 body.snapping #sidebar {
-    transition: width 0.3s var(--ease-smooth);
+    transition:
+        width 0.3s var(--ease-smooth),
+        padding 0.3s var(--ease-smooth);
 }
 
 body.snapping .nav-btn span,

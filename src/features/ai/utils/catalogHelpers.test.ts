@@ -9,6 +9,7 @@ import {
     getProviderFromCatalog,
     getSelectedModel,
     resolveProviderModel,
+    sortModelsByPrice,
 } from './catalogHelpers';
 import type { IAICatalogApp } from '../types/aiTypes';
 
@@ -72,9 +73,36 @@ describe('catalogHelpers', () => {
             expect(getApiModelId(catalog, 'gemini', 'broken')).toBe('broken');
         });
 
-        it('returns first model as most powerful simple fallback', () => {
-            expect(getMostPowerfulModel(catalog, 'gemini')).toBe('gemini-pro');
+        it('returns highest priced model as most powerful fallback', () => {
+            const pricedCatalog: IAICatalogApp[] = [
+                createAppMock('gpt', [
+                    {
+                        id: 'gpt-5.5',
+                        pricing: { input_per_1m: 5, output_per_1m: 30 },
+                    },
+                    {
+                        id: 'gpt-5.5-pro',
+                        pricing: { input_per_1m: 30, output_per_1m: 180 },
+                    },
+                ]),
+            ];
+
+            expect(getMostPowerfulModel(pricedCatalog, 'gpt')).toBe('gpt-5.5-pro');
             expect(getMostPowerfulModel(catalog, 'gpt')).toBe('');
+        });
+
+        it('sorts models by total token price descending', () => {
+            const models = [
+                { id: 'free' },
+                { id: 'regular', pricing: { input_per_1m: 5, output_per_1m: 30 } },
+                { id: 'pro', pricing: { input_per_1m: 30, output_per_1m: 180 } },
+            ];
+
+            expect(sortModelsByPrice(models as never).map((model) => model.id)).toEqual([
+                'pro',
+                'regular',
+                'free',
+            ]);
         });
 
         it('prefers saved model before catalog fallback', () => {

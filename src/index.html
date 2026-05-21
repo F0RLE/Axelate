@@ -1,4 +1,4 @@
-﻿<!DOCTYPE html>
+﻿<!doctype html>
 <html lang="en">
     <head>
         <meta charset="UTF-8" />
@@ -10,11 +10,15 @@
         <title>Axelate (Beta)</title>
         <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
         <link rel="stylesheet" href="styles/base/fonts.css" />
-        <link rel="preload" href="assets/fonts/Monocraft.woff2" as="font" type="font/woff2" crossorigin />
+        <link
+            rel="preload"
+            href="assets/fonts/Monocraft.woff2"
+            as="font"
+            type="font/woff2"
+            crossorigin
+        />
 
-
-
-    <link rel="stylesheet" href="styles/base/splash.css" />
+        <link rel="stylesheet" href="styles/base/splash.css" />
     </head>
 
     <body class="app-body no-overflow">
@@ -33,339 +37,277 @@
         <script type="module" src="assets/logos.ts"></script>
 
         <div id="app-viewport">
-        <!-- Sidebar Placeholder (Loaded dynamically via TemplateLoader) -->
-        <aside
-            id="sidebar"
-            class="fade-in-init"
-            data-i18n-aria-label="ui.launcher.web.main_menu"
-            aria-label="Main Menu"
-        ></aside>
+            <!-- Sidebar Placeholder (Loaded dynamically via TemplateLoader) -->
+            <aside
+                id="sidebar"
+                class="fade-in-init"
+                data-i18n-aria-label="ui.launcher.web.main_menu"
+                aria-label="Main Menu"
+            ></aside>
 
-        <!-- App Header (Glass Panel) -->
-        <header
-            id="app-header"
-            class="fade-in-init"
-        >
-            <!-- Left: Sound & Language Switcher -->
-            <div class="header-left-group">
-                <button class="lang-btn sound-toggle-btn" id="sound-toggle-btn" data-i18n-title="ui.launcher.web.toggle_sound" title="Toggle Sound">
-                    <svg class="icon">
-                        <use href="#icon-volume"></use>
-                    </svg>
-                </button>
-
-                <div class="lang-switcher-root">
-                    <!-- Sliding Menu Items (Other Languages) -->
-                    <div class="lang-menu-items" id="lang-menu-items">
-                        <button
-                            class="lang-btn"
-                            data-lang="en"
-                        >
-                            <span class="flag-icon flag-gb"></span>
-                        </button>
-                        <button
-                            class="lang-btn"
-                            data-lang="ru"
-                        >
-                            <span class="flag-icon flag-ru"></span>
-                        </button>
-                        <button
-                            class="lang-btn"
-                            data-lang="zh"
-                        >
-                            <span class="flag-icon flag-cn"></span>
-                        </button>
-                    </div>
-
-                    <!-- Current Language Trigger -->
+            <!-- App Header (Glass Panel) -->
+            <header id="app-header" class="fade-in-init">
+                <!-- Left: Sound & Language Switcher -->
+                <div class="header-left-group">
                     <button
-                        class="lang-btn current-lang-trigger"
-                        id="current-lang-trigger"
+                        class="lang-btn sound-toggle-btn"
+                        id="sound-toggle-btn"
+                        data-i18n-title="ui.launcher.web.toggle_sound"
+                        title="Toggle Sound"
                     >
-                        <span class="flag-icon flag-gb"></span>
+                        <svg class="icon">
+                            <use href="#icon-volume"></use>
+                        </svg>
                     </button>
-                </div>
-            </div>
 
-            <!-- Right: Window Controls -->
-            <div class="top-controls">
-                <button
-                    class="window-control-btn minimize-btn"
-                    id="minimize-btn"
-                    data-i18n-aria-label="ui.launcher.button.minimize"
-                    data-i18n-title="ui.launcher.button.minimize"
-                    aria-label="Minimize"
-                    title="Minimize"
-                >
-                    <svg class="icon">
-                        <use href="#icon-minimize"></use>
-                    </svg>
-                </button>
-                <button
-                    class="window-control-btn maximize-btn"
-                    id="maximize-btn"
-                    data-i18n-aria-label="ui.launcher.button.maximize"
-                    data-i18n-title="ui.launcher.button.maximize"
-                    aria-label="Maximize"
-                    title="Maximize"
-                >
-                    <svg class="icon" id="maximize-icon">
-                        <use href="#icon-maximize"></use>
-                    </svg>
-                </button>
-                <button
-                    class="window-control-btn close-btn"
-                    id="close-btn"
-                    data-i18n-aria-label="ui.launcher.button.close"
-                    data-i18n-title="ui.launcher.button.close"
-                    aria-label="Close"
-                    title="Close"
-                >
-                    <svg class="icon">
-                        <use href="#icon-close"></use>
-                    </svg>
-                </button>
-            </div>
-        </header>
-
-
-
-
-
-
-        <!-- Toast Container -->
-        <div class="toast-container" id="toast-container"></div>
-
-        <!-- Action Feedback -->
-        <div class="action-feedback" id="action-feedback">
-            <div class="action-feedback-icon"></div>
-        </div>
-
-        <main id="main-area" class="fade-in-init">
-            <!-- Pages will be dynamically injected here by init.ts -->
-            <div id="page-home" class="page"></div>
-            <div id="page-chat" class="page"></div>
-            <div id="page-modules" class="page"></div>
-            <div id="page-marketplace" class="page"></div>
-            <div id="page-downloads" class="page"></div>
-            <div id="page-console" class="page"></div>
-            <div id="page-settings" class="page"></div>
-
-            <dialog id="app-selection-modal" class="modal-backdrop hidden">
-                <div class="app-modal">
-                    <div class="app-modal-main">
-                        <div class="app-modal-header">
-                            <!-- Static title for non-AI categories -->
-                            <h2 id="app-modal-title" class="app-modal-title">Select App</h2>
-                            <!-- Tab row for AI categories (shown/hidden by ModalManager) -->
-                            <div id="app-modal-tab-row" class="app-modal-tab-row hidden">
-                                <button id="filter-text-btn" class="app-modal-tab active" data-i18n="ui.launcher.modules.modal.filter_text">Text</button>
-                                <button id="filter-image-btn" class="app-modal-tab" data-i18n="ui.launcher.modules.modal.filter_image">Image</button>
-                            </div>
-                            <button
-                                id="close-app-selection-btn"
-                                class="app-close-btn"
-                                autofocus
-                                data-i18n-aria-label="ui.launcher.button.close"
-                                data-i18n-title="ui.launcher.button.close"
-                                aria-label="Close"
-                                title="Close"
-                            >
-                                <svg class="icon"><use href="#icon-close"></use></svg>
+                    <div class="lang-switcher-root">
+                        <!-- Sliding Menu Items (Other Languages) -->
+                        <div class="lang-menu-items" id="lang-menu-items">
+                            <button class="lang-btn" data-lang="en">
+                                <span class="flag-icon flag-gb"></span>
+                            </button>
+                            <button class="lang-btn" data-lang="ru">
+                                <span class="flag-icon flag-ru"></span>
+                            </button>
+                            <button class="lang-btn" data-lang="zh">
+                                <span class="flag-icon flag-cn"></span>
                             </button>
                         </div>
-                        <div class="app-modal-body">
-                            <div id="app-modal-list" class="app-grid">
-                                <!-- Apps will be injected here -->
+
+                        <!-- Current Language Trigger -->
+                        <button class="lang-btn current-lang-trigger" id="current-lang-trigger">
+                            <span class="flag-icon flag-gb"></span>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Right: Window Controls -->
+                <div class="top-controls">
+                    <button
+                        class="window-control-btn minimize-btn"
+                        id="minimize-btn"
+                        data-i18n-aria-label="ui.launcher.button.minimize"
+                        data-i18n-title="ui.launcher.button.minimize"
+                        aria-label="Minimize"
+                        title="Minimize"
+                    >
+                        <svg class="icon">
+                            <use href="#icon-minimize"></use>
+                        </svg>
+                    </button>
+                    <button
+                        class="window-control-btn maximize-btn"
+                        id="maximize-btn"
+                        data-i18n-aria-label="ui.launcher.button.maximize"
+                        data-i18n-title="ui.launcher.button.maximize"
+                        aria-label="Maximize"
+                        title="Maximize"
+                    >
+                        <svg class="icon" id="maximize-icon">
+                            <use href="#icon-maximize"></use>
+                        </svg>
+                    </button>
+                    <button
+                        class="window-control-btn close-btn"
+                        id="close-btn"
+                        data-i18n-aria-label="ui.launcher.button.close"
+                        data-i18n-title="ui.launcher.button.close"
+                        aria-label="Close"
+                        title="Close"
+                    >
+                        <svg class="icon">
+                            <use href="#icon-close"></use>
+                        </svg>
+                    </button>
+                </div>
+            </header>
+
+            <!-- Toast Container -->
+            <div class="toast-container" id="toast-container"></div>
+
+            <!-- Action Feedback -->
+            <div class="action-feedback" id="action-feedback">
+                <div class="action-feedback-icon"></div>
+            </div>
+
+            <main id="main-area" class="fade-in-init">
+                <!-- Pages will be dynamically injected here by init.ts -->
+                <div id="page-home" class="page"></div>
+                <div id="page-chat" class="page"></div>
+                <div id="page-modules" class="page"></div>
+                <div id="page-marketplace" class="page"></div>
+                <div id="page-downloads" class="page"></div>
+                <div id="page-console" class="page"></div>
+                <div id="page-settings" class="page"></div>
+
+            </main>
+
+            <dialog id="lang-modal" class="modal-overlay hidden">
+                <div class="modal">
+                    <div class="modal-title" data-i18n="ui.launcher.web.select_language">
+                        Select Language
+                    </div>
+                    <div class="modal-desc" data-i18n="ui.launcher.web.select_language_desc">
+                        Choose your preferred language for the interface
+                    </div>
+                    <div class="lang-selector">
+                        <div class="lang-option lang-modal-btn" data-lang="en">
+                            <div class="lang-option-icon">🇬🇧</div>
+                            <div class="lang-option-name" data-i18n="ui.launcher.language.english">
+                                English
                             </div>
+                            <div class="lang-option-native">English</div>
+                        </div>
+                        <div class="lang-option lang-modal-btn" data-lang="ru">
+                            <div class="lang-option-icon">🇷🇺</div>
+                            <div class="lang-option-name" data-i18n="ui.launcher.language.russian">
+                                Russian
+                            </div>
+                            <div class="lang-option-native">Русский</div>
+                        </div>
+                        <div class="lang-option lang-modal-btn" data-lang="zh">
+                            <div class="lang-option-icon">🇨🇳</div>
+                            <div class="lang-option-name" data-i18n="ui.launcher.language.chinese">
+                                Chinese
+                            </div>
+                            <div class="lang-option-native">中文</div>
                         </div>
                     </div>
+                    <button
+                        id="confirm-lang-btn"
+                        class="btn btn-primary"
+                        data-i18n="ui.launcher.web.confirm"
+                    >
+                        Confirm
+                    </button>
                 </div>
             </dialog>
 
+            <!-- Close Confirmation Modal -->
+            <dialog id="close-confirm-modal" class="modal-overlay hidden">
+                <div class="modal close-confirm-modal">
+                    <div
+                        class="modal-title close-confirm-title"
+                        data-i18n="ui.launcher.modal.confirm_close_title"
+                    >
+                        Confirm Close
+                    </div>
+                    <div
+                        class="modal-message close-confirm-message"
+                        data-i18n="ui.launcher.web.close_warning"
+                    >
+                        Are you sure you want to close the launcher? All services will be stopped.
+                    </div>
+                    <div class="modal-actions">
+                        <button
+                            id="cancel-close-btn"
+                            class="modal-btn modal-btn-cancel"
+                            data-i18n="ui.launcher.button.cancel"
+                        >
+                            Cancel
+                        </button>
+                        <button
+                            id="confirm-close-btn"
+                            class="modal-btn modal-btn-confirm"
+                            data-i18n="ui.launcher.button.close"
+                        >
+                            Close
+                        </button>
+                    </div>
+                </div>
+            </dialog>
+        </div>
 
-        <!-- Module Settings Modal (inside main for proper positioning) -->
-            <dialog
-                id="module-settings-modal"
-                class="modal-backdrop hidden"
-            >
-                <div class="app-modal">
-                    <div class="app-modal-main">
-                        <div class="app-modal-header">
-                            <h2
-                                id="module-settings-title"
-                                class="app-modal-title"
-                                data-i18n="ui.launcher.module.settings_title"
-                            >
-                                Module Settings
-                            </h2>
+        <!-- App Selection Modal (outside app viewport to share stable zoom-aware modal geometry) -->
+        <dialog id="app-selection-modal" class="modal-backdrop hidden">
+            <div class="app-modal">
+                <div class="app-modal-main">
+                    <div class="app-modal-header">
+                        <!-- Static title for non-AI categories -->
+                        <h2 id="app-modal-title" class="app-modal-title">Select App</h2>
+                        <!-- Tab row for AI categories (shown/hidden by ModalManager) -->
+                        <div id="app-modal-tab-row" class="app-modal-tab-row hidden">
                             <button
-                                id="close-module-settings-btn"
-                                class="app-close-btn"
-                                data-i18n-aria-label="ui.launcher.button.close"
-                                data-i18n-title="ui.launcher.button.close"
-                                aria-label="Close"
-                                title="Close"
+                                id="filter-text-btn"
+                                class="app-modal-tab active"
+                                data-i18n="ui.launcher.modules.modal.filter_text"
                             >
-                                <svg class="icon">
-                                    <use href="#icon-close"></use>
-                                </svg>
+                                Text
+                            </button>
+                            <button
+                                id="filter-image-btn"
+                                class="app-modal-tab"
+                                data-i18n="ui.launcher.modules.modal.filter_image"
+                            >
+                                Image
                             </button>
                         </div>
-                        <div class="app-modal-body">
+                        <button
+                            id="close-app-selection-btn"
+                            class="app-close-btn"
+                            autofocus
+                            data-i18n-aria-label="ui.launcher.button.close"
+                            data-i18n-title="ui.launcher.button.close"
+                            aria-label="Close"
+                            title="Close"
+                        >
+                            <svg class="icon"><use href="#icon-close"></use></svg>
+                        </button>
+                    </div>
+                    <div class="app-modal-body">
+                        <div id="app-modal-list" class="app-grid">
+                            <!-- Apps will be injected here -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </dialog>
+
+        <!-- Module Settings Modal (outside app viewport to keep iframe rendering crisp under CSS zoom) -->
+        <dialog id="module-settings-modal" class="modal-backdrop hidden">
+            <div class="app-modal">
+                <div class="app-modal-main">
+                    <div class="app-modal-header">
+                        <h2
+                            id="module-settings-title"
+                            class="app-modal-title"
+                            data-i18n="ui.launcher.module.settings_title"
+                        >
+                            Module Settings
+                        </h2>
+                        <button
+                            id="close-module-settings-btn"
+                            class="app-close-btn"
+                            data-i18n-aria-label="ui.launcher.button.close"
+                            data-i18n-title="ui.launcher.button.close"
+                            aria-label="Close"
+                            title="Close"
+                        >
+                            <svg class="icon">
+                                <use href="#icon-close"></use>
+                            </svg>
+                        </button>
+                    </div>
+                    <div class="app-modal-body">
+                        <div id="module-settings-content" class="module-settings-content">
+                            <!-- Dynamic settings will be injected here -->
                             <div
-                                id="module-settings-content"
-                                class="module-settings-content"
+                                id="module-config-modal-active"
+                                class="module-config-modal-active"
                             >
-                                <!-- Dynamic settings will be injected here -->
-                                <div id="module-config-modal-active" class="module-config-modal-active">
-                                    <div class="module-settings-empty">
-                                        <span data-i18n="ui.launcher.module.no_settings">No settings available for this module</span>
-                                    </div>
+                                <div class="module-settings-empty">
+                                    <span data-i18n="ui.launcher.module.no_settings"
+                                        >No settings available for this module</span
+                                    >
                                 </div>
                             </div>
                         </div>
                     </div>
                 </div>
-            </dialog>
-        </main>
-
-        <dialog id="lang-modal" class="modal-overlay hidden">
-            <div class="modal">
-                <div
-                    class="modal-title"
-                    data-i18n="ui.launcher.web.select_language"
-                >
-                    Select Language
-                </div>
-                <div
-                    class="modal-desc"
-                    data-i18n="ui.launcher.web.select_language_desc"
-                >
-                    Choose your preferred language for the interface
-                </div>
-                <div class="lang-selector">
-                    <div
-                        class="lang-option lang-modal-btn"
-                        data-lang="en"
-                    >
-                        <div class="lang-option-icon">🇬🇧</div>
-                        <div
-                            class="lang-option-name"
-                            data-i18n="ui.launcher.language.english"
-                        >
-                            English
-                        </div>
-                        <div class="lang-option-native">English</div>
-                    </div>
-                    <div
-                        class="lang-option lang-modal-btn"
-                        data-lang="ru"
-                    >
-                        <div class="lang-option-icon">🇷🇺</div>
-                            <div
-                                class="lang-option-name"
-                                data-i18n="ui.launcher.language.russian"
-                            >
-                                Russian
-                            </div>
-                            <div class="lang-option-native">Русский</div>
-                    </div>
-                    <div
-                        class="lang-option lang-modal-btn"
-                        data-lang="zh"
-                    >
-                        <div class="lang-option-icon">🇨🇳</div>
-                        <div
-                            class="lang-option-name"
-                            data-i18n="ui.launcher.language.chinese"
-                        >
-                            Chinese
-                        </div>
-                        <div class="lang-option-native">中文</div>
-                    </div>
-                </div>
-                <button
-                    id="confirm-lang-btn"
-                    class="btn btn-primary"
-                    data-i18n="ui.launcher.web.confirm"
-                >
-                    Confirm
-                </button>
             </div>
         </dialog>
-
-        <!-- Module Settings Modal -->
-
-
-        <!-- Close Confirmation Modal -->
-        <dialog
-            id="close-confirm-modal"
-            class="modal-overlay hidden"
-        >
-            <div class="modal close-confirm-modal">
-                <div
-                    class="modal-title close-confirm-title"
-                    data-i18n="ui.launcher.modal.confirm_close_title"
-                >
-                    Confirm Close
-                </div>
-                <div
-                    class="modal-message close-confirm-message"
-                    data-i18n="ui.launcher.web.close_warning"
-                >
-                    Are you sure you want to close the launcher? All services
-                    will be stopped.
-                </div>
-                <div class="modal-actions">
-                    <button
-                        id="cancel-close-btn"
-                        class="modal-btn modal-btn-cancel"
-                        data-i18n="ui.launcher.button.cancel"
-                    >
-                        Cancel
-                    </button>
-                    <button
-                        id="confirm-close-btn"
-                        class="modal-btn modal-btn-confirm"
-                        data-i18n="ui.launcher.button.close"
-                    >
-                        Close
-                    </button>
-                </div>
-            </div>
-        </dialog>
-        </div>
 
         <script type="module" src="./app/init.ts"></script>
-
-        <!-- Global Width Warning Overlay (Native Dialog) -->
-        <dialog
-            id="global-width-warning"
-            class="width-warning"
-        >
-            <div class="width-warning-content">
-                <div class="width-warning-inner">
-                    <span class="warning-icon">⚠️</span>
-                    <span
-                        class="warning-text"
-                        data-i18n="ui.launcher.web.expand_window"
-                    >
-                        Expand window to see normal interface display
-                    </span>
-                    <div class="zoom-hint">
-                        <div class="zoom-icons" style="font-family: 'Monocraft', monospace;">
-                            <div class="ctrl-key" style="font-family: 'Monocraft', monospace;">CTRL</div>
-                            <span class="zoom-plus-icon">+</span>
-                            <div class="mouse-icon">
-                                <div class="wheel"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </dialog>
-
 
         <template id="tpl-taskbar-toggle">
             <button class="monitor-toggle-btn active">
@@ -397,9 +339,35 @@
         </template>
 
         <template id="tpl-empty-state-module">
-            <div style="grid-column: 1 / -1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 4rem 0; color: var(--text-muted); opacity: 0.7;">
-                <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" style="margin-bottom: 1rem;"><rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/></svg>
-                <span data-i18n="" style="font-size: 1.1rem;"></span>
+            <div
+                style="
+                    grid-column: 1 / -1;
+                    display: flex;
+                    flex-direction: column;
+                    align-items: center;
+                    justify-content: center;
+                    padding: 4rem 0;
+                    color: var(--text-muted);
+                    opacity: 0.7;
+                "
+            >
+                <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="48"
+                    height="48"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.5"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                    style="margin-bottom: 1rem"
+                >
+                    <rect width="18" height="18" x="3" y="3" rx="2" ry="2" />
+                    <circle cx="9" cy="9" r="2" />
+                    <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21" />
+                </svg>
+                <span data-i18n="" style="font-size: 1.1rem"></span>
             </div>
         </template>
 
@@ -412,6 +380,5 @@
             <!-- Status Html Placeholder -->
             <!-- Overlay Placeholder -->
         </template>
-
     </body>
 </html>

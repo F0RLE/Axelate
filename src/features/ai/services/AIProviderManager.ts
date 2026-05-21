@@ -200,7 +200,7 @@ export class AIProviderManager {
         }
 
         const fallbacks: Record<string, string> = {
-            gpt: 'gpt-5.4',
+            gpt: 'gpt-5.5',
             gemini: 'gemini-3-pro',
             local: 'llama-4-maverick',
         };

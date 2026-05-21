@@ -4,6 +4,7 @@ import type { IApp } from '@/shared/types/coreTypes';
 import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { IAIModelData } from '../types/aiTypes';
+import { sortModelsByPrice } from '../utils/catalogHelpers';
 import type { AISettingsViewPolicy } from './AISettingsViewPolicy';
 import {
     renderInternetAccessSection,
@@ -83,7 +84,19 @@ export class AISettingsContentRenderer {
 
         const statsArea = container?.querySelector<HTMLElement>(`#${appId}-model-stats`);
         if (statsArea !== null && statsArea !== undefined) {
-            statsArea.innerHTML = DOMPurify.sanitize(statsMarkup, PURIFY_CONFIG);
+            const sanitizedStatsMarkup = DOMPurify.sanitize(statsMarkup, PURIFY_CONFIG);
+            const statsPanel = statsArea.querySelector<HTMLElement>('.ai-content-panel');
+            const statsHeader =
+                statsPanel?.querySelector<HTMLElement>('.settings-card-header-center') ?? null;
+
+            if (statsPanel !== null && statsHeader !== null) {
+                statsPanel.replaceChildren(statsHeader);
+                statsPanel.insertAdjacentHTML('beforeend', sanitizedStatsMarkup);
+                i18nUI?.applyTranslations(statsPanel);
+                return;
+            }
+
+            statsArea.innerHTML = sanitizedStatsMarkup;
             i18nUI?.applyTranslations(statsArea);
         }
     }
@@ -110,7 +123,8 @@ export class AISettingsContentRenderer {
     }
 
     private _buildProviderMarkup(context: AISettingsRenderContext): string {
-        const { appId, models, savedModel, translate, viewPolicy } = context;
+        const { appId, savedModel, translate, viewPolicy } = context;
+        const models = sortModelsByPrice(context.models);
 
         return `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">

@@ -108,6 +108,8 @@ export const commands = {
 	 *  Uses native WebView zoom so layout metrics stay consistent with the rendered size.
 	 */
 	setWebviewZoom: (zoom: number) => typedError<null, AppError>(__TAURI_INVOKE("set_webview_zoom", { zoom })),
+	// Persist zoom for the active monitor resolution without touching the WebView.
+	saveCurrentResolutionZoom: (zoom: number) => typedError<null, AppError>(__TAURI_INVOKE("save_current_resolution_zoom", { zoom })),
 	// Retrieves current global `WebView` zoom level
 	getWebviewZoom: () => typedError<number, AppError>(__TAURI_INVOKE("get_webview_zoom")),
 	/**

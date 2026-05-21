@@ -195,6 +195,20 @@ export class ChatFileHandler {
     private async _processWithBackend(file: File): Promise<IFileProcessResult> {
         if (!this._bridge) return { error: '\n[Backend unavailable]' };
         try {
+            if (this._isImageFile(file)) {
+                const base64 = await readFileAsBase64(file);
+                return {
+                    content: '',
+                    attachment: {
+                        name: file.name,
+                        type: this._resolveImageMime(file),
+                        size: file.size,
+                        data_base64: base64,
+                        tokens: 258,
+                    },
+                };
+            }
+
             const buffer = await file.arrayBuffer();
             const bytes = Array.from(new Uint8Array(buffer));
 
@@ -226,20 +240,6 @@ export class ChatFileHandler {
                 };
             }
 
-            if (file.type.startsWith('image/')) {
-                const base64 = await readFileAsBase64(file);
-                return {
-                    content: '',
-                    attachment: {
-                        name: file.name,
-                        type: file.type,
-                        size: file.size,
-                        data_base64: base64,
-                        tokens: 258,
-                    },
-                };
-            }
-
             return { content: '' };
         } catch (e) {
             this._tracer.error(`[ChatFileHandler] Backend processing failed: ${String(e)}`);
@@ -265,13 +265,13 @@ export class ChatFileHandler {
             };
         }
 
-        if (file.type.startsWith('image/')) {
+        if (this._isImageFile(file)) {
             const base64 = await readFileAsBase64(file);
             return {
                 content: '',
                 attachment: {
                     name: file.name,
-                    type: file.type,
+                    type: this._resolveImageMime(file),
                     size: file.size,
                     data_base64: base64,
                     tokens: 258,
@@ -308,7 +308,7 @@ export class ChatFileHandler {
     }
 
     public async getFileTokenEstimate(file: File): Promise<number> {
-        if (file.type.startsWith('image/')) return 258;
+        if (this._isImageFile(file)) return 258;
         if (this._bridge?.isTauri() === true) {
             try {
                 const buffer = await file.arrayBuffer();
@@ -347,5 +347,22 @@ export class ChatFileHandler {
 
     private _getFileKey(file: File): string {
         return `${file.name}:${file.size}:${file.type}:${file.lastModified}`;
+    }
+
+    private _isImageFile(file: File): boolean {
+        if (file.type.startsWith('image/')) return true;
+        const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+        return ['png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'].includes(extension);
+    }
+
+    private _resolveImageMime(file: File): string {
+        if (file.type.startsWith('image/')) return file.type;
+        const extension = file.name.split('.').pop()?.toLowerCase() ?? '';
+        if (extension === 'jpg' || extension === 'jpeg') return 'image/jpeg';
+        if (extension === 'svg') return 'image/svg+xml';
+        if (extension === 'webp') return 'image/webp';
+        if (extension === 'gif') return 'image/gif';
+        if (extension === 'bmp') return 'image/bmp';
+        return 'image/png';
     }
 }

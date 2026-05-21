@@ -385,6 +385,8 @@ export function createCoreUiBundle(deps: CreateCoreUiBundleDeps): CoreUiBundle {
         deps.soundService,
         deps.tracer,
         deps.i18n,
+        undefined,
+        deps.eventBus,
     );
     const navigationUI = new NavigationUI(
         deps.navigation,

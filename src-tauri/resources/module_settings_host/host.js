@@ -144,6 +144,7 @@ function mountModuleFrame() {
 
     elements.frame.addEventListener("load", () => {
         state.frameLoaded = true;
+        applyEmbeddedModuleChrome();
         revealModuleWhenReady();
     });
     elements.frame.addEventListener("error", () => {
@@ -351,6 +352,91 @@ function hideOverlay() {
     postHostStatus("module-rendered");
 }
 
+function applyEmbeddedModuleChrome() {
+    if (!(elements.frame instanceof HTMLIFrameElement)) {
+        return;
+    }
+
+    let frameDocument = null;
+    try {
+        frameDocument = elements.frame.contentDocument;
+    } catch {
+        return;
+    }
+
+    if (frameDocument === null) {
+        return;
+    }
+
+    const styleId = "axelate-embedded-module-settings-style";
+    if (frameDocument.getElementById(styleId) !== null) {
+        return;
+    }
+
+    const style = frameDocument.createElement("style");
+    style.id = styleId;
+    style.textContent = `
+        :root {
+            color-scheme: dark;
+            --axelate-embedded-settings-bg: #080b12;
+        }
+
+        html,
+        body {
+            width: 100% !important;
+            min-width: 0 !important;
+            min-height: 100% !important;
+            margin: 0 !important;
+            background: var(--axelate-embedded-settings-bg) !important;
+        }
+
+        body {
+            overflow-x: hidden !important;
+        }
+
+        .app,
+        .root,
+        .page,
+        .settings-page,
+        .settings-shell,
+        .settings-console,
+        .settings-container,
+        .console,
+        .dashboard,
+        main {
+            max-width: none !important;
+            width: 100% !important;
+            margin: 0 !important;
+            box-shadow: none !important;
+        }
+
+        .settings-shell,
+        .settings-console,
+        .settings-container,
+        .console-shell,
+        .page-shell {
+            border-color: rgba(255, 255, 255, 0.06) !important;
+            border-radius: 0 !important;
+        }
+
+        .window,
+        .modal,
+        .dialog,
+        .panel.window,
+        .card.window {
+            box-shadow: none !important;
+        }
+    `;
+    const styleHost = frameDocument.head ?? frameDocument.documentElement;
+    if (styleHost === null) {
+        return;
+    }
+
+    styleHost.appendChild(style);
+    frameDocument.documentElement?.dataset &&
+        (frameDocument.documentElement.dataset.axelateEmbedded = "true");
+}
+
 function postHostStatus(type, message = "") {
     if (globalThis.parent === globalThis) {
         return;
@@ -420,10 +506,16 @@ function buildUrl(path) {
             ? normalizedPath
             : `${sessionPrefix}${normalizedPath}`;
 
-    return new URL(
+    const url = new URL(
         scopedPath,
         `${globalThis.location.protocol}//${globalThis.location.host}`,
-    ).toString();
+    );
+    if (normalizedPath === "/module/") {
+        url.searchParams.set("embedded", "1");
+        url.searchParams.set("host", "axelate");
+    }
+
+    return url.toString();
 }
 
 function showFatalError(error) {

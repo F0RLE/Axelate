@@ -726,7 +726,7 @@
 #chat-container.has-messages #chat-messages {
     flex: 1 1 auto;
     min-height: 0;
-    padding-right: var(--chat-context-safe-space);
+    padding-right: 0;
 }
 
 #chat-messages.has-messages {
@@ -1240,6 +1240,8 @@
 .chat-context-btn {
     --chat-context-fill: 0%;
     --chat-context-track: rgba(255, 255, 255, 0.16);
+    --chat-context-ring-radius: 8px;
+    --chat-context-dot-radius: 7px;
     display: none;
     position: relative;
     width: var(--chat-corner-button-width);
@@ -1293,7 +1295,7 @@
     top: 50%;
     width: 1.86rem;
     height: 1.86rem;
-    border-radius: 4px;
+    border-radius: var(--chat-context-ring-radius);
     display: inline-flex;
     align-items: center;
     justify-content: center;
@@ -1308,7 +1310,7 @@
 .chat-context-dot {
     width: 1.28rem;
     height: 1.28rem;
-    border-radius: 2px;
+    border-radius: var(--chat-context-dot-radius);
     background: rgb(var(--background-raw));
     box-shadow: none;
 }

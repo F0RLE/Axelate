@@ -24,12 +24,16 @@
 
     border-bottom: 1px solid rgba(255, 255, 255, 0.025);
     /* Subtle border */
-    transition: none;
+    transition:
+        opacity 0.2s var(--ease-smooth),
+        transform 0.3s var(--ease-smooth);
     -webkit-app-region: drag;
 }
 
 body.snapping #app-header {
-    transition: none;
+    transition:
+        opacity 0.2s var(--ease-smooth),
+        transform 0.3s var(--ease-smooth);
 }
 
 /* Top Right Controls (now inside header) */

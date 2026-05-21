@@ -127,7 +127,6 @@
     "ui.gemini.stats.speed": "速度",
     "ui.gemini.status.retry": "速率限制。将在 {seconds} 秒后重试...",
     "ui.gpt.key_check_btn": "检查",
-    "ui.gpt.model.gpt54.desc": "适用于代理、编程和专业工作流的旗舰智能模型",
     "ui.gpt.model.gpt54mini.desc": "目前最强的 mini 模型，适合编程、计算机使用和子代理",
     "ui.gpt.model.gpt54nano.desc": "最便宜的 GPT-5.4 级模型，适合简单高吞吐任务",
     "ui.gpt.image.gpt5_image.desc": "OpenAI GPT-5 Image，具备更强推理、高级图像生成与精细编辑能力",
@@ -222,7 +221,6 @@
     "ui.launcher.web.downloads_subtitle": "管理模型和模块下载",
     "ui.launcher.web.eta_label": "预计剩余",
     "ui.launcher.web.edit_last": "编辑上一条消息",
-    "ui.launcher.web.expand_window": "展开窗口以查看正常界面显示",
     "ui.launcher.web.home": "首页",
     "ui.launcher.web.home_title": "主菜单",
     "ui.launcher.web.information": "信息",
@@ -466,5 +464,7 @@
     "ui.launcher.engine.sdcpp.name": "Stable Diffusion.cpp",
     "ui.launcher.engine.sdcpp.desc": "轻量级图像生成引擎。",
     "ui.launcher.engine.comfyui.name": "ComfyUI",
-    "ui.launcher.engine.comfyui.desc": "面向最高画质与控制力的节点式图像工作流引擎。"
+    "ui.launcher.engine.comfyui.desc": "面向最高画质与控制力的节点式图像工作流引擎。",
+    "ui.gpt.model.gpt55.desc": "面向复杂专业工作负载的前沿模型，具备更强推理、更高可靠性和更好的高难任务 token 效率",
+    "ui.gpt.model.gpt55pro.desc": "面向复杂高风险工作负载的高能力模型，优化深度推理与准确性"
 }

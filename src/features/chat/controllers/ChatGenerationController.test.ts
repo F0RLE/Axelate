@@ -98,7 +98,7 @@ describe('ChatGenerationController', () => {
         };
 
         await controller.handleChatResponse(
-            { ok: false, error: 'stream failed', model: 'gpt-5.4' } as never,
+            { ok: false, error: 'stream failed', model: 'gpt-5.5' } as never,
             streamingHandle,
             null,
         );

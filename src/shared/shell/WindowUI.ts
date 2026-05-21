@@ -13,7 +13,7 @@ import type { I18nService } from '@/infrastructure/i18n/I18nService';
 import { WindowUiInteractionController } from './WindowUiInteractionController';
 import { WindowUiShellController } from './WindowUiShellController';
 import { WindowUiTimingController } from './WindowUiTimingController';
-import { readCssViewportZoom } from './ViewportZoom';
+import type { EventBus } from '@/shared/services/EventBus';
 
 type WindowUIRuntime = {
     addWindowListener: typeof globalThis.addEventListener;
@@ -44,7 +44,6 @@ export class WindowUI {
     private _cleanupAbort: AbortController | null = null;
 
     private _splash: HTMLElement | null = null;
-    private _globalWarning: HTMLDialogElement | null = null;
     private _maximizeIcon: HTMLElement | null = null;
     private _soundToggle: HTMLElement | null = null;
     private _isInGracePeriod = true;
@@ -64,6 +63,7 @@ export class WindowUI {
         private readonly _tracer: LoggerService,
         i18n: I18nService,
         private readonly _runtime: WindowUIRuntime = createDefaultWindowUIRuntime(),
+        private readonly _eventBus: EventBus | null = null,
     ) {
         this._interactionController = new WindowUiInteractionController({
             runtime: _runtime,
@@ -72,6 +72,9 @@ export class WindowUI {
             },
             changeZoom: async (delta) => {
                 await this._service.changeZoom(delta);
+            },
+            persistZoom: async () => {
+                await this._service.persistZoom();
             },
             setMonitoringPaused: async (paused) => {
                 await this._service.setMonitoringPaused(paused);
@@ -84,7 +87,6 @@ export class WindowUI {
         this._shellController = new WindowUiShellController({
             getElements: () => ({
                 splash: this._splash,
-                globalWarning: this._globalWarning,
                 soundToggle: this._soundToggle,
             }),
         });
@@ -123,9 +125,6 @@ export class WindowUI {
      */
     private _cacheElements(): void {
         this._splash = document.getElementById('splash-screen');
-        this._globalWarning = document.getElementById(
-            'global-width-warning',
-        ) as HTMLDialogElement | null;
         this._maximizeIcon = document.getElementById('maximize-icon');
         this._soundToggle = document.getElementById('sound-toggle-btn');
     }
@@ -143,7 +142,6 @@ export class WindowUI {
         this._wasMaximizedOnSmallScreen = false;
         this._isInGracePeriod = true;
         this._splash = null;
-        this._globalWarning = null;
         this._maximizeIcon = null;
         this._soundToggle = null;
     }
@@ -157,6 +155,17 @@ export class WindowUI {
         if (signal === undefined) return;
 
         this._timingController.setMonitoringTimeout(this._interactionController.bind(signal));
+        const unsubscribePageChange = this._eventBus?.on('page:change', ({ pageId }) => {
+            this._service
+                .setActivePage(pageId)
+                .then(() => this._scheduleZoomWidthCheck())
+                .catch(() => {
+                    /* ignore */
+                });
+        });
+        if (unsubscribePageChange !== undefined) {
+            signal.addEventListener('abort', unsubscribePageChange, { once: true });
+        }
     }
 
     private _scheduleZoomWidthCheck(): void {
@@ -278,18 +287,7 @@ export class WindowUI {
      * @sideeffect Shows/hides warning overlays in the DOM
      */
     private _checkWidth(): void {
-        const viewport = this._runtime.getInnerSize();
-        const config = this._service.getConfig();
-        const minWidth = config?.thresholds.warningWidth ?? 0;
-        const minHeight = config?.thresholds.warningHeight ?? 0;
-        const effectiveZoom = readCssViewportZoom();
-
-        this._shellController.updateWidthWarning({
-            width: viewport.width / effectiveZoom,
-            height: viewport.height / effectiveZoom,
-            minWidth,
-            minHeight,
-        });
+        this._shellController.updateWidthWarning();
     }
 
     /**

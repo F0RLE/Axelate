@@ -4,12 +4,7 @@ type SidebarAutoCompactPolicyConfig = {
     collapsedWidth: number;
     expandedWidth: number;
     autoCompactZoomThreshold: number;
-    autoCompactThresholdFactor: number;
-};
-
-type SidebarViewport = {
-    width: number;
-    height: number;
+    autoCompactMaxZoomEpsilon: number;
 };
 
 export class SidebarAutoCompactPolicy {
@@ -17,16 +12,11 @@ export class SidebarAutoCompactPolicy {
 
     public isAutoCompact(
         zoom: number,
-        windowConfig: IWindowConfig | null | undefined,
-        viewport: SidebarViewport,
+        _windowConfig: IWindowConfig | null | undefined,
+        maxSafeZoom?: number,
     ): boolean {
-        if (windowConfig !== null && windowConfig !== undefined) {
-            const compactWarningWidth =
-                windowConfig.thresholds.warningWidth * this._config.autoCompactThresholdFactor;
-            const compactWarningHeight =
-                windowConfig.thresholds.warningHeight * this._config.autoCompactThresholdFactor;
-
-            return viewport.width < compactWarningWidth || viewport.height < compactWarningHeight;
+        if (maxSafeZoom !== undefined && Number.isFinite(maxSafeZoom)) {
+            return zoom >= maxSafeZoom - this._config.autoCompactMaxZoomEpsilon;
         }
 
         return zoom >= this._config.autoCompactZoomThreshold;
