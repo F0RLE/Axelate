@@ -104,7 +104,15 @@ Confirmed behavior:
 - request-id-based stream isolation
 - session-aware requests
 - provider-side web search as an optional capability
-- support for custom OpenRouter model IDs
+- Custom text provider support for manual model IDs and custom
+  OpenAI-compatible base URLs
+
+Important current limitation:
+
+- built-in cloud cards use OpenRouter
+- Custom can point at another OpenAI-compatible API, but provider-specific
+  features such as reasoning and web search are only reliable on the OpenRouter
+  path today
 
 Confirmed current direction from the codebase and recent fixes:
 
@@ -199,7 +207,7 @@ The backend currently handles real runtime concerns:
 - runtime log paths split by owner: engines under `System/Runtime/Engines/Logs`, integrations under `System/Logs/Integrations`
 - duplicate process cleanup
 
-This is the strongest evidence that Axelate is already a launcher/workstation base and not just a model picker UI.
+This is why Axelate already reads as a launcher/workstation, not a model picker.
 
 ## Current Security and Ownership Model
 
