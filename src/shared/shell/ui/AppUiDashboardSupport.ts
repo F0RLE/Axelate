@@ -103,16 +103,24 @@ export class AppUiDashboardSupport {
         card.classList.remove('empty');
         card.classList.add('selected');
         this._deps.cardRenderer.updateSlotCardContent(card, app);
+        this._deps.cardRenderer.updateSlotCardRuntimeStatus(card, app.status);
         this._configureActionButton(card, app);
         this._refreshCardActions(card, app, category);
     }
 
     public resetCardToEmpty(card: HTMLElement): void {
-        card.classList.remove('selected', 'has-download', 'has-launch');
+        card.classList.remove(
+            'selected',
+            'has-download',
+            'has-launch',
+            'module-running',
+            'module-stopped',
+        );
         card.classList.add('empty');
         delete card.dataset['currentModule'];
         delete card.dataset['currentModuleName'];
         delete card.dataset['currentCapability'];
+        delete card.dataset['runtimeStatus'];
 
         const originalHtml = card.dataset['originalHtml'];
         if (originalHtml !== undefined && originalHtml !== '') {
@@ -124,6 +132,21 @@ export class AppUiDashboardSupport {
         this._deps.cardRenderer.markSlotCardAsInstalled(card, app, (currentCard, currentApp) => {
             this._configureActionButton(currentCard, currentApp);
         });
+    }
+
+    public updateRuntimeStatus(category: string, app: IApp, status: string): void {
+        app.status = status;
+
+        const card = this.getDashboardCard(category);
+        if (!(card instanceof HTMLElement)) {
+            return;
+        }
+
+        if (card.dataset['currentModule'] !== app.id) {
+            return;
+        }
+
+        this._deps.cardRenderer.updateSlotCardRuntimeStatus(card, status);
     }
 
     private readonly _boundDashboardContextMenu = (e: Event) => {

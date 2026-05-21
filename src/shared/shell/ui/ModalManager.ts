@@ -2,6 +2,7 @@ import type { IApp } from '../../types/coreTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { NavigationService } from '@/infrastructure/navigation/NavigationService';
 import type { ModuleCardRenderer } from './ModuleCardRenderer';
+import type { ModuleCardDownloadAction } from './ModuleCardActions';
 import { ModalFilterTransitionController } from './ModalFilterTransitionController';
 import {
     cancelModalDownload,
@@ -10,6 +11,10 @@ import {
     transitionSelectionButton,
     updateModalSidebarWidth,
 } from './ModalManagerSupport';
+import {
+    markModuleCardDownloadPaused,
+    markModuleCardDownloadResuming,
+} from './ModuleCardDownloadProgress';
 import { ModalSelectionPolicy } from './ModalSelectionPolicy';
 import { ModalFocusTrapHelper } from './ModalFocusTrapHelper';
 
@@ -62,8 +67,10 @@ export class ModalManager {
     private readonly _onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void;
     // Called when user switches filter tab — returns the selected app ID for that capability
     private readonly _onFilterChange: (capability: 'text' | 'image') => string | null;
-    private readonly _onDownloadRequest: (app: IApp) => Promise<void>;
+    private readonly _onDownloadRequest: (app: IApp) => Promise<unknown>;
     private readonly _onCancelDownloadRequest: (app: IApp) => Promise<void>;
+    private readonly _onPauseDownloadRequest: (app: IApp) => Promise<void>;
+    private readonly _onResumeDownloadRequest: (app: IApp) => Promise<void>;
     private readonly _translate: (key: string, fallback: string) => string;
     private readonly _tracer: LoggerService;
 
@@ -71,17 +78,21 @@ export class ModalManager {
         cardRenderer: ModuleCardRenderer,
         onAppInteraction: (e: MouseEvent, app: IApp, category: string) => void,
         onFilterChange: (capability: 'text' | 'image') => string | null,
-        onDownloadRequest: (app: IApp) => Promise<void>,
+        onDownloadRequest: (app: IApp) => Promise<unknown>,
         onCancelDownloadRequest: (app: IApp) => Promise<void>,
         translate: (key: string, fallback: string) => string,
         tracer: LoggerService,
         private readonly _navigation: NavigationService,
+        onPauseDownloadRequest?: (app: IApp) => Promise<void>,
+        onResumeDownloadRequest?: (app: IApp) => Promise<void>,
     ) {
         this._cardRenderer = cardRenderer;
         this._onAppInteraction = onAppInteraction;
         this._onFilterChange = onFilterChange;
         this._onDownloadRequest = onDownloadRequest;
         this._onCancelDownloadRequest = onCancelDownloadRequest;
+        this._onPauseDownloadRequest = onPauseDownloadRequest ?? (() => Promise.resolve());
+        this._onResumeDownloadRequest = onResumeDownloadRequest ?? (() => Promise.resolve());
         this._translate = translate;
         this._tracer = tracer;
 
@@ -301,7 +312,7 @@ export class ModalManager {
             selectionPolicy: this._selectionPolicy,
             cardRenderer: this._cardRenderer,
             onAppInteraction: this._onAppInteraction,
-            onDownload: (app) => this._handleDownload(app),
+            onDownload: (app, action) => this._handleDownload(app, action),
             translate: this._translate,
         });
     }
@@ -309,7 +320,7 @@ export class ModalManager {
     /**
      * Triggers a module download or cancellation via injected AppUI callbacks.
      */
-    private _handleDownload(app: IApp): void {
+    private _handleDownload(app: IApp, action: ModuleCardDownloadAction = 'start'): void {
         if (app.repoUrl === undefined || app.repoUrl === '') {
             this._tracer.warn(`[ModalManager] No repoUrl for module: ${app.id}`);
             return;
@@ -319,27 +330,49 @@ export class ModalManager {
         const card = list?.querySelector<HTMLElement>(`.app-card[data-app-id="${app.id}"]`);
         const btn = card?.querySelector<HTMLButtonElement>('.download-btn');
 
-        // Check if currently downloading to cancel instead
         if (btn?.classList.contains('downloading') === true) {
-            this._tracer.info(`[ModalManager] Cancelling download for: ${app.id}`);
-            void (async () => {
-                try {
-                    await cancelModalDownload({
-                        app,
-                        card,
-                        button: btn,
-                        onCancelDownloadRequest: this._onCancelDownloadRequest,
-                        translate: this._translate,
-                    });
-                } catch (err) {
-                    this._tracer.error(`[ModalManager] Cancel failed for ${app.id}:`, err);
-                }
-            })();
+            this._handleActiveDownloadAction(app, card, btn, action);
             return;
         }
 
         this._tracer.info(`[ModalManager] Starting download: ${app.id}`);
         void this._onDownloadRequest(app);
+    }
+
+    private _handleActiveDownloadAction(
+        app: IApp,
+        card: HTMLElement | null | undefined,
+        btn: HTMLButtonElement,
+        action: ModuleCardDownloadAction,
+    ): void {
+        if (action === 'pause') {
+            this._tracer.info(`[ModalManager] Pausing download for: ${app.id}`);
+            markModuleCardDownloadPaused(btn);
+            void this._onPauseDownloadRequest(app);
+            return;
+        }
+
+        if (action === 'resume') {
+            this._tracer.info(`[ModalManager] Resuming download for: ${app.id}`);
+            markModuleCardDownloadResuming(btn);
+            void this._onResumeDownloadRequest(app);
+            return;
+        }
+
+        this._tracer.info(`[ModalManager] Cancelling download for: ${app.id}`);
+        void (async () => {
+            try {
+                await cancelModalDownload({
+                    app,
+                    card,
+                    button: btn,
+                    onCancelDownloadRequest: this._onCancelDownloadRequest,
+                    translate: this._translate,
+                });
+            } catch (err) {
+                this._tracer.error(`[ModalManager] Cancel failed for ${app.id}:`, err);
+            }
+        })();
     }
 
     /**

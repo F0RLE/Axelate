@@ -7,6 +7,7 @@ describe('AppUiModuleLifecycle', () => {
     const platformService = {
         stop: vi.fn(),
         isApiModule: vi.fn(() => false),
+        getStatus: vi.fn().mockResolvedValue('running'),
     };
 
     const getSelectedApp = vi.fn();
@@ -14,6 +15,7 @@ describe('AppUiModuleLifecycle', () => {
     const resolveAppById = vi.fn();
     const translate = vi.fn((_key: string, fallback: string) => fallback);
     const showToast = vi.fn();
+    const updateRuntimeStatus = vi.fn();
 
     let lifecycle: AppUiModuleLifecycle;
 
@@ -30,6 +32,7 @@ describe('AppUiModuleLifecycle', () => {
             getSelectedApp,
             isSelectedInAnotherAiSlot,
             resolveAppById,
+            updateRuntimeStatus,
             translate,
             showToast,
         });
@@ -54,6 +57,19 @@ describe('AppUiModuleLifecycle', () => {
         await pending;
 
         expect(platformService.stop).toHaveBeenCalledWith(app);
+    });
+
+    it('marks the selected module with backend runtime status after launch', async () => {
+        const launchApp = vi.fn<(...args: [string, IApp]) => Promise<void>>().mockResolvedValue();
+        const app = { id: 'svc-a', name: 'Service A' } as IApp;
+        const version = lifecycle.bumpLaunchSelectionVersion('services');
+        getSelectedApp.mockReturnValue(app);
+        platformService.getStatus.mockResolvedValueOnce('running');
+
+        await lifecycle.launchSelectedApp('services', app, version, launchApp);
+
+        expect(platformService.getStatus).toHaveBeenCalledWith(app);
+        expect(updateRuntimeStatus).toHaveBeenCalledWith('services', app, 'running');
     });
 
     it('stops previous module and shows toast for local app', async () => {

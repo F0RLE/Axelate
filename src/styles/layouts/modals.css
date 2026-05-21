@@ -118,6 +118,14 @@
     background: #080b12;
 }
 
+.module-settings-webui-frame {
+    display: block;
+    width: 100%;
+    height: 100%;
+    border: 0;
+    background: #080b12;
+}
+
 .module-settings-webui-status {
     position: absolute;
     inset: 0;
@@ -143,6 +151,32 @@
 .module-settings-content.module-settings-content-custom-ui {
     padding: 0;
     overflow: hidden;
+}
+
+#module-settings-modal.module-settings-modal-custom-ui .app-modal {
+    background: rgb(var(--background-raw));
+    border-color: rgba(255, 255, 255, 0.05);
+    box-shadow:
+        inset -1px 0 0 rgba(255, 255, 255, 0.02),
+        0 18px 48px rgba(0, 0, 0, 0.32);
+    transform: none;
+    backface-visibility: visible;
+    animation: none;
+}
+
+#module-settings-modal.module-settings-modal-custom-ui .app-modal-header {
+    background: var(--bg-med);
+}
+
+#module-settings-modal.module-settings-modal-custom-ui .app-modal-body,
+#module-settings-modal.module-settings-modal-custom-ui .app-modal-main,
+#module-settings-modal.module-settings-modal-custom-ui .module-settings-content {
+    background: rgb(var(--background-raw));
+}
+
+#module-settings-modal.module-settings-modal-custom-ui .app-modal-main {
+    transform: none;
+    animation: none;
 }
 
 #module-settings-modal .app-modal-main {

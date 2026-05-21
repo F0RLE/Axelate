@@ -1,5 +1,6 @@
 import type { IApp } from '../../types/coreTypes';
 import { ModuleCardRenderer } from './ModuleCardRenderer';
+import type { ModuleCardDownloadAction } from './ModuleCardActions';
 import type { ModalSelectionPolicy } from './ModalSelectionPolicy';
 
 type DownloadProgressPayload = {
@@ -9,7 +10,7 @@ type DownloadProgressPayload = {
 };
 
 type AppInteractionHandler = (event: MouseEvent, app: IApp, category: string) => void;
-type DownloadHandler = (app: IApp) => void;
+type DownloadHandler = (app: IApp, action: ModuleCardDownloadAction) => void;
 type ProgressEventHandler = (event: Event) => void;
 type TranslateFunc = (key: string, fallback: string) => string;
 
@@ -45,7 +46,9 @@ export function createModalDownloadProgressHandler(): ProgressEventHandler {
             payload.status === 'cancelled';
 
         const lastRender = throttleMap.get(payload.module_id) ?? 0;
-        const withinThrottle = isTerminal === false && now - lastRender < 150;
+        const isControlState = payload.status === 'paused';
+        const withinThrottle =
+            isTerminal === false && isControlState === false && now - lastRender < 150;
         if (withinThrottle) {
             return;
         }
@@ -111,7 +114,7 @@ export function populateModalAppList(options: {
             interactionCategory,
             isSelected,
             (event, currentApp) => options.onAppInteraction(event, currentApp, interactionCategory),
-            (currentApp) => options.onDownload(currentApp),
+            (currentApp, action) => options.onDownload(currentApp, action),
         );
         options.listElement.appendChild(card);
     });

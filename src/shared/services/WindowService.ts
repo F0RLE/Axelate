@@ -175,11 +175,6 @@ export class WindowService {
             // Web Fallback: Load from localStorage or default to 1
             this._currentZoom = fallbackZoom;
             this._runtime.setAppZoomCss(this._currentZoom.toFixed(3));
-
-            // Enable Ctrl + Scroll implementation for Web Browser
-            this._persistence.bindWebWheelHandler((delta) => {
-                void this.changeZoom(delta, { syncNativeZoom: false });
-            });
         }
     }
 
@@ -238,9 +233,10 @@ export class WindowService {
      * Sets the webview zoom level.
      */
     public async setZoom(zoom: number, options: WindowZoomApplyOptions = {}): Promise<number> {
+        const syncNativeZoom = options.syncNativeZoom ?? this._bridge.isTauri();
         this._currentZoom = await this._zoomService.setZoom(zoom, {
-            syncNativeZoom: false,
             ...options,
+            syncNativeZoom,
         });
         globalThis.dispatchEvent(
             new CustomEvent('axelate:zoom-changed', {

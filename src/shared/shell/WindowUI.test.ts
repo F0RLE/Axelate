@@ -47,6 +47,7 @@ describe('WindowUI lifecycle', () => {
     afterEach(() => {
         ui?.destroy();
         ui = null;
+        document.documentElement.style.removeProperty('--app-zoom');
         document.body.innerHTML = '';
     });
 
@@ -578,7 +579,43 @@ describe('WindowUI lifecycle', () => {
         )._performResizeCheck();
     });
 
-    it('should account for css zoom when checking warnings', () => {
+    it('should account for active css zoom when checking warnings', () => {
+        document.body.innerHTML = `
+            <div id="splash-screen" class="hidden"></div>
+            <dialog id="global-width-warning"></dialog>
+            <button id="maximize-btn"></button>
+            <div id="maximize-icon"><svg><use href="#icon-maximize"></use></svg></div>
+            <button id="sound-toggle-btn"><svg><use href="#icon-volume"></use></svg></button>
+        `;
+
+        runtime.getInnerSize.mockReturnValue({ width: 900, height: 700 });
+
+        const uiLocal = createWindowUI();
+        ui = uiLocal;
+        const service = (uiLocal as unknown as { _service: WindowService })._service as unknown as {
+            getConfig: ReturnType<typeof vi.fn>;
+            getZoom: ReturnType<typeof vi.fn>;
+        };
+        service.getConfig.mockReturnValue({
+            thresholds: { warningWidth: 800, warningHeight: 600 },
+        });
+        service.getZoom.mockReturnValue(1);
+        document.documentElement.style.setProperty('--app-zoom', '2.000');
+
+        const dialog = document.getElementById('global-width-warning') as HTMLDialogElement;
+        dialog.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
+            Object.defineProperty(this, 'open', { configurable: true, value: true });
+        });
+        dialog.close = vi.fn(function close(this: HTMLDialogElement) {
+            Object.defineProperty(this, 'open', { configurable: true, value: false });
+        });
+
+        uiLocal.init();
+
+        expect(dialog.showModal).toHaveBeenCalled();
+    });
+
+    it('should not double-count native zoom when checking warnings', () => {
         document.body.innerHTML = `
             <div id="splash-screen" class="hidden"></div>
             <dialog id="global-width-warning"></dialog>
@@ -599,6 +636,7 @@ describe('WindowUI lifecycle', () => {
             thresholds: { warningWidth: 800, warningHeight: 600 },
         });
         service.getZoom.mockReturnValue(2);
+        document.documentElement.style.setProperty('--app-zoom', '1.000');
 
         const dialog = document.getElementById('global-width-warning') as HTMLDialogElement;
         dialog.showModal = vi.fn(function showModal(this: HTMLDialogElement) {
@@ -610,7 +648,7 @@ describe('WindowUI lifecycle', () => {
 
         uiLocal.init();
 
-        expect(dialog.showModal).toHaveBeenCalled();
+        expect(dialog.showModal).not.toHaveBeenCalled();
     });
 
     it('should not toggle maximize on small-screen init if window is already maximized', async () => {

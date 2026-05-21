@@ -58,7 +58,11 @@ export class AppUiModuleFlow {
         this.prepareDownloadButton(btn);
 
         try {
-            await this._deps.platformService.download(app);
+            const outcome = await this._deps.platformService.download(app);
+            if (outcome !== 'completed') {
+                this.onModalDownloadInterrupted(btn, outcome);
+                return;
+            }
             this.onModalDownloadSuccess(btn, app, category);
         } catch (err: unknown) {
             this.onModalDownloadError(btn, err);
@@ -123,6 +127,18 @@ export class AppUiModuleFlow {
                 this._deps.getSelectedAppId(category),
             );
         }
+    }
+
+    public onModalDownloadInterrupted(
+        btn: HTMLElement | null,
+        outcome: 'paused' | 'cancelled',
+    ): void {
+        if (outcome === 'paused') {
+            return;
+        }
+
+        this.resetDownloadButton(btn);
+        this.restoreDownloadButtonLabel(btn);
     }
 
     public onModalDownloadError(btn: HTMLElement | null, err: unknown): void {

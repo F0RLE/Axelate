@@ -24,6 +24,10 @@ describe('AppUI lifecycle', () => {
         delete: ReturnType<typeof vi.fn>;
         download: ReturnType<typeof vi.fn>;
         cancelDownload: ReturnType<typeof vi.fn>;
+        pauseDownload: ReturnType<typeof vi.fn>;
+        resumeDownload: ReturnType<typeof vi.fn>;
+        getDownloadState: ReturnType<typeof vi.fn>;
+        getStatus: ReturnType<typeof vi.fn>;
         stop: ReturnType<typeof vi.fn>;
     };
 
@@ -62,6 +66,10 @@ describe('AppUI lifecycle', () => {
             delete: vi.fn(),
             download: vi.fn(),
             cancelDownload: vi.fn(),
+            pauseDownload: vi.fn(),
+            resumeDownload: vi.fn(),
+            getDownloadState: vi.fn(),
+            getStatus: vi.fn().mockResolvedValue('running'),
             stop: vi.fn().mockResolvedValue(true),
         };
 
@@ -629,6 +637,36 @@ describe('AppUI lifecycle', () => {
 
         privateAppUI._performSelectionAction('services', serviceApp);
         expect(updateSelectionSpy).toHaveBeenLastCalledWith(null);
+    });
+
+    it('should mark selected service cards as running after backend status confirms launch', async () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="services-module-card" class="empty">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+
+        const privateAppUI = appUI as unknown as {
+            _performSelectionAction: (category: string, app: IApp) => void;
+        };
+        const serviceApp = {
+            id: 'telegram-bot',
+            name: 'Telegram Bot',
+            type: 'local',
+            installed: true,
+        } as IApp;
+
+        platformServiceMock.getStatus.mockResolvedValueOnce('running');
+        privateAppUI._performSelectionAction('services', serviceApp);
+        await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
+
+        const card = document.getElementById('services-module-card') as HTMLElement;
+        expect(platformServiceMock.getStatus).toHaveBeenCalledWith(serviceApp);
+        expect(card.classList.contains('module-running')).toBe(true);
+        expect(card.dataset['runtimeStatus']).toBe('running');
     });
 
     it('should handle modal download success and error', () => {

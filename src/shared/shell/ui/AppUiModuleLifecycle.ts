@@ -10,6 +10,7 @@ type AppUiModuleLifecycleDeps = {
     getSelectedApp: (category: string) => IApp | undefined;
     isSelectedInAnotherAiSlot: (category: string, appId: string) => boolean;
     resolveAppById: (appId: string) => IApp | undefined;
+    updateRuntimeStatus: (category: string, app: IApp, status: string) => void;
     translate: (key: string, fallback: string) => string;
     showToast: (message: string, type?: string) => void;
 };
@@ -35,12 +36,14 @@ export class AppUiModuleLifecycle {
             await launchApp(category, app);
         } catch (err: unknown) {
             this._deps.tracer.error(`[AppUI] Failed to launch selected module ${app.id}:`, err);
+            this._deps.updateRuntimeStatus(category, app, 'stopped');
             return;
         }
 
         const currentVersion = this._launchSelectionVersions.get(category);
         const isCurrentSelection = this._deps.getSelectedApp(category)?.id === app.id;
         if (currentVersion === launchSelectionVersion && isCurrentSelection) {
+            this._deps.updateRuntimeStatus(category, app, await this._resolveRuntimeStatus(app));
             return;
         }
 
@@ -98,5 +101,16 @@ export class AppUiModuleLifecycle {
             });
 
         this._deps.tracer.info('[AppUI] Stopped previous module:', previousModuleId);
+    }
+
+    private async _resolveRuntimeStatus(app: IApp): Promise<string> {
+        try {
+            return await this._deps.platformService.getStatus(app);
+        } catch (err: unknown) {
+            this._deps.tracer.warn(
+                `[AppUI] Failed to resolve runtime status for ${app.id}: ${String(err)}`,
+            );
+            return 'stopped';
+        }
     }
 }

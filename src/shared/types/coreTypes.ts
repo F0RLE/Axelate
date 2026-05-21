@@ -53,6 +53,7 @@ export interface IApp {
     configSchema?: Record<string, IConfigField>;
     settingsUi?: string | null;
     apiProviderData?: Record<string, unknown>; // Dynamic provider metadata for rich UI
+    status?: string | null;
 }
 
 /**

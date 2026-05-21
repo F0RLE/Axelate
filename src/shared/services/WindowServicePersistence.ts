@@ -24,7 +24,6 @@ export class WindowServicePersistence {
     private _saveWindowTimer: ReturnType<typeof setTimeout> | null = null;
     private _moveUnlisten: (() => void) | null = null;
     private _windowListenersInitialized = false;
-    private _webWheelHandler: ((e: WheelEvent) => void) | null = null;
 
     constructor(private readonly _deps: WindowServicePersistenceDeps) {}
 
@@ -43,21 +42,6 @@ export class WindowServicePersistence {
         });
     }
 
-    public bindWebWheelHandler(onWheelZoom: (delta: number) => void): void {
-        if (this._webWheelHandler !== null) {
-            return;
-        }
-
-        this._webWheelHandler = (event: WheelEvent) => {
-            if (event.ctrlKey) {
-                event.preventDefault();
-                const delta = event.deltaY > 0 ? -0.1 : 0.1;
-                onWheelZoom(delta);
-            }
-        };
-        this._deps.runtime.addEventListener('wheel', this._webWheelHandler, { passive: false });
-    }
-
     public destroy(): void {
         if (this._saveWindowTimer !== null) {
             clearTimeout(this._saveWindowTimer);
@@ -71,11 +55,6 @@ export class WindowServicePersistence {
 
         this._moveUnlisten?.();
         this._moveUnlisten = null;
-
-        if (this._webWheelHandler !== null) {
-            this._deps.runtime.removeEventListener('wheel', this._webWheelHandler);
-            this._webWheelHandler = null;
-        }
     }
 
     public scheduleSave(): void {

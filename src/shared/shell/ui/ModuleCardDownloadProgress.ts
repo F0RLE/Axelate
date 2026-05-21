@@ -7,6 +7,7 @@ export function setModuleCardDownloadProgress(
     if (btn === null) return;
 
     btn.classList.add('downloading');
+    btn.dataset['downloadStatus'] = status ?? 'downloading';
     btn.style.overflow = 'hidden';
 
     const isIndeterminate = percent < 0 || status === 'connecting' || status === 'pending';
@@ -37,11 +38,36 @@ export function setModuleCardDownloadProgress(
             label.textContent = targetText;
         }
     }
+
+    const pauseAction = btn.querySelector<HTMLElement>('.download-hover-action-pause');
+    if (pauseAction !== null) {
+        pauseAction.textContent =
+            status === 'paused'
+                ? (btn.dataset['resumeLabel'] ?? 'Resume')
+                : (btn.dataset['pauseLabel'] ?? 'Pause');
+    }
 }
 
 export function clearModuleCardDownloadProgress(card: HTMLElement): void {
     const btn = card.querySelector<HTMLButtonElement>('.download-btn');
     if (btn === null) return;
     btn.classList.remove('downloading', 'indeterminate');
+    delete btn.dataset['downloadStatus'];
     btn.style.removeProperty('--download-progress');
+}
+
+export function markModuleCardDownloadPaused(btn: HTMLElement): void {
+    btn.dataset['downloadStatus'] = 'paused';
+    const pauseAction = btn.querySelector<HTMLElement>('.download-hover-action-pause');
+    if (pauseAction !== null) {
+        pauseAction.textContent = btn.dataset['resumeLabel'] ?? 'Resume';
+    }
+}
+
+export function markModuleCardDownloadResuming(btn: HTMLElement): void {
+    btn.dataset['downloadStatus'] = 'downloading';
+    const pauseAction = btn.querySelector<HTMLElement>('.download-hover-action-pause');
+    if (pauseAction !== null) {
+        pauseAction.textContent = btn.dataset['pauseLabel'] ?? 'Pause';
+    }
 }

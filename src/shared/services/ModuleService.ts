@@ -9,19 +9,11 @@ import type { IModuleDownloadState } from '../types/coreTypes';
 import { commands } from '../types/bindings';
 import { invokeSafe } from '../api/invoke';
 
-// Local types for global access
-// IModuleGlobal removed
-
 type ModuleServiceLogger = Pick<LoggerService, 'info' | 'warn' | 'error'>;
-type DownloadRequest = {
-    repoUrl: string;
-    expectedHash?: string;
-    dlType?: string;
-};
+export type DownloadModuleOutcome = 'completed' | 'paused' | 'cancelled';
 
 export class ModuleService {
     private readonly _downloadState: Record<string, IModuleDownloadState> = {};
-    private readonly _downloadRequests: Record<string, DownloadRequest> = {};
     private readonly _deletedModules = new Set<string>();
     private readonly _lastLoggedDownloadPhase = new Map<string, string>();
     private _downloadProgressUnlisten: (() => void) | null = null;
@@ -73,11 +65,6 @@ export class ModuleService {
             if (payload.status === 'complete') {
                 (this._downloadState[payload.module_id] as { progress: number }).progress = 1;
             }
-            if (payload.status === 'complete' || payload.status === 'cancelled') {
-                // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-                delete this._downloadRequests[payload.module_id];
-            }
-
             // Dispatch custom event for UI components that don't use this service directly
             const event = new CustomEvent('download-progress-update', { detail: payload });
             globalThis.dispatchEvent(event);
@@ -116,6 +103,25 @@ export class ModuleService {
     }
 
     /**
+     * Gets the runtime status reported by the backend module controller.
+     */
+    public async getStatus(moduleId: string): Promise<string> {
+        if (!this._bridge.isTauri()) return 'stopped';
+
+        try {
+            const result = await invokeSafe(commands.getModuleStatus(moduleId));
+            if (result.status === 'ok') {
+                return result.data;
+            }
+            this._tracer.warn(`[ModuleService] Get status failed: ${result.error.message}`);
+            return 'stopped';
+        } catch (err) {
+            this._tracer.error(`Get module status error: ${String(err)}`);
+            return 'stopped';
+        }
+    }
+
+    /**
      * Downloads a module from a repository URL
      * @param moduleId - The ID of the module to download
      * @param repoUrl - The URL of the repository (or archive)
@@ -126,7 +132,7 @@ export class ModuleService {
         repoUrl: string,
         expectedHash?: string,
         dlType?: string,
-    ): Promise<void> {
+    ): Promise<DownloadModuleOutcome> {
         this._tracer.info(`[ModuleService] Downloading module: ${moduleId} from ${repoUrl}`);
         if (expectedHash !== undefined && expectedHash !== '') {
             this._tracer.info(`[ModuleService] Expected hash: ${expectedHash}`);
@@ -138,11 +144,6 @@ export class ModuleService {
 
         try {
             this._deletedModules.delete(moduleId);
-            this._downloadRequests[moduleId] = {
-                repoUrl,
-                ...(expectedHash !== undefined ? { expectedHash } : {}),
-                ...(dlType !== undefined ? { dlType } : {}),
-            };
             // Sanitize expectedHash: pass null if empty string or undefined to ensure rust gets None
             const hashToPass =
                 expectedHash !== undefined && expectedHash.trim() !== '' ? expectedHash : null;
@@ -153,14 +154,41 @@ export class ModuleService {
             );
 
             if (result.status === 'error') {
+                const interrupted = this._downloadOutcomeFromError(result.error.message);
+                if (interrupted !== null) {
+                    return interrupted;
+                }
                 throw new Error(result.error.message);
             }
+            return this._normalizeDownloadOutcome(result.data);
         } catch (err) {
             const errorMessage = err instanceof Error ? err.message : String(err);
+            const interrupted = this._downloadOutcomeFromError(errorMessage);
+            if (interrupted !== null) {
+                return interrupted;
+            }
             this._tracer.error(`[ModuleService] Download error for ${moduleId}: ${errorMessage}`);
             this._downloadState[moduleId] = { status: 'error', progress: 0, error: errorMessage };
             throw err;
         }
+    }
+
+    private _normalizeDownloadOutcome(value: unknown): DownloadModuleOutcome {
+        if (value === 'paused' || value === 'cancelled' || value === 'completed') {
+            return value;
+        }
+        return 'completed';
+    }
+
+    private _downloadOutcomeFromError(message: string): DownloadModuleOutcome | null {
+        const normalized = message.toLowerCase();
+        if (normalized.includes('download paused')) {
+            return 'paused';
+        }
+        if (normalized.includes('download cancelled')) {
+            return 'cancelled';
+        }
+        return null;
     }
 
     /**
@@ -199,21 +227,14 @@ export class ModuleService {
      */
     public async resumeDownload(moduleId: string): Promise<boolean> {
         this._tracer.info(`[ModuleService] Resuming download: ${moduleId}`);
-        const request = this._downloadRequests[moduleId];
-        if (request === undefined) {
-            this._tracer.warn(
-                `[ModuleService] Resume skipped: missing download metadata for ${moduleId}`,
-            );
-            return false;
-        }
+        if (!this._bridge.isTauri()) return false;
 
         try {
-            await this.downloadModule(
-                moduleId,
-                request.repoUrl,
-                request.expectedHash,
-                request.dlType,
-            );
+            const result = await invokeSafe(commands.resumeDownload(moduleId));
+            if (result.status === 'error') {
+                this._tracer.warn(`[ModuleService] Resume skipped: ${result.error.message}`);
+                return false;
+            }
             return true;
         } catch (e) {
             this._tracer.error(`[ModuleService] Resume failed: ${String(e)}`);
@@ -243,8 +264,6 @@ export class ModuleService {
             this._deletedModules.add(moduleId);
             // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
             delete this._downloadState[moduleId];
-            // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-            delete this._downloadRequests[moduleId];
             return true;
         } catch (e) {
             this._tracer.error(`[ModuleService] Delete exception: ${String(e)}`);

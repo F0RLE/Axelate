@@ -23,6 +23,9 @@ describe('AppUiCardActionFlow', () => {
         showToast: vi.fn(),
         handleDeleteModule: vi.fn(),
         handleDownloadModule: vi.fn(),
+        pauseDownload: vi.fn(),
+        resumeDownload: vi.fn(),
+        cancelDownload: vi.fn(),
         resetDownloadButton: vi.fn(),
         restoreDownloadButtonLabel: vi.fn(),
         performSelectionAction: vi.fn(),
@@ -35,6 +38,9 @@ describe('AppUiCardActionFlow', () => {
         vi.clearAllMocks();
         document.body.innerHTML = '';
         platformService.isApiModule.mockReturnValue(false);
+        deps.pauseDownload.mockResolvedValue(true);
+        deps.resumeDownload.mockResolvedValue(true);
+        deps.cancelDownload.mockResolvedValue(true);
         deps.isComingSoonApp.mockReturnValue(false);
         flow = new AppUiCardActionFlow(deps);
     });
@@ -54,25 +60,101 @@ describe('AppUiCardActionFlow', () => {
         expect(deps.performSelectionAction).not.toHaveBeenCalled();
     });
 
-    it('cancels in-flight download and restores button state', async () => {
+    it('pauses in-flight download from the left side and updates the button state', async () => {
         const card = document.createElement('div');
         card.className = 'app-card';
         const btn = document.createElement('button');
         btn.className = 'download-btn downloading';
+        btn.dataset['resumeLabel'] = 'Resume';
+        btn.innerHTML = '<span class="download-hover-action-pause">Pause</span>';
+        btn.getBoundingClientRect = vi.fn(
+            () =>
+                ({
+                    left: 0,
+                    width: 100,
+                }) as DOMRect,
+        );
         card.appendChild(btn);
         const event = {
             stopPropagation: vi.fn(),
             currentTarget: card,
             target: card,
+            clientX: 20,
         } as unknown as MouseEvent;
         const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
-        platformService.cancelDownload.mockResolvedValue(undefined);
         platformService.delete.mockResolvedValue(undefined);
 
         await flow.tryDownloadAction(event, app, 'services');
         await Promise.resolve();
 
-        expect(platformService.cancelDownload).toHaveBeenCalledWith('svc');
+        expect(deps.pauseDownload).toHaveBeenCalledWith('svc');
+        expect(btn.dataset['downloadStatus']).toBe('paused');
+        expect(btn.querySelector('.download-hover-action-pause')?.textContent).toBe('Resume');
+        expect(deps.cancelDownload).not.toHaveBeenCalled();
+        expect(platformService.delete).not.toHaveBeenCalled();
+        expect(deps.resetDownloadButton).not.toHaveBeenCalled();
+    });
+
+    it('resumes paused download from the left side and updates the button state', async () => {
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading';
+        btn.dataset['downloadStatus'] = 'paused';
+        btn.dataset['pauseLabel'] = 'Pause';
+        btn.innerHTML = '<span class="download-hover-action-pause">Resume</span>';
+        btn.getBoundingClientRect = vi.fn(
+            () =>
+                ({
+                    left: 0,
+                    width: 100,
+                }) as DOMRect,
+        );
+        card.appendChild(btn);
+        const event = {
+            stopPropagation: vi.fn(),
+            currentTarget: card,
+            target: card,
+            clientX: 20,
+        } as unknown as MouseEvent;
+        const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
+
+        await flow.tryDownloadAction(event, app, 'services');
+        await Promise.resolve();
+
+        expect(deps.resumeDownload).toHaveBeenCalledWith('svc');
+        expect(btn.dataset['downloadStatus']).toBe('downloading');
+        expect(btn.querySelector('.download-hover-action-pause')?.textContent).toBe('Pause');
+        expect(deps.pauseDownload).not.toHaveBeenCalled();
+        expect(deps.cancelDownload).not.toHaveBeenCalled();
+    });
+
+    it('uses right half of active download button to cancel', async () => {
+        const card = document.createElement('div');
+        card.className = 'app-card';
+        const btn = document.createElement('button');
+        btn.className = 'download-btn downloading';
+        btn.getBoundingClientRect = vi.fn(
+            () =>
+                ({
+                    left: 0,
+                    width: 100,
+                }) as DOMRect,
+        );
+        card.appendChild(btn);
+        const event = {
+            stopPropagation: vi.fn(),
+            currentTarget: card,
+            target: card,
+            clientX: 75,
+        } as unknown as MouseEvent;
+        const app = { id: 'svc', installed: false, repoUrl: 'https://repo' } as IApp;
+
+        await flow.tryDownloadAction(event, app, 'services');
+        await Promise.resolve();
+
+        expect(deps.cancelDownload).toHaveBeenCalledWith('svc');
+        expect(platformService.delete).not.toHaveBeenCalled();
         expect(deps.resetDownloadButton).toHaveBeenCalledWith(btn);
         expect(deps.restoreDownloadButtonLabel).toHaveBeenCalledWith(btn);
     });
