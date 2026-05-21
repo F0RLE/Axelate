@@ -10,3 +10,10 @@ Use GitHub Issues for reproducible bugs and scoped feature requests. For setup a
 - `docs/localization/en/CURRENT_STATE.md`
 
 For security issues, follow `SECURITY.md` instead of opening a public issue.
+
+For integration questions, use the English integration docs as the canonical
+reference:
+
+- `docs/localization/en/INTEGRATION_DEVELOPMENT.md`
+- `docs/localization/en/INTEGRATION_API.md`
+- `docs/localization/en/CUSTOM_INTEGRATIONS.md`

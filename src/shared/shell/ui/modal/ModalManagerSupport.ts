@@ -1,9 +1,9 @@
-import type { IApp } from '../../types/coreTypes';
-import { ModuleCardRenderer } from './ModuleCardRenderer';
-import type { ModuleCardDownloadAction } from './ModuleCardActions';
+import type { IApp } from '../../../types/coreTypes';
+import { ModuleCardRenderer } from '../card/ModuleCardRenderer';
+import type { ModuleCardDownloadAction } from '../card/ModuleCardActions';
 import type { ModalSelectionPolicy } from './ModalSelectionPolicy';
-import { getAiSlotForCapability, isAiCategory } from '../../utils/moduleCategoryPolicy';
-import { escapeCssSelectorValue } from '../../utils/cssSelectors';
+import { getAiSlotForCapability, isAiCategory } from '../../../utils/moduleCategoryPolicy';
+import { escapeCssSelectorValue } from '../../../utils/cssSelectors';
 
 type DownloadProgressPayload = {
     module_id: string;

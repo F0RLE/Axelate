@@ -59,7 +59,7 @@ pub(super) fn build_cloud_image_payload(request: &ImageGenerationRequest) -> ser
                 "content": request.prompt
             }
         ],
-        "modalities": resolve_openrouter_modalities(model)
+        "modalities": resolve_cloud_modalities(model)
     });
 
     if let Some(session_id) = request.session_id.as_ref().map(|value| value.trim())
@@ -72,7 +72,7 @@ pub(super) fn build_cloud_image_payload(request: &ImageGenerationRequest) -> ser
         );
     }
 
-    if let Some(image_config) = build_openrouter_image_config(request)
+    if let Some(image_config) = build_cloud_image_config(request)
         && let Some(payload_object) = payload.as_object_mut()
     {
         payload_object.insert("image_config".to_string(), image_config);
@@ -93,7 +93,7 @@ fn resolve_cloud_image_model(request: &ImageGenerationRequest) -> &str {
     }
 }
 
-fn resolve_openrouter_modalities(model: &str) -> &'static [&'static str] {
+fn resolve_cloud_modalities(model: &str) -> &'static [&'static str] {
     if supports_text_with_generated_images(model) {
         &["image", "text"]
     } else {
@@ -109,7 +109,7 @@ fn supports_text_with_generated_images(model: &str) -> bool {
         || normalized.starts_with("openai/gpt-image")
 }
 
-fn build_openrouter_image_config(request: &ImageGenerationRequest) -> Option<serde_json::Value> {
+fn build_cloud_image_config(request: &ImageGenerationRequest) -> Option<serde_json::Value> {
     let aspect_ratio = resolve_aspect_ratio(request.width, request.height)?;
     Some(serde_json::json!({
         "aspect_ratio": aspect_ratio

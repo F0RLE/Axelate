@@ -172,3 +172,6 @@ npm run clear
 - [Trust Model](TRUST_MODEL.md)
 - [Vision](VISION.md)
 - [Roadmap](ROADMAP.md)
+
+Read `Current State` and `Trust Model` before expanding product scope. Read
+`Vision` and `Roadmap` as planning context only, not as shipped behavior.

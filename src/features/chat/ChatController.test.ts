@@ -486,7 +486,7 @@ describe('ChatController', () => {
         );
     });
 
-    it('should map provider auth errors to the shared OpenRouter auth message', () => {
+    it('should map provider auth errors to the shared auth message', () => {
         const contentHelper = createContentHelper();
 
         const message = contentHelper.getFriendlyErrorMessage(
@@ -494,16 +494,14 @@ describe('ChatController', () => {
             'openrouter/auto',
         );
 
-        expect(message).toBe(
-            'Error: Invalid OpenRouter API key. Please check the key in settings.',
-        );
+        expect(message).toBe('Error: Invalid API key. Please check the key in settings.');
         expect(i18n.t).toHaveBeenCalledWith(
             'ui.chat.error.auth',
-            'Error: Invalid OpenRouter API key. Please check the key in settings.',
+            'Error: Invalid API key. Please check the key in settings.',
         );
     });
 
-    it('should map payment errors to the OpenRouter billing message', () => {
+    it('should map payment errors to the billing message', () => {
         const contentHelper = createContentHelper();
 
         const message = contentHelper.getFriendlyErrorMessage(
@@ -511,16 +509,14 @@ describe('ChatController', () => {
             'openrouter/auto',
         );
 
-        expect(message).toBe(
-            'Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).',
-        );
+        expect(message).toBe('Error 402: Payment Required. Please check your provider balance.');
         expect(i18n.t).toHaveBeenCalledWith(
             'ui.chat.error.payment_required',
-            'Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).',
+            'Error 402: Payment Required. Please check your provider balance.',
         );
     });
 
-    it('should map rate limit errors to the shared OpenRouter quota message', () => {
+    it('should map rate limit errors to the shared quota message', () => {
         const contentHelper = createContentHelper();
 
         const message = contentHelper.getFriendlyErrorMessage(
@@ -529,11 +525,11 @@ describe('ChatController', () => {
         );
 
         expect(message).toBe(
-            'Error: OpenRouter or the selected provider hit a rate limit. Wait a bit and try again.',
+            'Error: The provider or the selected model hit a rate limit. Wait a bit and try again.',
         );
         expect(i18n.t).toHaveBeenCalledWith(
             'ui.chat.error.quota',
-            'Error: OpenRouter or the selected provider hit a rate limit. Wait a bit and try again.',
+            'Error: The provider or the selected model hit a rate limit. Wait a bit and try again.',
         );
     });
 

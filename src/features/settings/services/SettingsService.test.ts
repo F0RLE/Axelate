@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+﻿import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { SettingsService } from './SettingsService';
 import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
@@ -229,22 +229,21 @@ describe('SettingsService', () => {
         it('should store cloud provider keys in the shared OpenRouter slot', async () => {
             await service.saveSecureKey('gemini', 'my-api-key');
             expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
-                service: 'openrouter_api_key',
+                service: 'cloud_api_key',
                 key: 'my-api-key',
             });
         });
 
-        it('should keep provider-specific slots for unknown providers', async () => {
-            await service.saveSecureKey('unknown-provider', 'my-api-key');
-            expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
-                service: 'unknown-provider_api_key',
-                key: 'my-api-key',
-            });
+        it('should reject unknown provider secure key storage', async () => {
+            await expect(service.saveSecureKey('unknown-provider', 'my-api-key')).rejects.toThrow(
+                'Provider does not support frontend-managed secrets',
+            );
+            expect(tauri.invoke).not.toHaveBeenCalledWith('save_secure_key', expect.anything());
         });
 
         it('should handle error gracefully', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
-            await expect(service.saveSecureKey('x', 'k')).rejects.toThrow('fail');
+            await expect(service.saveSecureKey('gemini', 'k')).rejects.toThrow('fail');
         });
     });
 
@@ -252,7 +251,7 @@ describe('SettingsService', () => {
         it('should remove secure key through tauri provider helper', async () => {
             await service.removeSecureKey('gemini');
 
-            expect(tauri.removeSecureKey).toHaveBeenCalledWith('openrouter_api_key');
+            expect(tauri.removeSecureKey).toHaveBeenCalledWith('cloud_api_key');
             expect(tauri.invoke).not.toHaveBeenCalledWith('remove_secure_key', expect.anything());
         });
 
@@ -262,7 +261,7 @@ describe('SettingsService', () => {
             await service.removeSecureKey('gemini');
 
             expect(tauri.invoke).toHaveBeenCalledWith('remove_secure_key', {
-                service: 'openrouter_api_key',
+                service: 'cloud_api_key',
             });
         });
 
@@ -280,6 +279,28 @@ describe('SettingsService', () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
             const result = await service.validateApiKey('gemini', 'key');
             expect(result).toBe(true);
+            expect(tauri.invoke).toHaveBeenCalledWith('validate_api_key', {
+                provider: 'gemini',
+                key: 'key',
+                baseUrl: null,
+            });
+        });
+
+        it('should pass custom validation base URLs through to the backend', async () => {
+            (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
+
+            const result = await service.validateApiKey(
+                'custom-text',
+                'key',
+                'https://api.openai.com/v1',
+            );
+
+            expect(result).toBe(true);
+            expect(tauri.invoke).toHaveBeenCalledWith('validate_api_key', {
+                provider: 'custom-text',
+                key: 'key',
+                baseUrl: 'https://api.openai.com/v1',
+            });
         });
 
         it('should return false on error', async () => {
@@ -297,7 +318,7 @@ describe('SettingsService', () => {
 
             expect(result).toBe(true);
             expect(tauri.invoke).toHaveBeenCalledWith('has_secure_key', {
-                service: 'openrouter_api_key',
+                service: 'cloud_api_key',
             });
         });
 
@@ -318,7 +339,7 @@ describe('SettingsService', () => {
             const result = await service.getSecureKeyMeta('gemini');
 
             expect(result).toEqual(meta);
-            expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('openrouter_api_key');
+            expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('cloud_api_key');
         });
 
         it('should return empty metadata on error', async () => {
@@ -339,7 +360,7 @@ describe('SettingsService', () => {
             const result = await service.getSecureKey('gemini');
 
             expect(result).toBe('secret');
-            expect(tauri.getSecureKey).toHaveBeenCalledWith('openrouter_api_key');
+            expect(tauri.getSecureKey).toHaveBeenCalledWith('cloud_api_key');
         });
 
         it('should return null on error', async () => {
@@ -355,18 +376,19 @@ describe('SettingsService', () => {
         it('should validate the stored key via backend', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
-            const result = await service.validateStoredApiKey('openrouter');
+            const result = await service.validateStoredApiKey('cloud');
 
             expect(result).toBe(true);
             expect(tauri.invoke).toHaveBeenCalledWith('validate_stored_api_key', {
-                provider: 'openrouter',
+                provider: 'cloud',
+                baseUrl: null,
             });
         });
 
         it('should return false when stored-key validation fails', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
-            const result = await service.validateStoredApiKey('openrouter');
+            const result = await service.validateStoredApiKey('cloud');
 
             expect(result).toBe(false);
         });

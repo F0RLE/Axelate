@@ -10,6 +10,7 @@ import {
     renderInternetAccessSection,
     renderModelCard,
     renderCustomModelComposer,
+    renderApiEndpointSection,
     renderThinkingSection,
 } from './AISettingsMarkup';
 
@@ -20,6 +21,8 @@ type AISettingsRenderContext = {
     appId: string;
     models: IAIModelData[];
     savedModel: string;
+    apiBaseUrl: string;
+    showApiEndpointSelector: boolean;
     showModelStats: boolean;
     showCustomModelComposer: boolean;
     translate: TranslateFunc;
@@ -125,6 +128,15 @@ export class AISettingsContentRenderer {
     private _buildProviderMarkup(context: AISettingsRenderContext): string {
         const { appId, savedModel, translate, viewPolicy } = context;
         const models = sortModelsByPrice(context.models);
+        const apiKeyLabel = context.showApiEndpointSelector
+            ? translate('ui.settings.api_key_label_custom', 'Custom provider API key')
+            : translate('ui.settings.api_key_label_openrouter', 'OpenRouter API key');
+        const apiKeyNote = context.showApiEndpointSelector
+            ? translate('ui.settings.keys_encrypted_custom', 'Uses a custom provider key.')
+            : translate(
+                  'ui.settings.keys_encrypted_openrouter',
+                  'Built-in cloud cards use OpenRouter.',
+              );
 
         return `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
@@ -134,7 +146,7 @@ export class AISettingsContentRenderer {
                             <div class="settings-card-header-center">
                                 <h3 id="${appId}-api-title">🔑 
                                     <a href="#" id="${appId}-api-link" class="api-key-link" title="Manage your OpenRouter API Keys">
-                                        <span data-i18n="ui.settings.api_key_label">${translate('ui.settings.api_key_label', 'OpenRouter API Key')}</span>
+                                        <span>${apiKeyLabel}</span>
                                     </a>
                                 </h3>
                             </div>
@@ -143,9 +155,15 @@ export class AISettingsContentRenderer {
                                 <button id="${appId}-key-toggle-btn" class="ai-icon-btn" aria-label="Toggle password visibility" data-i18n-aria-label="ui.settings.toggle_visibility"></button>
                                 <button id="${appId}-key-check-btn" class="ai-check-btn" data-i18n="ui.gpt.key_check_btn">${translate('ui.gpt.key_check_btn', 'Check')}</button>
                             </div>
-                            <div class="encryption-note">🔒 <span data-i18n="ui.settings.keys_encrypted">${translate('ui.settings.keys_encrypted', 'Shared OpenRouter key is securely encrypted locally.')}</span></div>
+                            <div class="encryption-note">🔒 <span>${apiKeyNote}</span></div>
                         </div>
                     </section>
+
+                    ${
+                        context.showApiEndpointSelector
+                            ? renderApiEndpointSection(appId, context.apiBaseUrl, translate)
+                            : ''
+                    }
 
                     <section class="ai-models-section" aria-labelledby="${appId}-models-title">
                         <div class="ai-content-panel">

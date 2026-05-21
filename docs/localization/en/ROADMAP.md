@@ -367,7 +367,7 @@ Turn the current shell into a reliable daily-use Windows AI workstation.
 - keep streaming fast and predictable
 - preserve chat history correctly
 - keep summary compaction hidden and reliable
-- make request isolation and cancellation robust
+- make request isolation and cancellation reliable
 - improve file and multimodal handling only where it is already justified
 
 ### Workstream D: Local Runtime Orchestration

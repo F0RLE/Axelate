@@ -93,7 +93,7 @@ pub fn clear_logs() -> Result<(), AppError> {
 #[allow(clippy::needless_pass_by_value)]
 pub fn clear_console_logs(view_id: String) -> Result<(), AppError> {
     let canonical_view_id = canonical_console_view_id(&view_id);
-    let target = resolve_console_log_target(&canonical_view_id);
+    let target = resolve_console_log_target(&canonical_view_id)?;
     logs::clear_logs_for_view(&canonical_view_id);
     clear_console_log_target(&canonical_view_id, &target)?;
     Ok(())
@@ -121,7 +121,7 @@ pub fn open_log_dir() -> Result<(), AppError> {
 /// Opens the log folder for a single console view.
 #[allow(clippy::needless_pass_by_value)]
 pub fn open_console_log_target(view_id: String) -> Result<(), AppError> {
-    let target = resolve_console_log_target(&view_id);
+    let target = resolve_console_log_target(&view_id)?;
     fs::create_dir_all(&target)?;
     open_folder(&target)?;
     Ok(())
@@ -203,16 +203,36 @@ const fn describe_status(status: ConsoleRuntimeStatus) -> &'static str {
     }
 }
 
-fn resolve_console_log_target(view_id: &str) -> PathBuf {
+fn resolve_console_log_target(view_id: &str) -> Result<PathBuf, AppError> {
     if let Some(engine_id) = view_id.strip_prefix("engine:") {
-        return crate::utils::paths::ENGINE_LOGS_DIR.join(canonical_engine_id(engine_id));
+        let engine_id = canonical_engine_id(engine_id);
+        validate_console_log_segment(&engine_id, "Engine ID")?;
+        return Ok(crate::utils::paths::ENGINE_LOGS_DIR.join(engine_id));
     }
 
     if let Some(module_id) = view_id.strip_prefix("module:") {
-        return crate::utils::paths::INTEGRATION_LOGS_DIR.join(module_id);
+        crate::domain::modules::downloader::validate_module_id(module_id)?;
+        return Ok(crate::utils::paths::INTEGRATION_LOGS_DIR.join(module_id));
     }
 
-    crate::utils::paths::LOG_DIR.clone()
+    Ok(crate::utils::paths::LOG_DIR.clone())
+}
+
+fn validate_console_log_segment(value: &str, label: &str) -> Result<(), AppError> {
+    if value.is_empty() {
+        return Err(AppError::Validation(format!("{label} cannot be empty")));
+    }
+
+    if !value
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '-')
+    {
+        return Err(AppError::Validation(format!(
+            "{label} contains invalid characters"
+        )));
+    }
+
+    Ok(())
 }
 
 fn canonical_console_view_id(view_id: &str) -> String {
@@ -756,13 +776,27 @@ mod tests {
 
     #[test]
     fn resolves_console_log_targets_by_view_kind() {
-        let engine_target = resolve_console_log_target("engine:sdcpp");
-        let module_target = resolve_console_log_target("module:comfyui");
-        let general_target = resolve_console_log_target("general");
+        let engine_target = resolve_console_log_target("engine:sdcpp").unwrap();
+        let module_target = resolve_console_log_target("module:comfyui").unwrap();
+        let general_target = resolve_console_log_target("general").unwrap();
 
         assert!(engine_target.ends_with("sdcpp"));
         assert!(module_target.ends_with("comfyui"));
         assert_ne!(general_target, module_target);
+    }
+
+    #[test]
+    fn rejects_invalid_module_console_log_targets() {
+        let error = resolve_console_log_target("module:..\\..").unwrap_err();
+
+        assert!(error.to_string().contains("invalid characters"));
+    }
+
+    #[test]
+    fn rejects_invalid_engine_console_log_targets() {
+        let error = resolve_console_log_target("engine:..\\..").unwrap_err();
+
+        assert!(error.to_string().contains("invalid characters"));
     }
 
     #[test]

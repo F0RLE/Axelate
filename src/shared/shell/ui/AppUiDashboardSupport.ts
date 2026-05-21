@@ -7,8 +7,8 @@ import {
     resolveModalCategory as resolveModalCategoryKey,
 } from '../../utils/moduleCategoryPolicy';
 
-import type { AppUiSelectionState } from './AppUiSelectionState';
-import type { ModuleCardRenderer } from './ModuleCardRenderer';
+import type { AppUiSelectionState } from './flow/AppUiSelectionState';
+import type { ModuleCardRenderer } from './card/ModuleCardRenderer';
 import type { AppUiChrome } from './AppUiChrome';
 
 type DashboardTracer = {

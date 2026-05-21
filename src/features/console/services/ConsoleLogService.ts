@@ -186,13 +186,8 @@ export class ConsoleLogService {
     }
 
     public async openModuleFolder(moduleId: string): Promise<boolean> {
-        const path = await this.getModulePath(moduleId);
-        if (path === null || path.trim() === '') {
-            return false;
-        }
-
         try {
-            await this.bridge.invoke('plugin:shell|open', { path });
+            await this.bridge.invoke('open_module_folder', { moduleId });
             return true;
         } catch (error) {
             this._tracer.error(

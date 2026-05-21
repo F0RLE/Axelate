@@ -379,14 +379,24 @@ fn build_validation_request(
     client: &reqwest::Client,
     provider: &str,
     key: &str,
+    base_url: Option<&str>,
 ) -> Result<reqwest::Request, crate::errors::AppError> {
-    let request = if provider == "gemini" && !key.starts_with("sk-or-") {
+    let request = if provider == "gemini" && key.starts_with("AIza") {
         client
             .get("https://generativelanguage.googleapis.com/v1beta/models")
             .header("x-goog-api-key", key)
     } else {
+        let base_url = base_url
+            .map(str::trim)
+            .filter(|value| !value.is_empty())
+            .unwrap_or("https://openrouter.ai/api/v1")
+            .trim_end_matches('/');
+        let models_url = format!("{base_url}/models");
+
+        // OpenAI-compatible providers expose model listing behind the same
+        // base URL used for chat completions.
         client
-            .get("https://openrouter.ai/api/v1/models")
+            .get(models_url)
             .header("Authorization", format!("Bearer {key}"))
     };
 
@@ -402,6 +412,7 @@ fn build_validation_request(
 pub async fn validate_api_key(
     provider: String,
     key: String,
+    base_url: Option<String>,
 ) -> Result<bool, crate::errors::AppError> {
     let key = key.trim().to_string();
     if key.is_empty()
@@ -414,12 +425,11 @@ pub async fn validate_api_key(
         return Ok(false);
     }
 
-    let is_openrouter_key = key.starts_with("sk-or-");
-    if provider == "gemini" && !is_openrouter_key && !key.starts_with("AIza") {
-        return Ok(false);
-    }
-
-    if provider != "gemini" && !is_openrouter_key {
+    // Gemini native keys must start with AIza (unless routed via OpenAI-compatible proxy)
+    if provider == "gemini" && key.starts_with("AIza") {
+        // Validate directly against Google AI Studio
+    } else if key.len() < 8 {
+        // Any reasonable API key should be at least 8 chars
         return Ok(false);
     }
 
@@ -431,7 +441,7 @@ pub async fn validate_api_key(
             message: e.to_string(),
         })?;
 
-    let request = build_validation_request(&client, &provider, &key)?;
+    let request = build_validation_request(&client, &provider, &key, base_url.as_deref())?;
 
     // Explicitly drop key after building request
     std::mem::drop(key);
@@ -602,20 +612,21 @@ mod tests {
     #[tokio::test]
     async fn test_validate_api_key_rejects_obvious_non_keys() {
         assert!(
-            !validate_api_key("openrouter".to_string(), String::new())
+            !validate_api_key("openrouter".to_string(), String::new(), None)
                 .await
                 .expect("empty key should not error")
         );
         assert!(
             !validate_api_key(
                 "openrouter".to_string(),
-                "https://reddit.com/r/not-a-key".to_string()
+                "https://reddit.com/r/not-a-key".to_string(),
+                None
             )
             .await
             .expect("url-like key should not error")
         );
         assert!(
-            !validate_api_key("openrouter".to_string(), "not a real key".to_string())
+            !validate_api_key("openrouter".to_string(), "not a real key".to_string(), None)
                 .await
                 .expect("whitespace key should not error")
         );
@@ -624,7 +635,7 @@ mod tests {
     #[test]
     fn test_build_validation_request_keeps_gemini_key_out_of_url() {
         let client = reqwest::Client::new();
-        let request = build_validation_request(&client, "gemini", "AIza-test-key")
+        let request = build_validation_request(&client, "gemini", "AIza-test-key", None)
             .expect("gemini request should build");
 
         assert_eq!(
@@ -643,7 +654,7 @@ mod tests {
     #[test]
     fn test_build_validation_request_uses_bearer_for_openrouter_keys() {
         let client = reqwest::Client::new();
-        let request = build_validation_request(&client, "openrouter", "sk-or-test")
+        let request = build_validation_request(&client, "openrouter", "sk-or-test", None)
             .expect("openrouter request should build");
 
         assert_eq!(
@@ -656,6 +667,30 @@ mod tests {
                 .get("Authorization")
                 .expect("authorization header should exist"),
             "Bearer sk-or-test"
+        );
+    }
+
+    #[test]
+    fn test_build_validation_request_uses_configured_openai_compatible_base_url() {
+        let client = reqwest::Client::new();
+        let request = build_validation_request(
+            &client,
+            "groq",
+            "gsk-test",
+            Some("https://api.groq.com/openai/v1/"),
+        )
+        .expect("groq request should build");
+
+        assert_eq!(
+            request.url().as_str(),
+            "https://api.groq.com/openai/v1/models"
+        );
+        assert_eq!(
+            request
+                .headers()
+                .get("Authorization")
+                .expect("authorization header should exist"),
+            "Bearer gsk-test"
         );
     }
 

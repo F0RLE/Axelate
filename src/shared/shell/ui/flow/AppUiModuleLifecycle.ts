@@ -1,7 +1,7 @@
-import type { IApp } from '../../types/coreTypes';
-import type { ModulePlatformService } from '../../services/ModulePlatformService';
+import type { IApp } from '../../../types/coreTypes';
+import type { ModulePlatformService } from '../../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import { isAiCategory } from '../../utils/moduleCategoryPolicy';
+import { isAiCategory } from '../../../utils/moduleCategoryPolicy';
 
 type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 

@@ -1,7 +1,7 @@
 {
     "id": "gpt",
-    "name": "GPT",
-    "description": "Autonomous agents and deep logic.",
+    "name": "OpenAI",
+    "description": "OpenAI models for chat, coding, reasoning, and image workflows.",
     "descKey": "ui.launcher.app.gpt.desc",
     "icon": "🤖",
     "type": "api",

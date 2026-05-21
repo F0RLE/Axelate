@@ -11,19 +11,18 @@ type ErrorRule = {
 };
 
 export class ChatContentHelper {
-    private static readonly _defaultProviderName = 'OpenRouter';
+    private static readonly _defaultProviderName = 'AI Provider';
     private static readonly _errorRules: ErrorRule[] = [
         {
             patterns: ['402', 'payment required', 'credits', 'balance', 'insufficient credit'],
             key: 'ui.chat.error.payment_required',
-            fallback:
-                'Error 402: Payment Required. Please check your balance at [OpenRouter](https://openrouter.ai/settings/credits).',
+            fallback: 'Error 402: Payment Required. Please check your provider balance.',
         },
         {
             patterns: ['429', 'rate limit', 'too many requests'],
             key: 'ui.chat.error.quota',
             fallback:
-                'Error: OpenRouter or the selected provider hit a rate limit. Wait a bit and try again.',
+                'Error: The provider or the selected model hit a rate limit. Wait a bit and try again.',
         },
         {
             patterns: ['503', 'unavailable', 'overloaded'],
@@ -34,7 +33,7 @@ export class ChatContentHelper {
         {
             patterns: ['403', 'permission_denied', 'api key'],
             key: 'ui.chat.error.auth',
-            fallback: 'Error: Invalid OpenRouter API key. Please check the key in settings.',
+            fallback: 'Error: Invalid API key. Please check the key in settings.',
         },
     ];
     private static readonly _localModelMemoryRule: ErrorRule = {

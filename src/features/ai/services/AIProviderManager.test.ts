@@ -36,6 +36,10 @@ function createMockCore(
         aiSettings: {
             setSelectedAIModel: vi.fn(),
             getSelectedAIModel: vi.fn().mockReturnValue(undefined),
+            getApiBaseUrl: vi.fn(
+                (_appId: string, fallback?: string) => fallback ?? 'https://openrouter.ai/api/v1',
+            ),
+            setApiBaseUrl: vi.fn().mockReturnValue(true),
             getThinkingLevel: vi.fn().mockReturnValue('auto'),
             getInternetAccessEnabled: vi.fn().mockReturnValue(false),
         },
@@ -182,7 +186,7 @@ describe('AIProviderManager', () => {
             const result = await manager.startProvider('gemini');
             expect(result).toBe(false);
             expect(manager.isActive()).toBe(false);
-            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith('openrouter_api_key');
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith('cloud_api_key');
         });
 
         it('should succeed for local provider without a key', async () => {
@@ -250,7 +254,7 @@ describe('AIProviderManager', () => {
             expect(manager.isActive()).toBe(true);
         });
 
-        it('should treat custom providers as cloud providers requiring the shared key', async () => {
+        it('should treat custom providers as cloud providers requiring their own key', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
             manager.setCore(mockCore);
 
@@ -258,7 +262,7 @@ describe('AIProviderManager', () => {
 
             expect(result).toBe(true);
             expect(manager.isActive()).toBe(true);
-            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith('openrouter_api_key');
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenCalledWith('custom_text_api_key');
         });
     });
 
@@ -278,9 +282,7 @@ describe('AIProviderManager', () => {
 
             expect(manager.apiKey).toBeNull();
             expect(manager.activeProviderId).toBeNull();
-            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenLastCalledWith(
-                'openrouter_api_key',
-            );
+            expect(mockCore.tauriProvider.hasSecureKey).toHaveBeenLastCalledWith('cloud_api_key');
         });
 
         it('should do nothing if no active provider', async () => {
@@ -314,7 +316,17 @@ describe('AIProviderManager', () => {
             const mockCore = createMockCore();
             vi.mocked(mockCore.catalog.getCatalog).mockReturnValue({
                 ai: [
-                    { id: 'gpt', name: 'OpenAI GPT' },
+                    {
+                        id: 'gpt',
+                        name: 'OpenAI GPT',
+                        apiProviderData: {
+                            id: 'gpt',
+                            name: 'OpenAI GPT',
+                            type: 'api',
+                            baseUrl: ' https://api.openai.com/v1 ',
+                            models: [],
+                        },
+                    },
                     { id: 'gemini', name: 'Google Gemini' },
                 ],
             });
@@ -325,6 +337,35 @@ describe('AIProviderManager', () => {
             expect(manager.getProviderDisplayName(CUSTOM_TEXT_PROVIDER_ID)).toBe('Custom');
             expect(manager.getProviderDisplayName('llamacpp')).toBe('llamacpp');
             expect(manager.getProviderDisplayName('unknown-id')).toBe('unknown-id');
+            expect(manager.getProviderBaseUrl('gpt')).toBe('https://api.openai.com/v1');
+            expect(manager.getProviderBaseUrl('gemini')).toBeUndefined();
+        });
+
+        it('uses saved API base URLs only for custom text providers', () => {
+            const mockCore = createMockCore();
+            vi.mocked(mockCore.aiSettings.getApiBaseUrl).mockReturnValue(
+                'https://api.groq.com/openai/v1',
+            );
+            vi.mocked(mockCore.catalog.getCatalog).mockReturnValue({
+                ai: [
+                    {
+                        id: 'gpt',
+                        apiProviderData: {
+                            id: 'gpt',
+                            name: 'GPT',
+                            type: 'api',
+                            baseUrl: 'https://openrouter.ai/api/v1',
+                            models: [],
+                        },
+                    },
+                ],
+            });
+            manager.setCore(mockCore);
+
+            expect(manager.getProviderBaseUrl('gpt')).toBe('https://openrouter.ai/api/v1');
+            expect(manager.getProviderBaseUrl(CUSTOM_TEXT_PROVIDER_ID)).toBe(
+                'https://api.groq.com/openai/v1',
+            );
         });
     });
 

@@ -1,11 +1,11 @@
-//! Cloud image generation through OpenRouter-compatible image models.
+//! Cloud image generation through OpenAI-compatible image models.
 
 use std::time::Duration;
 
 use super::image_http::{build_image_client, parse_image_response_body};
 use super::image_payload::build_cloud_image_payload;
 use super::image_provider_adapter;
-use super::image_response::parse_openrouter_generated_images;
+use super::image_response::parse_cloud_generated_images;
 use super::types::ImageGenerationRequest;
 use crate::errors::AppError;
 use crate::infrastructure::crypto::secure_storage::SecureStorage;
@@ -17,10 +17,18 @@ pub(super) fn is_cloud_image_provider(provider: &str) -> bool {
 pub(super) async fn process_cloud_image_request(
     request: &ImageGenerationRequest,
 ) -> Result<Vec<String>, AppError> {
-    let api_key = SecureStorage::get_key_async("openrouter_api_key".to_string())
+    let api_key = SecureStorage::get_key_async("cloud_api_key".to_string())
         .await?
-        .filter(|value| !value.trim().is_empty())
-        .ok_or_else(|| AppError::Validation("OpenRouter API key is missing".to_string()))?;
+        .filter(|value| !value.trim().is_empty());
+
+    // Legacy fallback for users who stored keys under the old name
+    let api_key = match api_key {
+        Some(key) => key,
+        None => SecureStorage::get_key_async("openrouter_api_key".to_string())
+            .await?
+            .filter(|value| !value.trim().is_empty())
+            .ok_or_else(|| AppError::Validation("Cloud API key is missing".to_string()))?,
+    };
 
     let client = build_image_client(Duration::from_mins(3))?;
     let response = client
@@ -36,7 +44,7 @@ pub(super) async fn process_cloud_image_request(
         })?;
 
     let body = parse_image_response_body(response).await?;
-    let images = parse_openrouter_generated_images(&body);
+    let images = parse_cloud_generated_images(&body);
     if images.is_empty() {
         return Err(AppError::External {
             request_id: None,

@@ -1,10 +1,10 @@
-import type { IApp, ReleaseDownloadSelection } from '../../types/coreTypes';
-import { resolveCatalogCategory } from '../../utils/moduleCategoryPolicy';
-import type { ModulePlatformService } from '../../services/ModulePlatformService';
+import type { IApp, ReleaseDownloadSelection } from '../../../types/coreTypes';
+import { resolveCatalogCategory } from '../../../utils/moduleCategoryPolicy';
+import type { ModulePlatformService } from '../../../services/ModulePlatformService';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import { openDownloadSelectionDialog } from './DownloadSelectionDialog';
-import { openIntegrationUrlDialog } from './IntegrationImportDialog';
-import type { IntegrationImportAction } from './ModalManagerSupport';
+import { openDownloadSelectionDialog } from '../dialog/DownloadSelectionDialog';
+import { openIntegrationUrlDialog } from '../dialog/IntegrationImportDialog';
+import type { IntegrationImportAction } from '../modal/ModalManagerSupport';
 import { open } from '@tauri-apps/plugin-dialog';
 import { downloadDir } from '@tauri-apps/api/path';
 

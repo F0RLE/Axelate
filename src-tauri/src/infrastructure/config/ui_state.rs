@@ -102,6 +102,22 @@ mod tests {
     }
 
     #[test]
+    fn normalize_ui_state_preserves_api_base_urls() {
+        let mut state = UIState::default();
+        state.ai_api_base_urls.insert(
+            "custom-text".to_string(),
+            "https://api.openai.com/v1".to_string(),
+        );
+
+        let normalized = normalize_ui_state(state);
+
+        assert_eq!(
+            normalized.ai_api_base_urls.get("custom-text"),
+            Some(&"https://api.openai.com/v1".to_string())
+        );
+    }
+
+    #[test]
     fn ui_state_deserializes_without_local_max_output_tokens() {
         let state_result = serde_json::from_str::<UIState>(
             r#"{

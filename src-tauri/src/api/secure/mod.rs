@@ -18,7 +18,14 @@ fn normalize_service_name(service: &str) -> String {
 
 fn is_frontend_managed_secret(service: &str) -> bool {
     let normalized = normalize_service_name(service);
-    normalized == "ai_session_id" || normalized.ends_with("_api_key")
+    matches!(
+        normalized.as_str(),
+        "ai_session_id"
+            | "cloud_api_key"
+            | "openrouter_api_key"
+            | "custom_text_api_key"
+            | "custom_image_api_key"
+    )
 }
 
 fn is_frontend_readable_secret(service: &str) -> bool {
@@ -38,7 +45,7 @@ fn ensure_frontend_managed_secret(service: &str) -> Result<String, AppError> {
 
 #[tauri::command]
 #[specta::specta]
-/// Saves anAPI key securely to system credential storage
+/// Saves an API key securely to system credential storage
 pub async fn save_secure_key(service: String, key: String) -> Result<(), AppError> {
     let service = ensure_frontend_managed_secret(&service)?;
     if key.trim().is_empty() {
@@ -108,11 +115,18 @@ mod tests {
 
     #[test]
     fn frontend_secret_policy_allows_only_expected_service_names() {
-        assert!(is_frontend_managed_secret("openrouter_api_key"));
+        assert!(is_frontend_managed_secret("cloud_api_key"));
+        assert!(is_frontend_managed_secret("openrouter_api_key")); // legacy compat
+        assert!(is_frontend_managed_secret("custom_text_api_key"));
+        assert!(is_frontend_managed_secret("custom_image_api_key"));
         assert!(is_frontend_managed_secret("ai_session_id"));
+        assert!(!is_frontend_managed_secret("groq_api_key"));
+        assert!(!is_frontend_managed_secret("deepseek_api_key"));
+        assert!(!is_frontend_managed_secret("unknown_provider_api_key"));
         assert!(!is_frontend_managed_secret("internal_service_token"));
         assert!(is_frontend_readable_secret("ai_session_id"));
-        assert!(is_frontend_readable_secret("openrouter_api_key"));
+        assert!(is_frontend_readable_secret("cloud_api_key"));
+        assert!(is_frontend_readable_secret("custom_text_api_key"));
     }
 
     #[tokio::test]

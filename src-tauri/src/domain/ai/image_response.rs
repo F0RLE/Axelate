@@ -119,22 +119,19 @@ pub(super) fn summarize_image_response_shape(body: &serde_json::Value) -> String
         .join(", ")
 }
 
-pub(super) fn parse_openrouter_generated_images(body: &serde_json::Value) -> Vec<String> {
+pub(super) fn parse_cloud_generated_images(body: &serde_json::Value) -> Vec<String> {
     body.get("choices")
         .and_then(|value| value.as_array())
         .into_iter()
         .flat_map(|items| items.iter())
         .filter_map(|item| item.get("message"))
-        .flat_map(extract_images_from_openrouter_message)
+        .flat_map(extract_images_from_cloud_message)
         .collect()
 }
 
-fn extract_images_from_openrouter_message(message: &serde_json::Value) -> Vec<String> {
+fn extract_images_from_cloud_message(message: &serde_json::Value) -> Vec<String> {
     if let Some(images) = message.get("images").and_then(|value| value.as_array()) {
-        return images
-            .iter()
-            .filter_map(extract_openrouter_image_url)
-            .collect();
+        return images.iter().filter_map(extract_cloud_image_url).collect();
     }
 
     if let Some(content) = message.get("content").and_then(|value| value.as_array()) {
@@ -152,7 +149,7 @@ fn extract_images_from_openrouter_message(message: &serde_json::Value) -> Vec<St
     Vec::new()
 }
 
-fn extract_openrouter_image_url(item: &serde_json::Value) -> Option<String> {
+fn extract_cloud_image_url(item: &serde_json::Value) -> Option<String> {
     item.get("image_url")
         .and_then(|value| value.get("url"))
         .and_then(|value| value.as_str())

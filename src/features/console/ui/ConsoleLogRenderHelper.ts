@@ -34,28 +34,16 @@ export class ConsoleLogRenderHelper {
     }
 
     public applyFiltersToPane(pane: HTMLElement, entries: HTMLElement[]): void {
-        const existingEmptyState = pane.querySelector<HTMLElement>(`#${this._deps.emptyStateId}`);
-        let visibleEntries = 0;
+        const visibleEntries = entries.filter((entry) =>
+            this._deps.matchesNormalizedLevel(entry.dataset['level'] ?? 'ALL'),
+        );
 
-        entries.forEach((entry) => {
-            const isVisible = this._deps.matchesNormalizedLevel(entry.dataset['level'] ?? 'ALL');
-            if (isVisible) {
-                pane.append(entry);
-                visibleEntries += 1;
-                return;
-            }
-
-            entry.remove();
-        });
-
-        if (visibleEntries === 0) {
-            if (!(existingEmptyState instanceof HTMLElement)) {
-                pane.append(this.createEmptyState());
-            }
+        if (visibleEntries.length === 0) {
+            pane.replaceChildren(this.createEmptyState());
             return;
         }
 
-        existingEmptyState?.remove();
+        pane.replaceChildren(...visibleEntries);
     }
 
     public scrollLogsToBottom(container: HTMLElement): void {

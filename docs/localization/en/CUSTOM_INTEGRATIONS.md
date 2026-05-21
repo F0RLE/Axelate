@@ -75,6 +75,11 @@ status. Store integration-owned runtime files under `AXELATE_MODULE_RUNTIME_DIR`
 and logs under `AXELATE_MODULE_LOG_DIR`; do not write generated files into the
 imported integration folder.
 
+URL imports must use `https://`, except localhost development URLs such as
+`http://localhost` or `http://127.0.0.1`. Repository-root GitHub URLs are probed
+for `main` and `master` branch archives; direct archive URLs are downloaded as
+archives.
+
 ## Current Trust Limits
 
 Custom integrations are local code imported by the user. The current launcher can
@@ -82,6 +87,11 @@ validate the manifest, isolate settings/runtime/log folders, issue scoped local
 API tokens, and remove imported files. It does not yet provide marketplace
 signing, verified publisher identity, install-time permission review, or managed
 remote execution. Treat manually imported integrations as code you chose to run.
+
+The launcher validates module ids, runtime entry paths, settings UI paths, import
+archive entries, file counts, and size limits. These checks protect the launcher
+from common import mistakes and path traversal, but they are not a replacement
+for reviewing the integration code you run.
 
 ## Example
 

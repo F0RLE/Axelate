@@ -1,6 +1,10 @@
-import type { IApp } from '../../types/coreTypes';
-import { CategoryKey } from '../../types/categoryKeys';
-import { getOtherAiSlot, isAiCategory, isAiSlotCategory } from '../../utils/moduleCategoryPolicy';
+import type { IApp } from '../../../types/coreTypes';
+import { CategoryKey } from '../../../types/categoryKeys';
+import {
+    getOtherAiSlot,
+    isAiCategory,
+    isAiSlotCategory,
+} from '../../../utils/moduleCategoryPolicy';
 
 export class AppUiSelectionState {
     private readonly _selectedApps = new Map<string, IApp>();

@@ -2,27 +2,30 @@ import { vi } from 'vitest';
 import type { UiStateStore, IUIState } from '@/shared/services/state/UiStateStore';
 
 export function createMockStore(initial?: Partial<IUIState>): UiStateStore {
-    const state: IUIState = {
-        sidebar_collapsed: false,
-        sidebar_manual_override: false,
-        sidebar_width: 280,
-        hidden_nav_items: [],
-        hidden_monitors: [],
-        card_widths: {},
-        download_limit_enabled: false,
-        download_max_speed: 50,
-        selected_modules: {},
-        zoom_level: 1,
-        selected_ai_models: {},
-        resolution_zoom: {},
-        sound_enabled: true,
-        ai_thinking_level: {},
-        ai_web_search_enabled: {},
-        local_max_output_tokens: {},
-        integration_import_last_directory: null,
-        pending_chat_reveal: false,
-        ...initial,
-    };
+    const state: IUIState = Object.assign(
+        {
+            sidebar_collapsed: false,
+            sidebar_manual_override: false,
+            sidebar_width: 280,
+            hidden_nav_items: [],
+            hidden_monitors: [],
+            card_widths: {},
+            download_limit_enabled: false,
+            download_max_speed: 50,
+            selected_modules: {},
+            zoom_level: 1,
+            selected_ai_models: {},
+            ai_api_base_urls: {},
+            resolution_zoom: {},
+            sound_enabled: true,
+            ai_thinking_level: {},
+            ai_web_search_enabled: {},
+            local_max_output_tokens: {},
+            integration_import_last_directory: null,
+            pending_chat_reveal: false,
+        },
+        initial,
+    );
 
     return {
         getState: vi.fn(() => state),

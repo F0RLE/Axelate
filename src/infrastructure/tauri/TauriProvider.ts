@@ -2,6 +2,7 @@ import { listen } from '@tauri-apps/api/event';
 import { invoke as tauriInvoke } from '@tauri-apps/api/core';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IBridge } from '@/shared/types/IBridge';
+import { assertAllowedExternalUrl } from '@/shared/utils/externalUrlPolicy';
 
 // No local types needed, using global.d.ts
 export interface SecureKeyMeta {
@@ -238,6 +239,8 @@ export class TauriProvider implements IBridge {
     }
 
     public async openUrl(url: string): Promise<void> {
+        assertAllowedExternalUrl(url);
+
         if (this.isTauri()) {
             await this.invoke('plugin:shell|open', { path: url });
         } else {

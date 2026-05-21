@@ -38,6 +38,19 @@ It already includes:
 
 It is not yet a finished marketplace, managed platform, or polished MCP-first operating layer.
 
+## Current Product Boundary
+
+Use Axelate today as a desktop workstation and local integration runtime:
+
+- install, start, stop, inspect, and remove local AI runtimes
+- use BYOK cloud providers from one desktop shell
+- import local integrations you trust from folders, archives, or supported URLs
+- inspect logs, downloads, settings, and runtime health from the launcher
+
+Do not treat the current app as a reviewed package store. Manually imported
+integrations are code the user chose to run locally; signing, reviewed publisher
+identity, install-time permission review, and managed execution are later layers.
+
 ## Preview
 
 ![Axelate Launcher Preview](docs/assets/screenshots/Launcher.png)
@@ -120,6 +133,17 @@ Planning only:
 - [Roadmap](docs/localization/en/ROADMAP.md)
 
 `Vision` and `Roadmap` are planning documents. They are not setup guides and should not be read as a promise that those features already ship today.
+
+Documentation rule:
+
+- [Documentation Localizations](docs/localization/README.md) lists available
+  language folders and translation policy.
+- English files under `docs/localization/en/` are canonical.
+- `CURRENT_STATE`, `GETTING_STARTED`, `DEVELOPMENT_WORKFLOW`, `ARCHITECTURE`,
+  `TRUST_MODEL`, and `RELEASES` should describe current behavior only.
+- `VISION` and `ROADMAP` may describe future direction.
+- RU/ZH files are localized integration-development references and may lag the
+  canonical English docs.
 
 ## Feedback
 

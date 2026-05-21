@@ -3,6 +3,7 @@ import { getModelData, getMostPowerfulModel } from '../utils/catalogHelpers';
 import type { IAICatalogApp } from '../types/aiTypes';
 import type { AIProviderManagerContext } from './AIBridgeContext';
 import {
+    CUSTOM_TEXT_PROVIDER_ID,
     getCustomProviderDisplayName,
     isCustomProviderId,
 } from '@/shared/utils/customProviderSupport';
@@ -153,6 +154,17 @@ export class AIProviderManager {
 
         const catalogProvider = this._getAiCatalogApps().find((provider) => provider.id === id);
         return catalogProvider?.name ?? id;
+    }
+
+    public getProviderBaseUrl(id: string): string | undefined {
+        const catalogProvider = this._getAiCatalogApps().find((provider) => provider.id === id);
+        const baseUrl = catalogProvider?.apiProviderData?.baseUrl?.trim();
+        const fallback = baseUrl !== undefined && baseUrl !== '' ? baseUrl : undefined;
+        if (id !== CUSTOM_TEXT_PROVIDER_ID) {
+            return fallback;
+        }
+
+        return this._context?.aiSettings.getApiBaseUrl(id, fallback) ?? fallback;
     }
 
     /**

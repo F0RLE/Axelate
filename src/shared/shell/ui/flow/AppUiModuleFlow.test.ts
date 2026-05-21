@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import type { IApp } from '../../types/coreTypes';
+import type { IApp } from '../../../types/coreTypes';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { AppUiModuleFlow } from './AppUiModuleFlow';
 import { open } from '@tauri-apps/plugin-dialog';
@@ -9,7 +9,7 @@ const integrationDialogMocks = vi.hoisted(() => ({
     openIntegrationUrlDialog: vi.fn(),
 }));
 
-vi.mock('./IntegrationImportDialog', () => ({
+vi.mock('../dialog/IntegrationImportDialog', () => ({
     openIntegrationUrlDialog: integrationDialogMocks.openIntegrationUrlDialog,
 }));
 

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { AISettingsKeyController } from './AISettingsKeyController';
 
 describe('AISettingsKeyController', () => {
@@ -48,11 +48,11 @@ describe('AISettingsKeyController', () => {
         settingsService.getSecureKeyMeta.mockResolvedValue({ exists: true, length: 8 });
         settingsService.getSecureKey.mockResolvedValue('secret-1');
 
-        await controller.hydrateStoredMask(input, 'openrouter');
+        await controller.hydrateStoredMask(input, 'cloud');
         expect(input.value).toBe('••••••••');
         expect(input.dataset['storedMasked']).toBe('true');
 
-        await controller.toggleVisibility(input, button, 'openrouter');
+        await controller.toggleVisibility(input, button, 'cloud');
         expect(input.value).toBe('secret-1');
         expect(input.dataset['storedRevealed']).toBe('true');
         expect(button.innerHTML).toContain('<visible>');
@@ -69,10 +69,14 @@ describe('AISettingsKeyController', () => {
         settingsService.validateApiKey.mockResolvedValue(true);
         settingsService.saveSecureKey.mockResolvedValue(undefined);
 
-        await controller.checkKey(input, button, 'openrouter');
+        await controller.checkKey(input, button, 'cloud', 'https://api.openai.com/v1');
 
-        expect(settingsService.validateApiKey).toHaveBeenCalledWith('openrouter', 'typed-key');
-        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('openrouter', 'typed-key');
+        expect(settingsService.validateApiKey).toHaveBeenCalledWith(
+            'cloud',
+            'typed-key',
+            'https://api.openai.com/v1',
+        );
+        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('cloud', 'typed-key');
         expect(input.dataset['storedMasked']).toBe('true');
         expect(button.disabled).toBe(false);
         expect(button.innerHTML).toBe('Check');
@@ -110,9 +114,13 @@ describe('AISettingsKeyController', () => {
         input.value = 'typed-key';
         input.dataset['keyDirty'] = 'true';
 
-        await controllerWithDisappearingSettings.checkKey(input, button, 'openrouter');
+        await controllerWithDisappearingSettings.checkKey(input, button, 'cloud');
 
-        expect(validateOnlyService.validateApiKey).toHaveBeenCalledWith('openrouter', 'typed-key');
+        expect(validateOnlyService.validateApiKey).toHaveBeenCalledWith(
+            'cloud',
+            'typed-key',
+            undefined,
+        );
         expect(validateOnlyService.saveSecureKey).not.toHaveBeenCalled();
         expect(input.dataset['storedMasked']).toBeUndefined();
         expect(input.value).toBe('typed-key');
@@ -132,9 +140,9 @@ describe('AISettingsKeyController', () => {
         input.value = '';
         settingsService.removeSecureKey.mockResolvedValue(undefined);
 
-        await controller.checkKey(input, button, 'openrouter');
+        await controller.checkKey(input, button, 'cloud');
 
-        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('cloud');
         expect(settingsService.saveSecureKey).not.toHaveBeenCalled();
         expect(input.dataset['storedMasked']).toBeUndefined();
         expect(input.value).toBe('');
@@ -147,10 +155,10 @@ describe('AISettingsKeyController', () => {
         input.value = '';
         settingsService.removeSecureKey.mockResolvedValue(undefined);
 
-        const removed = await controller.removeClearedStoredKey(input, 'openrouter');
+        const removed = await controller.removeClearedStoredKey(input, 'cloud');
 
         expect(removed).toBe(true);
-        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('openrouter');
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('cloud');
         expect(input.dataset['storedMasked']).toBeUndefined();
         expect(input.dataset['storedRevealed']).toBeUndefined();
         expect(input.dataset['keyDirty']).toBeUndefined();
@@ -167,7 +175,7 @@ describe('AISettingsKeyController', () => {
         input.value = '';
         settingsService.removeSecureKey.mockRejectedValue(new Error('secure storage failed'));
 
-        const removed = await controller.removeClearedStoredKey(input, 'openrouter');
+        const removed = await controller.removeClearedStoredKey(input, 'cloud');
 
         expect(removed).toBe(false);
         expect(input.dataset['storedMasked']).toBe('true');
@@ -200,7 +208,7 @@ describe('AISettingsKeyController', () => {
             tracer,
         });
 
-        const removed = await controllerWithoutSettings.removeClearedStoredKey(input, 'openrouter');
+        const removed = await controllerWithoutSettings.removeClearedStoredKey(input, 'cloud');
 
         expect(removed).toBe(false);
         expect(input.dataset['storedMasked']).toBe('true');
@@ -232,7 +240,7 @@ describe('AISettingsKeyController', () => {
             tracer,
         });
 
-        await controllerWithoutSettings.checkKey(input, button, 'openrouter');
+        await controllerWithoutSettings.checkKey(input, button, 'cloud');
 
         expect(input.dataset['keyDirty']).toBe('true');
         expect(showToast).toHaveBeenCalledWith(

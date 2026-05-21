@@ -66,6 +66,8 @@ describe('ModuleSettingsUI lifecycle', () => {
             getCardWidths: vi.fn().mockReturnValue({}),
         } as unknown as UISettingsService;
         const aiSettings = {
+            getApiBaseUrl: vi.fn((_appId: string, fallback?: string) => fallback ?? ''),
+            setApiBaseUrl: vi.fn().mockReturnValue(true),
             getThinkingLevel: vi
                 .fn()
                 .mockImplementation((appId: string) => (appId === 'llamacpp' ? 'low' : 'high')),

@@ -123,7 +123,7 @@ describe('ConsoleLogService', () => {
             data: {
                 views: [
                     { id: 'general', label: 'Platform' },
-                    { id: 'module:openrouter-custom-text', label: 'Custom' },
+                    { id: 'module:custom-text', label: 'Custom' },
                     { id: 'module:axelate-telegram-parser', label: 'Parser' },
                 ],
                 status_items: [],
@@ -132,7 +132,7 @@ describe('ConsoleLogService', () => {
 
         await expect(service.getAvailableViews()).resolves.toEqual([
             { id: 'general', label: 'Platform' },
-            { id: 'module:openrouter-custom-text', label: 'Custom' },
+            { id: 'module:custom-text', label: 'Custom' },
             { id: 'module:axelate-telegram-parser', label: 'Parser' },
         ]);
     });
@@ -164,5 +164,17 @@ describe('ConsoleLogService', () => {
         expect(bridge.invoke).toHaveBeenCalledWith('open_console_log_target', {
             viewId: 'engine:sdcpp',
         });
+    });
+
+    it('opens module folders through the backend command', async () => {
+        setupTauri(bridge, true);
+        vi.mocked(bridge.invoke).mockResolvedValue(undefined);
+
+        await expect(service.openModuleFolder('axelate-telegram-parser')).resolves.toBe(true);
+
+        expect(bridge.invoke).toHaveBeenCalledWith('open_module_folder', {
+            moduleId: 'axelate-telegram-parser',
+        });
+        expect(bridge.invoke).not.toHaveBeenCalledWith('plugin:shell|open', expect.anything());
     });
 });

@@ -32,7 +32,7 @@ pub enum EngineKind {
     },
     /// Cloud API endpoint
     Cloud {
-        /// Base URL (e.g. "https://openrouter.ai/api/v1")
+        /// Base URL for the OpenAI-compatible API endpoint
         base_url: String,
     },
 }

@@ -14,7 +14,10 @@ import type { AIProviderManager } from './AIProviderManager';
 import type { AIBridgeEvents } from './AIBridgeEvents';
 import type { AIBridgeProviderPolicy } from './AIBridgeProviderPolicy';
 import type { IAIBridgeSendMessageOptions } from '../types/IAIBridge';
-import { resolveCustomProviderBackendId } from '@/shared/utils/customProviderSupport';
+import {
+    CUSTOM_TEXT_PROVIDER_ID,
+    resolveCustomProviderBackendId,
+} from '@/shared/utils/customProviderSupport';
 
 type AIBridgeMessageLogger = Pick<LoggerService, 'error'>;
 
@@ -88,11 +91,15 @@ export class AIBridgeMessageController {
             this._deps.onActivity();
 
             const providerId = this._deps.manager.activeProviderId;
-            const backendProviderId = resolveCustomProviderBackendId(providerId);
+            const backendProviderId =
+                providerId === CUSTOM_TEXT_PROVIDER_ID
+                    ? providerId
+                    : resolveCustomProviderBackendId(providerId);
             const requestModel = this._resolveRequestModel(providerId);
             if (requestModel === null) {
                 return this._handleMissingModel();
             }
+            const cloudApiBaseUrl = this._deps.manager.getProviderBaseUrl(providerId);
             const requestOptions = this._deps.providerPolicy.buildRequestOptions({
                 hasApiKey: this._deps.manager.apiKey !== null,
                 maxOutputTokens: Math.min(this._deps.manager.maxOutputTokens ?? 320, 420),
@@ -110,6 +117,7 @@ export class AIBridgeMessageController {
                     providerId: backendProviderId,
                     model: requestModel,
                     apiKey: null,
+                    cloudApiBaseUrl,
                     sessionId: '',
                     ...requestOptions,
                 },
@@ -153,7 +161,10 @@ export class AIBridgeMessageController {
         const context = this._deps.getContext();
         const selectedImageModule = context?.stateStore.getSelectedModule('ai_image');
         const settingsKey = selectedImageModule?.id ?? providerId;
-        const backendProviderId = resolveCustomProviderBackendId(providerId);
+        const backendProviderId =
+            providerId === CUSTOM_TEXT_PROVIDER_ID
+                ? providerId
+                : resolveCustomProviderBackendId(providerId);
         const originalPrompt = options.originalPrompt?.trim();
 
         const request: IImageGenerationRequest = {
@@ -216,13 +227,17 @@ export class AIBridgeMessageController {
             return this._handleMissingApiKey(source);
         }
 
-        const backendProviderId = resolveCustomProviderBackendId(providerId);
+        const backendProviderId =
+            providerId === CUSTOM_TEXT_PROVIDER_ID
+                ? providerId
+                : resolveCustomProviderBackendId(providerId);
         const requestHistory = isLocalTextProvider ? this._toTextOnlyMessages(history) : history;
         const requestAttachments = isLocalTextProvider ? [] : attachments;
         const requestModel = this._resolveRequestModel(providerId);
         if (requestModel === null) {
             return this._handleMissingModel();
         }
+        const cloudApiBaseUrl = this._deps.manager.getProviderBaseUrl(providerId);
         const requestOptions = this._deps.providerPolicy.buildRequestOptions({
             hasApiKey: this._deps.manager.apiKey !== null,
             maxOutputTokens: this._deps.manager.maxOutputTokens,
@@ -233,6 +248,7 @@ export class AIBridgeMessageController {
             providerId: backendProviderId,
             model: requestModel,
             apiKey: null,
+            cloudApiBaseUrl,
             sessionId: this._deps.manager.sessionId,
             ...requestOptions,
         });

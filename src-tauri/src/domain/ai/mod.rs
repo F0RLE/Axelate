@@ -20,6 +20,7 @@ mod provider_response;
 /// Chat session persistence and management
 pub mod session;
 mod session_context;
+mod session_persistence;
 /// AI streaming abstractions and provider implementations
 pub mod streaming;
 /// AI Data Transfer Objects (DTOs)

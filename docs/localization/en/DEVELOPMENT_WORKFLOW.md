@@ -216,3 +216,16 @@ Use these as planning-only documents:
 - [Roadmap](ROADMAP.md)
 
 If a statement is not true in the repository today, it should not live in the onboarding docs.
+
+When changing behavior, update docs in the same scope:
+
+- command, setup, or release behavior: update `GETTING_STARTED`,
+  `DEVELOPMENT_WORKFLOW`, or `RELEASES`
+- frontend/backend contracts: update `ARCHITECTURE` and regenerate/check
+  bindings
+- integration runtime behavior: update `INTEGRATION_API`,
+  `INTEGRATION_DEVELOPMENT`, and `CUSTOM_INTEGRATIONS`
+- secrets, filesystem, shell, process, token, or permission behavior: update
+  `TRUST_MODEL` and the relevant user/developer guide
+- future product direction only: update `VISION` or `ROADMAP`, not current-state
+  onboarding docs
