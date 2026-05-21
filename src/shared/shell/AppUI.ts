@@ -1,5 +1,7 @@
 import type { IApp } from '../types/coreTypes';
+import { CategoryKey } from '../types/categoryKeys';
 import { appendCustomProviderApps } from '../utils/customProviderSupport';
+import { isAiCategory } from '../utils/moduleCategoryPolicy';
 import type { EventBus } from '../services/EventBus';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 
@@ -327,7 +329,7 @@ export class AppUI {
             this._selectionState.delete(category);
         }
 
-        if (category.startsWith('ai')) {
+        if (isAiCategory(category)) {
             const otherSlot = this._selectionState.getOtherAiSlot(category);
             const otherApp = this._selectionState.get(otherSlot);
             if (otherApp) {
@@ -361,7 +363,7 @@ export class AppUI {
 
     /** Stops the AI provider when all AI capability slots are empty. */
     private _stopAiProviderIfNoSlots(category: string): void {
-        if (!category.startsWith('ai')) return;
+        if (!isAiCategory(category)) return;
         if (!this._selectionState.hasAnyAiSlot()) {
             this._deps.stopAiProvider();
         }
@@ -433,33 +435,33 @@ export class AppUI {
             return currentCapability;
         }
 
-        return card.id === 'ai-module-card' ? 'ai_text' : 'services';
+        return card.id === 'ai-module-card' ? CategoryKey.AI_TEXT : CategoryKey.SERVICES;
     }
 
     public getPreferredAiCategory(): 'ai_text' | 'ai_image' {
-        const card = this._dashboardSupport.getDashboardCard('ai_text');
+        const card = this._dashboardSupport.getDashboardCard(CategoryKey.AI_TEXT);
         if (card instanceof HTMLElement) {
             const resolvedCategory = this._selectionState.resolveCategoryFromCard(card);
-            if (resolvedCategory === 'ai_image') {
-                return 'ai_image';
+            if (resolvedCategory === CategoryKey.AI_IMAGE) {
+                return CategoryKey.AI_IMAGE;
             }
         }
 
-        if (this._selectionState.has('ai_text')) {
-            return 'ai_text';
+        if (this._selectionState.has(CategoryKey.AI_TEXT)) {
+            return CategoryKey.AI_TEXT;
         }
 
-        if (this._selectionState.has('ai_image')) {
-            return 'ai_image';
+        if (this._selectionState.has(CategoryKey.AI_IMAGE)) {
+            return CategoryKey.AI_IMAGE;
         }
 
-        return 'ai_text';
+        return CategoryKey.AI_TEXT;
     }
 
     private _getCatalogApps(category: string): IApp[] {
         try {
             const apps = this._catalogResolver(category);
-            return category === 'ai' ? appendCustomProviderApps(apps) : apps;
+            return category === CategoryKey.AI ? appendCustomProviderApps(apps) : apps;
         } catch (err: unknown) {
             this._deps.tracer.warn(
                 `[AppUI] Failed to read catalog category ${category}: ${String(err)}`,

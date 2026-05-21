@@ -229,6 +229,8 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     let settings_service = SettingsService::new(json_store.clone());
     let ui_state_service = UiStateService::new(json_store.clone());
     let window_settings_service = WindowSettingsService::new(json_store.clone());
+    let settings_service_for_api = settings_service.clone();
+    let ui_state_service_for_api = ui_state_service.clone();
 
     let config_repo = crate::infrastructure::config::config_repository::FileConfigRepository::new(
         app.handle().clone(),
@@ -242,13 +244,14 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     app.manage(settings_service);
     app.manage(ui_state_service);
     app.manage(window_settings_service);
-    app.manage(config_service);
+    app.manage(std::sync::Arc::clone(&config_service));
     app.manage(crate::domain::modules::downloader::DownloaderService::new());
     app.manage(crate::domain::modules::settings_ui_protocol::ModuleSettingsSessionStore::default());
     let sessions = std::sync::Arc::new(ChatSessionManager::new());
     sessions.start_saver();
-    app.manage(sessions);
-    app.manage(std::sync::Arc::new(ImageGenerationState::new()));
+    app.manage(std::sync::Arc::clone(&sessions));
+    let image_generation_state = std::sync::Arc::new(ImageGenerationState::new());
+    app.manage(std::sync::Arc::clone(&image_generation_state));
     let monitor_service = std::sync::Arc::new(SystemMonitorService::new());
     app.manage(std::sync::Arc::clone(&monitor_service));
 
@@ -273,7 +276,24 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
         });
     }
 
-    app.manage(engine_manager);
+    app.manage(std::sync::Arc::clone(&engine_manager));
+
+    let integration_api = crate::domain::integration_api::start_launcher_http_api(
+        crate::domain::integration_api::LauncherHttpApiContext::new(
+            app.handle().clone(),
+            std::sync::Arc::clone(&sessions),
+            std::sync::Arc::clone(&config_service),
+            std::sync::Arc::clone(&engine_manager),
+            std::sync::Arc::clone(&image_generation_state),
+            settings_service_for_api,
+            ui_state_service_for_api,
+        ),
+    )?;
+    tracing::info!(
+        "Launcher integration API ready at {}",
+        integration_api.base_url()
+    );
+    app.manage(integration_api);
 
     crate::utils::paths::init_filesystem().ok();
 

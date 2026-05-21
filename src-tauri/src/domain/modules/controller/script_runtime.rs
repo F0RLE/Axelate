@@ -127,13 +127,13 @@ pub async fn spawn_process(
             module_runtime_root.as_os_str(),
         )
         .env("AXELATE_MODULE_ID", module_id)
-        .env("AXELATE_HTTP_API_BASE", "http://127.0.0.1:3000")
         .env("PYTHONUNBUFFERED", "1")
         .env("PYTHONUTF8", "1")
         .stdout(Stdio::from(log_file.try_clone().map_err(|e| {
             AppError::Io(format!("Failed to clone runtime log file: {e}"))
         })?))
         .stderr(Stdio::from(log_file));
+    crate::domain::integration_api::apply_process_env(&mut command);
 
     command.spawn().map_err(|e| AppError::Internal {
         request_id: None,

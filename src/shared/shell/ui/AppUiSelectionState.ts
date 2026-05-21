@@ -1,4 +1,6 @@
 import type { IApp } from '../../types/coreTypes';
+import { CategoryKey } from '../../types/categoryKeys';
+import { getOtherAiSlot, isAiCategory, isAiSlotCategory } from '../../utils/moduleCategoryPolicy';
 
 export class AppUiSelectionState {
     private readonly _selectedApps = new Map<string, IApp>();
@@ -38,14 +40,15 @@ export class AppUiSelectionState {
     public getModalSelectedId(category: string): string | undefined {
         return (
             this.get(category)?.id ??
-            (category.startsWith('ai') ? this.get('ai_text')?.id : undefined)
+            (isAiCategory(category) ? this.get(CategoryKey.AI_TEXT)?.id : undefined)
         );
     }
 
     public resolveCategoryFromCard(card: HTMLElement): string {
-        const defaultCategory = card.id === 'ai-module-card' ? 'ai_text' : 'services';
+        const defaultCategory =
+            card.id === 'ai-module-card' ? CategoryKey.AI_TEXT : CategoryKey.SERVICES;
         const shownCapability = card.dataset['currentCapability'];
-        if (shownCapability !== undefined && shownCapability !== '') {
+        if (shownCapability !== undefined && isAiSlotCategory(shownCapability)) {
             return shownCapability;
         }
 
@@ -64,16 +67,16 @@ export class AppUiSelectionState {
     }
 
     public getOtherAiSlot(category: string): string {
-        return category === 'ai_text' ? 'ai_image' : 'ai_text';
+        return getOtherAiSlot(category);
     }
 
     public hasAnyAiSlot(): boolean {
-        return this.has('ai_text') || this.has('ai_image');
+        return this.has(CategoryKey.AI_TEXT) || this.has(CategoryKey.AI_IMAGE);
     }
 
     public isSelectedInAnotherAiSlot(category: string, appId: string): boolean {
         for (const [slot, selectedApp] of this._selectedApps.entries()) {
-            if (slot !== category && slot.startsWith('ai') && selectedApp.id === appId) {
+            if (slot !== category && isAiSlotCategory(slot) && selectedApp.id === appId) {
                 return true;
             }
         }
@@ -82,7 +85,7 @@ export class AppUiSelectionState {
     }
 
     public shouldKeepRemovedAiAppRunning(category: string, app: IApp): boolean {
-        if (!category.startsWith('ai')) {
+        if (!isAiCategory(category)) {
             return false;
         }
 
@@ -96,21 +99,21 @@ export class AppUiSelectionState {
         secondaryApp: IApp;
         openCapability: string;
     } | null {
-        const textApp = this.get('ai_text');
-        const imageApp = this.get('ai_image');
+        const textApp = this.get(CategoryKey.AI_TEXT);
+        const imageApp = this.get(CategoryKey.AI_IMAGE);
         if (textApp === undefined || imageApp === undefined) {
             return null;
         }
 
         const shownModule = card.dataset['currentModule'];
         const shownCapability = card.dataset['currentCapability'];
-        const isTextShown = shownCapability === 'ai_text' || shownModule === textApp.id;
+        const isTextShown = shownCapability === CategoryKey.AI_TEXT || shownModule === textApp.id;
 
         return {
             textApp,
             imageApp,
             secondaryApp: isTextShown ? imageApp : textApp,
-            openCapability: isTextShown ? 'ai_image' : 'ai_text',
+            openCapability: isTextShown ? CategoryKey.AI_IMAGE : CategoryKey.AI_TEXT,
         };
     }
 }

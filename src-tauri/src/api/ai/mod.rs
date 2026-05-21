@@ -205,7 +205,7 @@ async fn load_stored_provider_api_key(
     Ok(key.filter(|value| !value.trim().is_empty()))
 }
 
-async fn fill_chat_request_api_key(
+pub(crate) async fn fill_chat_request_api_key(
     request: &mut ChatRequest,
     config_service: &ConfigService,
 ) -> Result<(), AppError> {

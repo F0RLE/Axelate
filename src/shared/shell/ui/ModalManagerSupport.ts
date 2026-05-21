@@ -2,6 +2,7 @@ import type { IApp } from '../../types/coreTypes';
 import { ModuleCardRenderer } from './ModuleCardRenderer';
 import type { ModuleCardDownloadAction } from './ModuleCardActions';
 import type { ModalSelectionPolicy } from './ModalSelectionPolicy';
+import { getAiSlotForCapability, isAiCategory } from '../../utils/moduleCategoryPolicy';
 
 type DownloadProgressPayload = {
     module_id: string;
@@ -104,8 +105,9 @@ export function populateModalAppList(options: {
         return;
     }
 
-    const isAiCategory = options.category === 'ai' || options.category.startsWith('ai_');
-    const interactionCategory = isAiCategory ? `ai_${options.currentFilter}` : options.category;
+    const interactionCategory = isAiCategory(options.category)
+        ? getAiSlotForCapability(options.currentFilter)
+        : options.category;
 
     visibleApps.forEach((app) => {
         const isSelected = options.selectedAppId !== null && app.id === options.selectedAppId;

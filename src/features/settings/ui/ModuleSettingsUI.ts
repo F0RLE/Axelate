@@ -272,6 +272,9 @@ export class ModuleSettingsUI {
         this._resetDynamicModuleState();
         container.classList.remove('module-settings-custom-ui-active');
         document
+            .getElementById('module-settings-modal')
+            ?.classList.remove('module-settings-modal-custom-ui');
+        document
             .getElementById('module-settings-content')
             ?.classList.remove('module-settings-content-custom-ui');
 

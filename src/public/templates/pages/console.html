@@ -1,42 +1,78 @@
 <div class="debug-layout">
     <div class="console-toolbar">
+        <button
+            class="console-tab-scroll console-tab-scroll-left"
+            type="button"
+            aria-label="Previous log tabs"
+            title="Previous"
+            hidden
+        >
+            ‹
+        </button>
         <div class="console-toolbar-left">
             <button class="console-tab active" data-view="general">
                 <span data-i18n="ui.launcher.web.logs_general">General</span>
             </button>
         </div>
-
-        <div class="console-toolbar-right">
-            <div class="console-level-filters">
-                <button class="console-filter-chip active" data-level="ERROR" type="button">
-                    Error
-                </button>
-                <button class="console-filter-chip active" data-level="WARN" type="button">
-                    Warn
-                </button>
-                <button class="console-filter-chip active" data-level="INFO" type="button">
-                    Info
-                </button>
-                <button class="console-filter-chip active" data-level="DEBUG" type="button">
-                    Debug
-                </button>
-            </div>
-            <button id="copy-logs-btn" class="console-btn" title="Copy Logs">
-                <svg class="icon">
-                    <use href="#icon-clipboard"></use>
-                </svg>
-            </button>
-            <button id="clear-logs-btn" class="console-btn" title="Clear Console">
-                <svg class="icon">
-                    <use href="#icon-trash"></use>
-                </svg>
-            </button>
-        </div>
+        <button
+            class="console-tab-scroll console-tab-scroll-right"
+            type="button"
+            aria-label="Next log tabs"
+            title="Next"
+            hidden
+        >
+            ›
+        </button>
     </div>
 
-    <div id="console-container" class="console-logs-area">
-        <div id="logs">
-            <div id="logs-general" class="logs-pane active"></div>
+    <div id="console-runtime-cards" class="console-runtime-cards" hidden></div>
+
+    <div class="console-workspace">
+        <div id="console-container" class="console-logs-area">
+            <div id="logs">
+                <div id="logs-general" class="logs-pane active"></div>
+            </div>
         </div>
+
+        <aside class="console-controls-panel" aria-label="Console controls">
+            <div class="console-controls-group">
+                <div class="console-controls-label">Levels</div>
+                <div class="console-level-filters">
+                    <button class="console-filter-chip active" data-level="ERROR" type="button">
+                        Error
+                    </button>
+                    <button class="console-filter-chip active" data-level="WARN" type="button">
+                        Warn
+                    </button>
+                    <button class="console-filter-chip active" data-level="INFO" type="button">
+                        Info
+                    </button>
+                    <button class="console-filter-chip active" data-level="DEBUG" type="button">
+                        Debug
+                    </button>
+                </div>
+            </div>
+
+            <div class="console-controls-group">
+                <div class="console-controls-label">Actions</div>
+                <div class="console-action-buttons">
+                    <button id="copy-logs-btn" class="console-btn" title="Copy Logs">
+                        <svg class="icon">
+                            <use href="#icon-clipboard"></use>
+                        </svg>
+                    </button>
+                    <button id="open-logs-folder-btn" class="console-btn" title="Open Logs Folder">
+                        <svg class="icon">
+                            <use href="#icon-folder"></use>
+                        </svg>
+                    </button>
+                    <button id="clear-logs-btn" class="console-btn" title="Clear Console">
+                        <svg class="icon">
+                            <use href="#icon-trash"></use>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+        </aside>
     </div>
 </div>

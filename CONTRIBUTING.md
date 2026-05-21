@@ -34,6 +34,7 @@ Use these documents first:
 - Read [Releases](docs/en/RELEASES.md) before tagging.
 - Tags must start with `v`.
 - Tag versions must match `package.json`, `src/package.json`, and `src-tauri/Cargo.toml`.
+- Release tags must point to a commit that is already reachable from `main`.
 - Pushing a matching `v*` tag triggers the GitHub release workflow.
 
 ## Docs Policy

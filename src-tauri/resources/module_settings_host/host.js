@@ -1,5 +1,7 @@
 const BRIDGE_CHANNEL = "axelate:module-settings";
-const MODULE_BOOT_TIMEOUT_MS = 4000;
+const HOST_CHANNEL = "axelate:module-settings-host";
+const SETTINGS_LOAD_TIMEOUT_MS = 2500;
+const MODULE_BOOT_TIMEOUT_MS = 5000;
 
 const STRINGS = {
     en: {
@@ -30,6 +32,7 @@ const STRINGS = {
 const params = new URLSearchParams(globalThis.location.search);
 const language = normalizeLanguage(params.get("language"));
 const strings = STRINGS[language] ?? STRINGS.en;
+const sessionPrefix = resolveSessionPrefix(globalThis.location.pathname);
 
 const elements = {
     frame: document.getElementById("module-frame"),
@@ -43,6 +46,9 @@ const state = {
     bootTimeoutTimer: null,
     frameLoaded: false,
     moduleReady: false,
+    moduleRendered: false,
+    settingsLoaded: false,
+    hostReadyPosted: false,
 };
 
 document.documentElement.dataset.theme = state.context.launcher.theme;
@@ -54,9 +60,11 @@ void bootstrap().catch((error) => {
 
 async function bootstrap() {
     ensureElements();
+    postHostStatus("host-ready");
     globalThis.addEventListener("message", handleModuleMessage);
-    await loadSettings();
+    const settingsLoad = loadSettingsSafe();
     mountModuleFrame();
+    await settingsLoad;
 }
 
 function ensureElements() {
@@ -108,8 +116,25 @@ function normalizeTheme(rawTheme) {
         : "dark";
 }
 
-async function loadSettings() {
-    state.settings = await requestJson("/api/settings");
+function resolveSessionPrefix(pathname) {
+    const match = pathname.match(/^\/session\/([^/]+)/);
+    return match === null ? "" : `/session/${match[1]}`;
+}
+
+async function loadSettingsSafe() {
+    try {
+        state.settings = await withTimeout(
+            requestJson("/api/settings"),
+            SETTINGS_LOAD_TIMEOUT_MS,
+            "Settings load timed out.",
+        );
+    } catch {
+        state.settings = {};
+    } finally {
+        state.settingsLoaded = true;
+        postHostReadyWhenPossible();
+        revealModuleWhenReady();
+    }
 }
 
 function mountModuleFrame() {
@@ -121,15 +146,15 @@ function mountModuleFrame() {
         state.frameLoaded = true;
         revealModuleWhenReady();
     });
+    elements.frame.addEventListener("error", () => {
+        showFatalError(new Error(strings.failed));
+    });
     armModuleBootTimeout();
     elements.frame.src = buildUrl("/module/");
 }
 
 function handleModuleMessage(event) {
-    if (
-        !(elements.frame instanceof HTMLIFrameElement) ||
-        event.source !== elements.frame.contentWindow
-    ) {
+    if (!(elements.frame instanceof HTMLIFrameElement)) {
         return;
     }
 
@@ -140,8 +165,15 @@ function handleModuleMessage(event) {
 
     if (payload.type === "module-ready") {
         state.moduleReady = true;
-        clearModuleBootTimeout();
-        postHostReady();
+        postHostReadyWhenPossible();
+        revealModuleWhenReady();
+        return;
+    }
+
+    if (payload.type === "module-rendered") {
+        state.moduleReady = true;
+        state.moduleRendered = true;
+        postHostReadyWhenPossible();
         revealModuleWhenReady();
         return;
     }
@@ -183,12 +215,23 @@ function postHostReady() {
     );
 }
 
+function postHostReadyWhenPossible() {
+    if (!state.moduleReady || !state.settingsLoaded || state.hostReadyPosted) {
+        return;
+    }
+
+    state.hostReadyPosted = true;
+    postHostReady();
+}
+
 function armModuleBootTimeout() {
     clearModuleBootTimeout();
     state.frameLoaded = false;
     state.moduleReady = false;
+    state.moduleRendered = false;
+    state.hostReadyPosted = false;
     state.bootTimeoutTimer = globalThis.setTimeout(() => {
-        if (!state.moduleReady) {
+        if (!state.frameLoaded || !state.moduleReady) {
             showFatalError(new Error(strings.moduleBootTimedOut));
         }
     }, MODULE_BOOT_TIMEOUT_MS);
@@ -202,7 +245,7 @@ function clearModuleBootTimeout() {
 }
 
 function revealModuleWhenReady() {
-    if (!state.frameLoaded || !state.moduleReady) {
+    if (!state.frameLoaded || !state.moduleReady || !state.settingsLoaded) {
         return;
     }
 
@@ -305,6 +348,22 @@ function hideOverlay() {
     }
 
     elements.overlay.hidden = true;
+    postHostStatus("module-rendered");
+}
+
+function postHostStatus(type, message = "") {
+    if (globalThis.parent === globalThis) {
+        return;
+    }
+
+    globalThis.parent.postMessage(
+        {
+            channel: HOST_CHANNEL,
+            type,
+            message,
+        },
+        "*",
+    );
 }
 
 async function requestJson(path, init = {}) {
@@ -327,14 +386,23 @@ async function requestJson(path, init = {}) {
     return isPlainObject(parsedBody) ? parsedBody : {};
 }
 
-async function extractErrorMessage(response, fallbackMessage) {
-    const bodyText = await response.text();
-    const parsedBody = safeParseJson(bodyText);
-    if (isPlainObject(parsedBody) && typeof parsedBody.message === "string") {
-        return parsedBody.message;
-    }
+async function withTimeout(promise, timeoutMs, message) {
+    return await new Promise((resolve, reject) => {
+        const timer = globalThis.setTimeout(() => {
+            reject(new Error(message));
+        }, timeoutMs);
 
-    return bodyText.trim() === "" ? fallbackMessage : bodyText;
+        promise.then(
+            (value) => {
+                globalThis.clearTimeout(timer);
+                resolve(value);
+            },
+            (error) => {
+                globalThis.clearTimeout(timer);
+                reject(error);
+            },
+        );
+    });
 }
 
 function safeParseJson(input) {
@@ -346,7 +414,16 @@ function safeParseJson(input) {
 }
 
 function buildUrl(path) {
-    return new URL(path, globalThis.location.href).toString();
+    const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+    const scopedPath =
+        sessionPrefix === ""
+            ? normalizedPath
+            : `${sessionPrefix}${normalizedPath}`;
+
+    return new URL(
+        scopedPath,
+        `${globalThis.location.protocol}//${globalThis.location.host}`,
+    ).toString();
 }
 
 function showFatalError(error) {
@@ -356,4 +433,5 @@ function showFatalError(error) {
             ? error.message
             : strings.failed;
     setOverlay("error", message);
+    postHostStatus("host-error", message);
 }

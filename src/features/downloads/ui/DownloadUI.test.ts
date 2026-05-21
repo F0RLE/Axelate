@@ -760,6 +760,40 @@ describe('DownloadUI', () => {
             expect(pauseFn).toHaveBeenCalledWith('mod-pause');
         });
 
+        it('should keep action buttons stable while progress updates', () => {
+            const pauseFn = vi.fn();
+            ui.setOnPause(pauseFn);
+            ui.init();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-stable-actions',
+                        progress: 0.4,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            const list = document.getElementById('downloads-dynamic-list');
+            const pauseBtn = list?.querySelector('.download-pause-btn');
+            expect(pauseBtn).not.toBeNull();
+
+            globalThis.dispatchEvent(
+                new CustomEvent('download-progress-update', {
+                    detail: {
+                        module_id: 'mod-stable-actions',
+                        progress: 0.42,
+                        status: 'downloading',
+                    },
+                }),
+            );
+
+            expect(list?.querySelector('.download-pause-btn')).toBe(pauseBtn);
+            if (pauseBtn !== null) (pauseBtn as HTMLElement).click();
+            expect(pauseFn).toHaveBeenCalledWith('mod-stable-actions');
+        });
+
         it('should wire resume button on paused card', () => {
             const resumeFn = vi.fn();
             ui.setOnResume(resumeFn);

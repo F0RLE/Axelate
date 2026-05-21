@@ -28,10 +28,21 @@ describe('ConsoleUI lifecycle', () => {
             <button class="debug-tab"></button>
             <div id="debug-first-tab" class="debug-tab-content"></div>
             <div class="console-toolbar">
+                <button class="console-tab-scroll console-tab-scroll-left" type="button" hidden></button>
                 <div class="console-toolbar-left">
                     <button class="console-tab" data-view="general"></button>
                 </div>
-                <div class="console-toolbar-right">
+                <button class="console-tab-scroll console-tab-scroll-right" type="button" hidden></button>
+            </div>
+            <div id="console-runtime-cards" class="console-runtime-cards" hidden></div>
+            <div id="page-console" class="active"></div>
+            <div class="console-workspace">
+                <div id="console-container" class="console-logs-area">
+                    <div id="logs">
+                        <div id="logs-general" class="logs-pane active"></div>
+                    </div>
+                </div>
+                <aside class="console-controls-panel">
                     <div class="console-level-filters">
                         <button class="console-filter-chip active" data-level="ERROR" type="button"></button>
                         <button class="console-filter-chip active" data-level="WARN" type="button"></button>
@@ -39,14 +50,9 @@ describe('ConsoleUI lifecycle', () => {
                         <button class="console-filter-chip active" data-level="DEBUG" type="button"></button>
                     </div>
                     <button id="copy-logs-btn"></button>
+                    <button id="open-logs-folder-btn"></button>
                     <button id="clear-logs-btn"></button>
-                </div>
-            </div>
-            <div id="page-console" class="active"></div>
-            <div id="console-container" class="console-logs-area">
-                <div id="logs">
-                    <div id="logs-general" class="logs-pane active"></div>
-                </div>
+                </aside>
             </div>
         `;
         (globalThis as unknown as { t?: (key: string, fallback: string) => string }).t = (
@@ -61,6 +67,7 @@ describe('ConsoleUI lifecycle', () => {
         ui?.destroy();
         ui = null;
         document.body.innerHTML = '';
+        vi.useRealTimers();
     });
 
     async function flushPromises(): Promise<void> {
@@ -100,9 +107,11 @@ describe('ConsoleUI lifecycle', () => {
             getLogs: ReturnType<typeof vi.fn>;
             getLogsForView: ReturnType<typeof vi.fn>;
             getAvailableViews: ReturnType<typeof vi.fn>;
+            getStatusItems: ReturnType<typeof vi.fn>;
             fetchLogs: ReturnType<typeof vi.fn>;
             getModulePath: ReturnType<typeof vi.fn>;
             openModuleFolder: ReturnType<typeof vi.fn>;
+            openLogsFolder: ReturnType<typeof vi.fn>;
         }> = {},
     ): ConsoleLogService {
         return {
@@ -112,9 +121,11 @@ describe('ConsoleUI lifecycle', () => {
             getLogs: vi.fn().mockReturnValue([]),
             getLogsForView: vi.fn().mockReturnValue([]),
             getAvailableViews: vi.fn().mockResolvedValue([{ id: 'general', label: 'General' }]),
+            getStatusItems: vi.fn().mockResolvedValue([]),
             fetchLogs: vi.fn().mockResolvedValue([]),
             getModulePath: vi.fn().mockResolvedValue(null),
             openModuleFolder: vi.fn().mockResolvedValue(false),
+            openLogsFolder: vi.fn().mockResolvedValue(false),
             ...overrides,
         } as unknown as ConsoleLogService;
     }
@@ -181,7 +192,6 @@ describe('ConsoleUI lifecycle', () => {
     });
 
     it('should clear, copy and render logs through browser clipboard fallback', async () => {
-        vi.useFakeTimers();
         const service = createServiceMock({
             getLogs: vi.fn().mockReturnValue(
                 normalizeLogs([
@@ -213,7 +223,6 @@ describe('ConsoleUI lifecycle', () => {
 
         ui.init();
         await ui.clearLogs();
-        vi.advanceTimersByTime(100);
         expect(service.clearLogs).toHaveBeenCalled();
 
         await ui.copyLogs();
@@ -228,7 +237,61 @@ describe('ConsoleUI lifecycle', () => {
         );
     });
 
+    it('should require a second clear action click before clearing logs', async () => {
+        vi.useFakeTimers();
+        const service = createServiceMock();
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+
+        const clearButton = document.getElementById('clear-logs-btn') as HTMLButtonElement;
+        clearButton.click();
+
+        expect(clearButton.classList.contains('confirming')).toBe(true);
+        expect(service.clearLogs).not.toHaveBeenCalled();
+
+        clearButton.click();
+        await vi.runOnlyPendingTimersAsync();
+
+        expect(clearButton.classList.contains('confirming')).toBe(false);
+        expect(service.clearLogs).toHaveBeenCalledTimes(1);
+
+        vi.useRealTimers();
+    });
+
+    it('should reset clear action confirmation after timeout', () => {
+        vi.useFakeTimers();
+        const service = createServiceMock();
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+
+        const clearButton = document.getElementById('clear-logs-btn') as HTMLButtonElement;
+        clearButton.click();
+        vi.advanceTimersByTime(2200);
+
+        expect(clearButton.classList.contains('confirming')).toBe(false);
+        expect(service.clearLogs).not.toHaveBeenCalled();
+
+        vi.useRealTimers();
+    });
+
+    it('should open logs folder from the console actions', async () => {
+        const service = createServiceMock({
+            openLogsFolder: vi.fn().mockResolvedValue(true),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+
+        document.getElementById('open-logs-folder-btn')?.click();
+        await flushPromises();
+
+        expect(service.openLogsFolder).toHaveBeenCalledTimes(1);
+    });
+
     it('should scroll logs to the bottom on the first render', () => {
+        vi.useFakeTimers();
         const service = createServiceMock({
             getLogs: vi
                 .fn()
@@ -348,7 +411,7 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogsForView: vi.fn((view: string) =>
                 normalizeLogs(
-                    view === 'llamacpp'
+                    view === 'engine:llamacpp'
                         ? [
                               {
                                   level: 'INFO',
@@ -369,7 +432,7 @@ describe('ConsoleUI lifecycle', () => {
             ),
             getAvailableViews: vi.fn().mockResolvedValue([
                 { id: 'general', label: 'General' },
-                { id: 'llamacpp', label: 'LLaMA.cpp' },
+                { id: 'engine:llamacpp', label: 'LLaMA.cpp' },
             ]),
             fetchLogs: vi.fn().mockResolvedValue([]),
         });
@@ -378,13 +441,119 @@ describe('ConsoleUI lifecycle', () => {
         ui.init();
         await flushPromises();
 
-        const moduleTab = document.querySelector('[data-view="llamacpp"]') as HTMLElement;
+        const moduleTab = document.querySelector('[data-view="engine:llamacpp"]') as HTMLElement;
         moduleTab.click();
 
-        expect(service.getLogsForView).toHaveBeenLastCalledWith('llamacpp');
+        expect(service.getLogsForView).toHaveBeenLastCalledWith('engine:llamacpp');
         expect(document.getElementById('logs-general')?.hidden).toBe(true);
-        expect(document.getElementById('logs-llamacpp')?.hidden).toBe(false);
-        expect(document.getElementById('logs-llamacpp')?.textContent).toContain('engine line');
+        expect(document.getElementById('logs-engine:llamacpp')?.hidden).toBe(false);
+        expect(document.getElementById('logs-engine:llamacpp')?.textContent).toContain(
+            'engine line',
+        );
+    });
+
+    it('should expose tab scroll controls when log tabs overflow', async () => {
+        const toolbar = document.querySelector('.console-toolbar-left') as HTMLElement;
+        Object.defineProperty(toolbar, 'clientWidth', { configurable: true, value: 160 });
+        Object.defineProperty(toolbar, 'scrollWidth', { configurable: true, value: 520 });
+        toolbar.scrollBy = vi.fn(({ left }: ScrollToOptions) => {
+            toolbar.scrollLeft += Number(left ?? 0);
+            toolbar.dispatchEvent(new Event('scroll'));
+        }) as unknown as typeof toolbar.scrollBy;
+
+        const service = createServiceMock({
+            getAvailableViews: vi.fn().mockResolvedValue([
+                { id: 'general', label: 'General' },
+                { id: 'module:telegram', label: 'Telegram' },
+                { id: 'module:parser', label: 'Parser' },
+                { id: 'engine:llamacpp', label: 'llamacpp' },
+                { id: 'engine:sdcpp', label: 'sdcpp' },
+            ]),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await flushPromises();
+
+        const previousButton = document.querySelector(
+            '.console-tab-scroll-left',
+        ) as HTMLButtonElement;
+        const nextButton = document.querySelector('.console-tab-scroll-right') as HTMLButtonElement;
+
+        expect(previousButton.hidden).toBe(false);
+        expect(previousButton.disabled).toBe(true);
+        expect(nextButton.hidden).toBe(false);
+
+        nextButton.click();
+
+        expect(toolbar.scrollLeft).toBeGreaterThan(0);
+        expect(previousButton.disabled).toBe(false);
+    });
+
+    it('should hide runtime status cards when matching log tabs already exist', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn((view: string) =>
+                normalizeLogs(
+                    view === 'module:axelate-telegram-bot'
+                        ? [
+                              {
+                                  level: 'INFO',
+                                  message: 'telegram runtime line',
+                                  source: 'module:axelate-telegram-bot',
+                                  module_id: 'axelate-telegram-bot',
+                                  timestamp: 1,
+                              },
+                          ]
+                        : [],
+                ),
+            ),
+            getAvailableViews: vi.fn().mockResolvedValue([
+                { id: 'general', label: 'General' },
+                { id: 'module:axelate-telegram-bot', label: 'Telegram Bot' },
+            ]),
+            getStatusItems: vi.fn().mockResolvedValue([
+                {
+                    id: 'module:axelate-telegram-bot',
+                    label: 'Telegram Bot',
+                    kind: 'module',
+                    status: 'running',
+                    detail: 'Running',
+                },
+            ]),
+            fetchLogs: vi.fn().mockResolvedValue([]),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await flushPromises();
+
+        const cardsRoot = document.getElementById('console-runtime-cards') as HTMLElement;
+        const card = cardsRoot.querySelector<HTMLElement>('.console-runtime-card');
+        expect(cardsRoot.hidden).toBe(true);
+        expect(card).toBeNull();
+    });
+
+    it('should hide idle engine status cards', async () => {
+        const service = createServiceMock({
+            getAvailableViews: vi.fn().mockResolvedValue([{ id: 'general', label: 'General' }]),
+            getStatusItems: vi.fn().mockResolvedValue([
+                {
+                    id: 'engine:idle',
+                    label: 'Engines',
+                    kind: 'engine',
+                    status: 'stopped',
+                    detail: 'No active engines',
+                },
+            ]),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await flushPromises();
+
+        const cardsRoot = document.getElementById('console-runtime-cards') as HTMLElement;
+        expect(cardsRoot.hidden).toBe(true);
+        expect(cardsRoot.textContent).not.toContain('No active engines');
     });
 
     it('should copy only logs from the active view', async () => {
@@ -397,7 +566,7 @@ describe('ConsoleUI lifecycle', () => {
         const service = createServiceMock({
             getLogsForView: vi.fn((view: string) =>
                 normalizeLogs(
-                    view === 'llamacpp'
+                    view === 'engine:llamacpp'
                         ? [
                               {
                                   level: 'INFO',
@@ -418,7 +587,7 @@ describe('ConsoleUI lifecycle', () => {
             ),
             getAvailableViews: vi.fn().mockResolvedValue([
                 { id: 'general', label: 'General' },
-                { id: 'llamacpp', label: 'LLaMA.cpp' },
+                { id: 'engine:llamacpp', label: 'LLaMA.cpp' },
             ]),
         });
 
@@ -426,7 +595,7 @@ describe('ConsoleUI lifecycle', () => {
         ui.init();
         await flushPromises();
 
-        const moduleTab = document.querySelector('[data-view="llamacpp"]') as HTMLElement;
+        const moduleTab = document.querySelector('[data-view="engine:llamacpp"]') as HTMLElement;
         moduleTab.click();
         await ui.copyLogs();
 
@@ -513,7 +682,7 @@ describe('ConsoleUI lifecycle', () => {
         expect(document.getElementById('logs-general')?.textContent).toContain('stable line');
     });
 
-    it('should filter logs by selected levels from top menu', async () => {
+    it('should isolate logs by selected level and restore all levels on repeat click', async () => {
         const service = createServiceMock({
             getLogsForView: vi.fn().mockReturnValue(
                 normalizeLogs([
@@ -553,10 +722,77 @@ describe('ConsoleUI lifecycle', () => {
         ) as HTMLButtonElement;
         infoButton.click();
 
+        expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
+        expect(document.getElementById('logs-general')?.textContent).not.toContain(
+            'Manifest not found',
+        );
+
+        infoButton.click();
+
+        expect(document.getElementById('logs-general')?.textContent).toContain(
+            'Manifest not found',
+        );
+        expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
+    });
+
+    it('should allow multi-select level filters with ctrl click', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn().mockReturnValue(
+                normalizeLogs([
+                    {
+                        level: 'INFO',
+                        message: '[NavigationService] Navigating to: settings',
+                        source: 'frontend',
+                        timestamp: 1,
+                    },
+                    {
+                        level: 'ERROR',
+                        message:
+                            '[ModuleService] Control failed: Error: Manifest not found. Expected axelate-module.toml',
+                        source: 'frontend',
+                        timestamp: 2,
+                    },
+                    {
+                        level: 'DEBUG',
+                        message: '[NavigationUI] Page modules',
+                        source: 'frontend',
+                        timestamp: 3,
+                    },
+                ]),
+            ),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
+        await flushPromises();
+
+        const errorButton = document.querySelector(
+            '.console-filter-chip[data-level="ERROR"]',
+        ) as HTMLButtonElement;
+        const infoButton = document.querySelector(
+            '.console-filter-chip[data-level="INFO"]',
+        ) as HTMLButtonElement;
+
+        errorButton.click();
+
         expect(document.getElementById('logs-general')?.textContent).toContain(
             'Manifest not found',
         );
         expect(document.getElementById('logs-general')?.textContent).not.toContain('Page settings');
+        expect(document.getElementById('logs-general')?.textContent).not.toContain('Page modules');
+
+        infoButton.dispatchEvent(new MouseEvent('click', { bubbles: true, ctrlKey: true }));
+
+        expect(document.getElementById('logs-general')?.textContent).toContain(
+            'Manifest not found',
+        );
+        expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
+        expect(document.getElementById('logs-general')?.textContent).not.toContain('Page modules');
     });
 
     it('should hide launcher source labels like frontend from rendered logs', async () => {

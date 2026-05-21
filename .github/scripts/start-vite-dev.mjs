@@ -19,7 +19,7 @@ const dependencyManifestFiles = [
     path.join(srcDir, 'package.json'),
     path.join(srcDir, 'package-lock.json'),
 ];
-const viteStateFile = path.join(srcDir, 'node_modules', '.cache', 'axelate-vite-dev-state.json');
+const viteStateFile = path.join(srcDir, '.axelate', 'vite-dev-state.json');
 
 function log(message) {
     console.log(`[vite-dev] ${message}`);

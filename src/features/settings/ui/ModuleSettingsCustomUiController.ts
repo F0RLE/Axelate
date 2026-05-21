@@ -1,8 +1,5 @@
-import { invoke } from '@tauri-apps/api/core';
-import { LogicalPosition, LogicalSize } from '@tauri-apps/api/dpi';
-import { Webview } from '@tauri-apps/api/webview';
-import { getCurrentWindow } from '@tauri-apps/api/window';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
+import type { TauriProvider } from '@/infrastructure/tauri/TauriProvider';
 import type { IApp } from '@/shared/types/coreTypes';
 
 type TranslateFn = (key: string, defaultValue?: string) => string;
@@ -17,44 +14,44 @@ type SettingsServiceLike = {
 };
 
 type ModuleSettingsCustomUiLogger = Pick<LoggerService, 'error'>;
+type ModuleSettingsCustomUiTauri = Pick<TauriProvider, 'invoke' | 'isTauri'>;
 
 type ModuleSettingsCustomUiControllerDeps = {
     service: SettingsServiceLike;
+    tauri: ModuleSettingsCustomUiTauri;
     translate: TranslateFn;
     registerCleanup: (cleanup: () => void) => void;
     tracer: ModuleSettingsCustomUiLogger;
 };
 
-type WebviewBounds = {
-    x: number;
-    y: number;
-    width: number;
-    height: number;
-};
-
-type ActiveWebviewSession = {
-    webview: Webview;
-    frameShell: HTMLElement;
-    zoom: number;
-    appliedZoom: number | null;
+type ActiveIframeSession = {
+    frame: HTMLIFrameElement;
     disposed: boolean;
-    syncScheduled: boolean;
+    hostShellLoaded: boolean;
     cleanup: Array<() => void>;
 };
 
+const HOST_CHANNEL = 'axelate:module-settings-host';
+const HOST_FRAME_LOAD_TIMEOUT_MS = 8_000;
+const WINDOWS_MODULE_SETTINGS_ORIGIN = 'http://module-settings.localhost';
+const DEFAULT_MODULE_SETTINGS_ORIGIN = 'module-settings://localhost';
+
 export class ModuleSettingsCustomUiController {
-    private _activeSession: ActiveWebviewSession | null = null;
+    private _activeSession: ActiveIframeSession | null = null;
 
     public constructor(private readonly _deps: ModuleSettingsCustomUiControllerDeps) {}
 
     public async render(container: HTMLElement, app: IApp): Promise<void> {
-        await this._disposeActiveSession();
+        this._disposeActiveSession();
 
         container.innerHTML = '';
         container.classList.add('module-settings-custom-ui-active');
         container
             .closest('.module-settings-content')
             ?.classList.add('module-settings-content-custom-ui');
+        container
+            .closest('#module-settings-modal')
+            ?.classList.add('module-settings-modal-custom-ui');
 
         const shell = document.createElement('div');
         shell.className = 'module-settings-webui-shell';
@@ -63,19 +60,24 @@ export class ModuleSettingsCustomUiController {
         frameShell.className = 'module-settings-webui-frame-shell';
 
         const status = document.createElement('div');
-        status.className = 'module-settings-webui-status hidden';
+        status.className = 'module-settings-webui-status';
+        status.dataset['state'] = 'loading';
+        status.textContent = this._deps.translate(
+            'ui.settings.custom_ui_loading',
+            'Loading module settings…',
+        );
 
         frameShell.append(status);
         shell.appendChild(frameShell);
         container.appendChild(shell);
 
-        if (!this._canUseNativeWebview()) {
+        if (!this._deps.tauri.isTauri()) {
             this._showFailure(status, new Error('Tauri runtime is unavailable'));
             return;
         }
 
         const lifecycle = { disposed: false };
-        let session: ActiveWebviewSession | null = null;
+        let session: ActiveIframeSession | null = null;
         this._deps.registerCleanup(() => {
             lifecycle.disposed = true;
             if (session !== null) {
@@ -84,334 +86,144 @@ export class ModuleSettingsCustomUiController {
         });
 
         try {
-            session = await this._createSession(frameShell, app);
+            const sessionToken = await this._deps.tauri.invoke<string>(
+                'create_module_settings_session',
+                {
+                    moduleId: app.id,
+                },
+            );
+
             if (lifecycle.disposed) {
-                await this._disposeSession(session);
                 return;
             }
 
+            // The embedded host iframe already owns loading and error rendering.
+            // Keep the launcher overlay until the host shell itself is ready.
+            // Otherwise the user only sees a blank dark iframe while the
+            // custom protocol document is still booting.
+            session = this._createSession(frameShell, app, sessionToken, status);
             this._activeSession = session;
-            status.classList.add('hidden');
         } catch (error) {
             this._showFailure(status, error);
         }
     }
 
-    private _canUseNativeWebview(): boolean {
-        const runtime = globalThis as Record<string, unknown>;
-        return '__TAURI_INTERNALS__' in runtime || '__TAURI__' in runtime;
-    }
-
-    private async _createSession(
+    private _createSession(
         frameShell: HTMLElement,
         app: IApp,
-    ): Promise<ActiveWebviewSession> {
-        await this._waitForNextFrame();
-        await this._waitForModalLayout(frameShell);
+        sessionToken: string,
+        status: HTMLElement,
+    ): ActiveIframeSession {
+        const frame = document.createElement('iframe');
+        frame.className = 'module-settings-webui-frame';
+        frame.title = `${app.name ?? app.id} settings`;
+        frame.referrerPolicy = 'no-referrer';
 
-        const zoom = await this._readCurrentZoom();
-        const bounds = await this._measureReadyBounds(frameShell, zoom);
-        const label = this._buildWebviewLabel(app.id);
-        const webview = await this._createWebview(label, this._buildWebviewUrl(app), bounds);
-
-        const session: ActiveWebviewSession = {
-            webview,
-            frameShell,
-            zoom,
-            appliedZoom: null,
+        const session: ActiveIframeSession = {
+            frame,
             disposed: false,
-            syncScheduled: false,
+            hostShellLoaded: false,
             cleanup: [],
         };
 
-        const scheduleLayoutSync = () => {
-            this._scheduleLayoutSync(session);
-        };
-
-        if (typeof ResizeObserver === 'function') {
-            const resizeObserver = new ResizeObserver(() => {
-                scheduleLayoutSync();
-            });
-            resizeObserver.observe(frameShell);
-            session.cleanup.push(() => {
-                resizeObserver.disconnect();
-            });
-        }
-
-        const handleWindowResize = () => {
-            scheduleLayoutSync();
-        };
-        globalThis.addEventListener('resize', handleWindowResize);
-        session.cleanup.push(() => {
-            globalThis.removeEventListener('resize', handleWindowResize);
-        });
-
-        const handleZoomChange = (event: Event) => {
-            const nextZoom = this._readZoomFromEvent(event);
-            if (nextZoom === null) {
-                return;
-            }
-
-            session.zoom = nextZoom;
-            scheduleLayoutSync();
-        };
-        globalThis.addEventListener('axelate:zoom-changed', handleZoomChange as EventListener);
-        session.cleanup.push(() => {
-            globalThis.removeEventListener(
-                'axelate:zoom-changed',
-                handleZoomChange as EventListener,
-            );
-        });
-
-        try {
-            await this._applySessionLayout(session);
-            return session;
-        } catch (error) {
-            await this._disposeSession(session);
-            throw error;
-        }
-    }
-
-    private async _createWebview(
-        label: string,
-        url: string,
-        bounds: WebviewBounds,
-    ): Promise<Webview> {
-        const webview = new Webview(getCurrentWindow(), label, {
-            url,
-            x: bounds.x,
-            y: bounds.y,
-            width: bounds.width,
-            height: bounds.height,
-            backgroundColor: '#080b12',
-            focus: true,
-            incognito: true,
-            zoomHotkeysEnabled: false,
-        });
-
-        await this._waitForWebviewCreation(webview);
-        return webview;
-    }
-
-    private async _waitForWebviewCreation(webview: Webview): Promise<void> {
-        await new Promise<void>((resolve, reject) => {
-            let settled = false;
-            const timer = globalThis.setTimeout(() => {
-                if (settled) {
+        const clearBootTimeout = (() => {
+            const timeoutId = globalThis.setTimeout(() => {
+                if (session.disposed) {
                     return;
                 }
 
-                settled = true;
-                resolve();
-            }, 1200);
+                this._showFailure(
+                    status,
+                    new Error('Module settings host timed out while loading'),
+                );
+            }, HOST_FRAME_LOAD_TIMEOUT_MS);
 
-            const finish = (handler: () => void) => {
-                if (settled) {
-                    return;
-                }
-
-                settled = true;
-                globalThis.clearTimeout(timer);
-                handler();
+            return () => {
+                globalThis.clearTimeout(timeoutId);
             };
+        })();
 
-            void webview.once('tauri://created', () => {
-                finish(resolve);
-            });
-            void webview.once('tauri://error', (event) => {
-                finish(() => {
-                    reject(new Error(this._stringifyError(event.payload)));
-                });
-            });
-        });
-    }
-
-    private async _readCurrentZoom(): Promise<number> {
-        try {
-            const zoom = await invoke<number>('get_webview_zoom');
-            return typeof zoom === 'number' && zoom > 0 ? zoom : 1;
-        } catch {
-            return 1;
-        }
-    }
-
-    private async _waitForModalLayout(frameShell: HTMLElement): Promise<void> {
-        // Child webview bounds are captured once at creation time, so wait until
-        // the modal shell finishes its open animation instead of keeping modal listeners alive.
-        const targets = this._collectMotionTargets(frameShell);
-        const maxMotionMs = targets.reduce((currentMax, target) => {
-            return Math.max(currentMax, this._readMotionDuration(target));
-        }, 0);
-
-        if (maxMotionMs <= 0) {
-            await this._waitForNextFrame();
-            return;
-        }
-
-        await new Promise<void>((resolve) => {
-            globalThis.setTimeout(resolve, Math.ceil(maxMotionMs) + 16);
-        });
-    }
-
-    private _collectMotionTargets(frameShell: HTMLElement): HTMLElement[] {
-        const targets = new Set<HTMLElement>();
-
-        const modal = frameShell.closest('#module-settings-modal');
-        const modalShell = frameShell.closest('.app-modal');
-        const modalMain = frameShell.closest('.app-modal-main');
-
-        if (modal instanceof HTMLElement) {
-            targets.add(modal);
-        }
-        if (modalShell instanceof HTMLElement) {
-            targets.add(modalShell);
-        }
-        if (modalMain instanceof HTMLElement) {
-            targets.add(modalMain);
-        }
-
-        return [...targets];
-    }
-
-    private _readMotionDuration(element: HTMLElement): number {
-        const styles = globalThis.getComputedStyle(element);
-        return Math.max(
-            this._readCssTiming(styles.transitionDuration, styles.transitionDelay),
-            this._readCssTiming(styles.animationDuration, styles.animationDelay),
-        );
-    }
-
-    private _readCssTiming(durationList: string, delayList: string): number {
-        const durations = this._parseCssTimeList(durationList);
-        const delays = this._parseCssTimeList(delayList);
-        const count = Math.max(durations.length, delays.length);
-
-        if (count === 0) {
-            return 0;
-        }
-
-        let maxDuration = 0;
-        for (let index = 0; index < count; index += 1) {
-            const duration = durations[index % durations.length] ?? 0;
-            const delay = delays[index % delays.length] ?? 0;
-            maxDuration = Math.max(maxDuration, duration + delay);
-        }
-
-        return maxDuration;
-    }
-
-    private _parseCssTimeList(value: string): number[] {
-        return value
-            .split(',')
-            .map((item) => this._parseCssTime(item.trim()))
-            .filter((time) => time > 0);
-    }
-
-    private _parseCssTime(value: string): number {
-        if (value.endsWith('ms')) {
-            return Number.parseFloat(value);
-        }
-
-        if (value.endsWith('s')) {
-            return Number.parseFloat(value) * 1000;
-        }
-
-        return 0;
-    }
-
-    private _readZoomFromEvent(event: Event): number | null {
-        if (!(event instanceof CustomEvent)) {
-            return null;
-        }
-
-        const detail = event.detail as { zoom?: unknown };
-        return typeof detail.zoom === 'number' && detail.zoom > 0 ? detail.zoom : null;
-    }
-
-    private async _measureReadyBounds(
-        frameShell: HTMLElement,
-        zoom: number,
-    ): Promise<WebviewBounds> {
-        for (let attempt = 0; attempt < 8; attempt += 1) {
-            const bounds = this._measureBounds(frameShell, zoom);
-            if (bounds !== null) {
-                return bounds;
-            }
-
-            await this._waitForNextFrame();
-        }
-
-        throw new Error('Custom settings container is not ready for webview placement');
-    }
-
-    private _measureBounds(frameShell: HTMLElement, zoom: number): WebviewBounds | null {
-        const rect = frameShell.getBoundingClientRect();
-        const scale = Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
-        const width = Math.round(rect.width * scale);
-        const height = Math.round(rect.height * scale);
-
-        if (width < 2 || height < 2) {
-            return null;
-        }
-
-        // Child webviews are placed in window logical pixels. When the parent webview
-        // uses native zoom, DOMRect stays in CSS pixels, so we must scale by zoom.
-        return {
-            x: Math.max(0, Math.round(rect.left * scale)),
-            y: Math.max(0, Math.round(rect.top * scale)),
-            width,
-            height,
-        };
-    }
-
-    private _scheduleLayoutSync(session: ActiveWebviewSession): void {
-        if (session.disposed || session.syncScheduled) {
-            return;
-        }
-
-        session.syncScheduled = true;
-        globalThis.requestAnimationFrame(() => {
-            session.syncScheduled = false;
+        const markHostReady = () => {
             if (session.disposed) {
                 return;
             }
 
-            void this._applySessionLayout(session).catch((error: unknown) => {
-                if (!session.disposed) {
-                    this._deps.tracer.error(
-                        `[ModuleSettingsCustomUiController] Failed to sync module settings webview: ${this._stringifyError(error)}`,
-                    );
-                }
-            });
+            clearBootTimeout();
+            session.hostShellLoaded = true;
+            status.classList.add('hidden');
+        };
+
+        const markHostFailed = (error: Error) => {
+            if (session.disposed) {
+                return;
+            }
+
+            clearBootTimeout();
+
+            // Once the host shell has loaded, the iframe owns all loading and
+            // failure rendering. Keeping the launcher overlay visible would
+            // duplicate the host error state on top of the iframe.
+            if (session.hostShellLoaded) {
+                this._deps.tracer.error(
+                    `[ModuleSettingsCustomUiController] Host reported custom settings UI failure after shell load: ${this._stringifyError(error)}`,
+                );
+                status.classList.add('hidden');
+                return;
+            }
+
+            this._showFailure(status, error);
+        };
+
+        const handleMessage = (event: MessageEvent) => {
+            if (!this._isHostPayload(event.data)) {
+                return;
+            }
+
+            if (event.data.type === 'host-ready' || event.data.type === 'module-rendered') {
+                markHostReady();
+                return;
+            }
+
+            if (event.data.type === 'host-error') {
+                markHostFailed(new Error(event.data.message ?? 'Module settings host failed'));
+            }
+        };
+
+        const handleLoad = () => {
+            markHostReady();
+        };
+
+        const handleError = () => {
+            markHostFailed(new Error('Failed to load module settings host'));
+        };
+
+        globalThis.addEventListener('message', handleMessage);
+        frame.addEventListener('load', handleLoad);
+        frame.addEventListener('error', handleError);
+        session.cleanup.push(() => {
+            clearBootTimeout();
+            globalThis.removeEventListener('message', handleMessage);
+            frame.removeEventListener('load', handleLoad);
+            frame.removeEventListener('error', handleError);
         });
+
+        frame.src = this._buildHostUrl(app, sessionToken);
+        frameShell.prepend(frame);
+        return session;
     }
 
-    private async _applySessionLayout(session: ActiveWebviewSession): Promise<void> {
-        const bounds = this._measureBounds(session.frameShell, session.zoom);
-        if (bounds === null || session.disposed) {
-            return;
-        }
-
-        await session.webview.setPosition(new LogicalPosition(bounds.x, bounds.y));
-        await session.webview.setSize(new LogicalSize(bounds.width, bounds.height));
-
-        if (session.appliedZoom !== session.zoom) {
-            await session.webview.setZoom(session.zoom);
-            session.appliedZoom = session.zoom;
-        }
+    private _isHostPayload(
+        payload: unknown,
+    ): payload is { channel: typeof HOST_CHANNEL; type: string; message?: string } {
+        return (
+            typeof payload === 'object' &&
+            payload !== null &&
+            (payload as { channel?: unknown }).channel === HOST_CHANNEL &&
+            typeof (payload as { type?: unknown }).type === 'string'
+        );
     }
 
-    private _buildWebviewLabel(moduleId: string): string {
-        const safeModuleId = moduleId.replace(/[^a-zA-Z0-9:/_-]/g, '-');
-        const nonce =
-            typeof globalThis.crypto.randomUUID === 'function'
-                ? globalThis.crypto.randomUUID()
-                : `${Date.now().toString(36)}-${Math.random().toString(16).slice(2)}`;
-
-        return `module-settings:${safeModuleId}:${nonce}`;
-    }
-
-    private _buildWebviewUrl(app: IApp): string {
+    private _buildHostUrl(app: IApp, sessionToken: string): string {
         const settings = this._deps.service.getSettings() as SettingsSnapshot;
         const searchParams = new URLSearchParams({
             moduleId: app.id,
@@ -423,46 +235,40 @@ export class ModuleSettingsCustomUiController {
             theme: settings.theme ?? 'dark',
         });
 
-        return `module-settings://localhost/host/index.html?${searchParams.toString()}`;
+        return `${this._resolveModuleSettingsOrigin()}/session/${sessionToken}/host/index.html?${searchParams.toString()}`;
     }
 
-    private async _disposeActiveSession(): Promise<void> {
+    private _resolveModuleSettingsOrigin(): string {
+        return navigator.userAgent.includes('Windows')
+            ? WINDOWS_MODULE_SETTINGS_ORIGIN
+            : DEFAULT_MODULE_SETTINGS_ORIGIN;
+    }
+
+    private _disposeActiveSession(): void {
         if (this._activeSession === null) {
             return;
         }
 
-        await this._disposeSession(this._activeSession);
+        this._disposeSession(this._activeSession);
         this._activeSession = null;
     }
 
-    private async _disposeSession(session: ActiveWebviewSession): Promise<void> {
+    private _disposeSession(session: ActiveIframeSession): void {
         if (session.disposed) {
             return;
         }
 
         session.disposed = true;
-        session.syncScheduled = false;
         session.cleanup.splice(0).forEach((cleanup) => {
             cleanup();
         });
 
-        try {
-            await session.webview.close();
-        } catch {
-            // The child webview may already be gone if the modal closed first.
-        }
+        session.frame.src = 'about:blank';
+        session.frame.remove();
 
         if (this._activeSession === session) {
             this._activeSession = null;
         }
-    }
-
-    private async _waitForNextFrame(): Promise<void> {
-        await new Promise<void>((resolve) => {
-            globalThis.requestAnimationFrame(() => {
-                resolve();
-            });
-        });
     }
 
     private _showFailure(status: HTMLElement, error: unknown): void {

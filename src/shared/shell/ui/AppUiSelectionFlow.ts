@@ -1,4 +1,5 @@
 import type { IApp } from '../../types/coreTypes';
+import { isAiCategory, shouldLaunchOnSelection } from '../../utils/moduleCategoryPolicy';
 
 type LaunchAppFn = (category: string, app: IApp) => Promise<void>;
 
@@ -39,7 +40,7 @@ export class AppUiSelectionFlow {
         this._deps.updateModalSelection(app.id);
         this._persistSelectedModule(category, app);
 
-        if (!this._isAiCategory(category) && typeof this._deps.launchApp === 'function') {
+        if (shouldLaunchOnSelection(category) && typeof this._deps.launchApp === 'function') {
             void this._deps.launchSelectedApp(
                 category,
                 app,
@@ -62,14 +63,10 @@ export class AppUiSelectionFlow {
     }
 
     public activateExistingSelection(category: string, app: IApp): void {
-        if (this._isAiCategory(category) || typeof this._deps.launchApp !== 'function') {
+        if (isAiCategory(category) || typeof this._deps.launchApp !== 'function') {
             return;
         }
 
         void this._deps.launchApp(category, app);
-    }
-
-    private _isAiCategory(category: string): boolean {
-        return category === 'ai' || category.startsWith('ai_');
     }
 }

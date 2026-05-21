@@ -192,6 +192,12 @@ export class DownloadCardRenderer {
             return;
         }
 
+        if (actionArea.dataset['status'] === status) {
+            this.patchStatusPill(actionArea, status);
+            this.patchActionButtonLabels(actionArea);
+            return;
+        }
+
         actionArea.innerHTML = DOMPurify.sanitize(
             this.renderActionArea(status),
             DownloadCardRenderer._purifyConfig,
@@ -241,6 +247,11 @@ export class DownloadCardRenderer {
     }
 
     private bindActionButtons(card: HTMLElement, moduleId: string, status: string): void {
+        const actionArea = card.querySelector<HTMLElement>('.downloads-card-actions');
+        if (actionArea !== null) {
+            actionArea.dataset['status'] = status;
+        }
+
         if (this._deps.isPausableStatus(status)) {
             card.querySelector('.download-pause-btn')?.addEventListener('click', () => {
                 this._deps.onPause(moduleId);
@@ -258,6 +269,36 @@ export class DownloadCardRenderer {
                 this._deps.onCancel(moduleId);
             });
         }
+    }
+
+    private patchStatusPill(actionArea: HTMLElement, status: string): void {
+        const pill = actionArea.querySelector<HTMLElement>('.downloads-status-pill');
+        if (pill === null) {
+            return;
+        }
+
+        pill.className = `downloads-status-pill ${this.statusClass(status)}`;
+        pill.textContent = this._deps.statusLabel(status);
+    }
+
+    private patchActionButtonLabels(actionArea: HTMLElement): void {
+        const pauseTitle = this._deps.translate('ui.launcher.button.pause', 'Pause');
+        this.patchButtonLabel(actionArea.querySelector('.download-pause-btn'), pauseTitle);
+
+        const resumeTitle = this._deps.translate('ui.launcher.button.resume', 'Resume');
+        this.patchButtonLabel(actionArea.querySelector('.download-resume-btn'), resumeTitle);
+
+        const cancelTitle = this._deps.translate('ui.launcher.button.cancel', 'Cancel');
+        this.patchButtonLabel(actionArea.querySelector('.download-cancel-btn'), cancelTitle);
+    }
+
+    private patchButtonLabel(button: Element | null, label: string): void {
+        if (!(button instanceof HTMLElement)) {
+            return;
+        }
+
+        button.title = label;
+        button.setAttribute('aria-label', label);
     }
 
     private patchProgressBar(card: HTMLElement, pct: number): void {
