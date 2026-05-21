@@ -58,7 +58,7 @@ futures-util = "0.3.32"
 scraper      = "0.27.0"
 
 # --- System, Hardware & Low Level ---
-sysinfo      = "0.39.1"
+sysinfo      = "0.39.2"
 nvml-wrapper = "0.12.1" # NVIDIA Management Library
 wmi          = "0.18.4" # Windows Management Instrumentation
 machine-uid  = "0.6.0"  # Hardware ID generation
@@ -93,12 +93,12 @@ zip         = "8.6.0"
 tempfile    = "3.27.0"
 log         = "0.4.29"
 # env_logger = "0.11.8" - Replaced by tracing
-dashmap = "6.1.0"
+dashmap = "6.2.1"
 uuid = { version = "1.23.1", features = ["v4", "serde"] }
 bitflags = { version = "2.11.1", features = ["serde"] }
 async-trait = "0.1.89"
 flate2 = "1.1.9"
-tar = "0.4.45"
+tar = "0.4.46"
 sevenz-rust2 = "0.21.0"
 notify = "8.2.0"
 
