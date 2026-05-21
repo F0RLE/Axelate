@@ -20,11 +20,10 @@
 /.history/
 /.playwright-cli/
 /build/
-/output/
 
 # Local app/runtime data
 /AxelateData/
-/data/
+/src-tauri/test_appdata_roaming/
 
 # Environment files
 .env

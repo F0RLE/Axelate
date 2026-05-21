@@ -13,6 +13,8 @@
         "preview": "node .github/scripts/workflow.mjs preview",
         "tauri:build": "node .github/scripts/workflow.mjs tauri:build",
         "release": "node .github/scripts/workflow.mjs release",
+        "release:checksums": "node .github/scripts/workflow.mjs release:checksums",
+        "release:verify-hardening": "node .github/scripts/workflow.mjs release:verify-hardening",
         "run": "node .github/scripts/workflow.mjs run",
         "lint": "node .github/scripts/workflow.mjs lint",
         "format": "node .github/scripts/workflow.mjs format",

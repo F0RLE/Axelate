@@ -5,6 +5,7 @@ import type { UiStateStore, IUIState } from '../state/UiStateStore';
 function createMockStore(): UiStateStore {
     const state: IUIState = {
         sidebar_collapsed: false,
+        sidebar_manual_override: false,
         sidebar_width: 280,
         hidden_nav_items: [],
         hidden_monitors: [],

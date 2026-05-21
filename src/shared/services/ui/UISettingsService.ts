@@ -7,6 +7,10 @@ export class UISettingsService {
         return this._store.getState().sidebar_collapsed;
     }
 
+    public getSidebarManualOverride(): boolean {
+        return this._store.getState().sidebar_manual_override ?? false;
+    }
+
     public setSidebarCollapsed(collapsed: boolean): void {
         this._store.updateState({ sidebar_collapsed: collapsed });
     }
@@ -17,6 +21,14 @@ export class UISettingsService {
 
     public setSidebarWidth(width: number): void {
         this._store.updateState({ sidebar_width: width });
+    }
+
+    public setSidebarState(collapsed: boolean, width: number, manualOverride?: boolean): void {
+        this._store.updateState({
+            sidebar_collapsed: collapsed,
+            ...(manualOverride !== undefined ? { sidebar_manual_override: manualOverride } : {}),
+            sidebar_width: width,
+        });
     }
 
     public getHiddenNavItems(): string[] {

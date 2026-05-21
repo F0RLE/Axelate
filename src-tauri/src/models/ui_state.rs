@@ -28,6 +28,9 @@ pub struct SelectedModule {
 pub struct UIState {
     /// Sidebar collapsed state
     pub sidebar_collapsed: bool,
+    /// User manually overrode responsive sidebar compaction
+    #[serde(default)]
+    pub sidebar_manual_override: bool,
     /// Sidebar width in pixels
     pub sidebar_width: u32,
     /// Hidden navigation items (page IDs)
@@ -74,6 +77,7 @@ impl Default for UIState {
     fn default() -> Self {
         Self {
             sidebar_collapsed: false,
+            sidebar_manual_override: false,
             sidebar_width: 280,
             hidden_nav_items: Vec::new(),
             hidden_monitors: Vec::new(),

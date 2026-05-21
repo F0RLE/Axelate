@@ -21,10 +21,11 @@ class ResizeObserverMock {
 describe('SidebarUI', () => {
     const uiSettings = {
         getSidebarCollapsed: vi.fn(() => false),
+        getSidebarManualOverride: vi.fn(() => false),
+        getSidebarWidth: vi.fn(() => 280),
         getZoomLevel: vi.fn(() => 1),
         getHiddenNavItems: vi.fn<() => string[]>(() => []),
-        setSidebarWidth: vi.fn(),
-        setSidebarCollapsed: vi.fn(),
+        setSidebarState: vi.fn(),
     };
 
     const soundService = {
@@ -75,6 +76,8 @@ describe('SidebarUI', () => {
         vi.stubGlobal('cancelAnimationFrame', vi.fn());
         setupDom();
         uiSettings.getSidebarCollapsed.mockReturnValue(false);
+        uiSettings.getSidebarManualOverride.mockReturnValue(false);
+        uiSettings.getSidebarWidth.mockReturnValue(280);
         uiSettings.getZoomLevel.mockReturnValue(1);
         uiSettings.getHiddenNavItems.mockReturnValue([]);
         windowService.getConfig.mockReturnValue(null);
@@ -141,8 +144,7 @@ describe('SidebarUI', () => {
         const logoArea = document.querySelector('.logo-area') as HTMLElement;
         logoArea.click();
 
-        expect(uiSettings.setSidebarWidth).toHaveBeenCalledWith(80);
-        expect(uiSettings.setSidebarCollapsed).toHaveBeenCalledWith(true);
+        expect(uiSettings.setSidebarState).toHaveBeenCalledWith(true, 80, false);
         expect(soundService.playExpand).toHaveBeenCalledWith(false);
         expect(document.body.classList.contains('snapping')).toBe(true);
 
@@ -256,6 +258,26 @@ describe('SidebarUI', () => {
 
         expect(sidebar.classList.contains('auto-compact')).toBe(false);
         expect(sidebar.style.width).toBe('280px');
-        expect(uiSettings.setSidebarCollapsed).toHaveBeenCalledWith(false);
+        expect(uiSettings.setSidebarState).toHaveBeenCalledWith(false, 280, true);
+    });
+
+    it('restores manual expanded state while auto compact is active', async () => {
+        uiSettings.getZoomLevel.mockReturnValue(3);
+        uiSettings.getSidebarCollapsed.mockReturnValue(false);
+        uiSettings.getSidebarManualOverride.mockReturnValue(true);
+
+        const sidebarUi = new SidebarUI(
+            uiSettings as never,
+            tracer,
+            soundService as never,
+            windowService as never,
+        );
+
+        await sidebarUi.init();
+
+        const sidebar = document.getElementById('sidebar') as HTMLElement;
+        expect(sidebar.classList.contains('auto-compact')).toBe(false);
+        expect(sidebar.classList.contains('collapsed')).toBe(false);
+        expect(sidebar.style.width).toBe('280px');
     });
 });

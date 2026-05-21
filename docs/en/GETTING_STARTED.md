@@ -10,11 +10,12 @@ For day-to-day contributor work after setup, continue with [Development Workflow
 
 - Node.js 20+
 - npm 10+
-- Rust stable
+- Rust via `rustup` (`rust-toolchain.toml` pins the tested version)
 - Windows: Visual Studio Build Tools, Windows SDK, and WebView2 Runtime
 
 Tauri on Windows depends on machine-level native tooling.
 Portable Node and Rust are supported, but MSVC, SDK tools, and WebView2 still need to exist on the machine.
+The repository pins the tested Rust toolchain in `rust-toolchain.toml`; let `rustup` install that exact version.
 
 ## Windows Prerequisites
 
@@ -106,6 +107,9 @@ npm run release
 - `tauri:build` builds the desktop app.
 - `release` runs verification first, then produces release bundles.
 
+Local release builds do not publish anything to GitHub. GitHub releases are created by the tag workflow.
+See [Releases](RELEASES.md) for the tag rules and checklist.
+
 ## First App Launch
 
 Current happy path:
@@ -150,6 +154,7 @@ This repository should use `src/node_modules`. A second root `node_modules` tree
 ## Related Docs
 
 - [Development Workflow](DEVELOPMENT_WORKFLOW.md)
+- [Releases](RELEASES.md)
 - [Current State](CURRENT_STATE.md)
 - [Trust Model](TRUST_MODEL.md)
 - [Vision](VISION.md)

@@ -301,7 +301,7 @@ It does not yet have enough commercial infrastructure to expand safely into a pu
 
 The honest current statement is:
 
-Axelate is a Windows AI workstation beta with local runtime orchestration, OpenRouter-backed AI flows, backend-owned secure state, and the beginnings of a package-capable desktop shell.
+Axelate is an alpha-stage Windows AI workstation with local runtime orchestration, OpenRouter-backed AI flows, backend-owned secure state, and the beginnings of a package-capable desktop shell.
 
 That is the current truth.
 
@@ -311,6 +311,17 @@ The project should not yet describe itself as:
 - a fully open ecosystem
 - a trusted managed execution platform
 - a finished MCP operating layer
+
+## Current Automation State
+
+Current GitHub automation:
+
+- strict CI runs on `main` and `nightly`
+- Dependabot opens dependency update pull requests against `nightly`
+- release builds run when a `v*` tag is pushed
+- release tags must match all project manifest versions
+
+The repository is still alpha-stage. `nightly` is where active development lands; `main` should stay release-ready.
 
 ## Current Strategic Conclusion
 

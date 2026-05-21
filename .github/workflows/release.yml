@@ -1,20 +1,52 @@
 name: Release Build
 
+run-name: Release ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.tag }}
+
 on:
   workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing v* tag to release"
+        required: true
+        type: string
   push:
     tags:
       - "v*"
 
+concurrency:
+  group: release-${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.tag }}
+  cancel-in-progress: false
+
 jobs:
   build-and-release:
     runs-on: windows-latest
+    timeout-minutes: 60
     permissions:
       contents: write
+    env:
+      RELEASE_TAG: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || inputs.tag }}
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          ref: ${{ env.RELEASE_TAG }}
+
+      - name: Validate release tag and versions
+        shell: powershell
+        run: |
+          if ($env:RELEASE_TAG -notmatch '^v\d+\.\d+\.\d+(-[0-9A-Za-z.-]+)?$') {
+            throw "Release tag must use vMAJOR.MINOR.PATCH or vMAJOR.MINOR.PATCH-prerelease format."
+          }
+
+          $version = $env:RELEASE_TAG.Substring(1)
+          $rootVersion = (Get-Content package.json | ConvertFrom-Json).version
+          $frontendVersion = (Get-Content src/package.json | ConvertFrom-Json).version
+          $cargoVersion = (Select-String -Path src-tauri/Cargo.toml -Pattern '^version\s*=\s*"([^"]+)"').Matches.Groups[1].Value
+
+          if ($rootVersion -ne $version -or $frontendVersion -ne $version -or $cargoVersion -ne $version) {
+            throw "Release tag $env:RELEASE_TAG does not match manifest versions: root=$rootVersion frontend=$frontendVersion cargo=$cargoVersion."
+          }
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -25,6 +57,8 @@ jobs:
 
       - name: Setup Rust
         uses: dtolnay/rust-toolchain@631a55b12751854ce901bb631d5902ceb48146f7 # stable
+        with:
+          toolchain: 1.94.1
 
       - name: Rust Cache
         uses: Swatinem/rust-cache@ad397744b0d591a723ab90405b7247fac0e6b8db # v2
@@ -55,28 +89,16 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: src
-          tagName: ${{ startsWith(github.ref, 'refs/tags/') && github.ref_name || '' }}
-          releaseName: ${{ startsWith(github.ref, 'refs/tags/') && format('Axelate {0}', github.ref_name) || '' }}
+          tagName: ${{ env.RELEASE_TAG }}
+          releaseName: Axelate ${{ env.RELEASE_TAG }}
           releaseDraft: false
-          prerelease: false
+          prerelease: ${{ contains(env.RELEASE_TAG, '-') }}
 
       - name: Generate release checksums
-        shell: powershell
-        run: |
-          . .\.github\scripts\common.ps1
-          $bundleDir = Join-Path $TAURI_DIR "target\release\bundle"
-          $checksumPath = Write-ReleaseChecksums -BundleDir $bundleDir
-          if (-not $checksumPath) {
-            throw "No release artifacts found for checksum generation."
-          }
-
-          Write-Host "Checksums saved: $checksumPath"
+        run: node .github/scripts/workflow.mjs release:checksums
 
       - name: Verify release hardening
-        shell: powershell
-        run: |
-          . .\.github\scripts\common.ps1
-          Invoke-ReleaseSecurityVerification
+        run: node .github/scripts/workflow.mjs release:verify-hardening
 
       - name: Upload release checksums
         uses: actions/upload-artifact@v4
@@ -85,9 +107,8 @@ jobs:
           path: src-tauri/target/release/bundle/SHA256SUMS.txt
 
       - name: Attach checksums to GitHub release
-        if: startsWith(github.ref, 'refs/tags/')
         shell: powershell
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh release upload "${{ github.ref_name }}" "src-tauri/target/release/bundle/SHA256SUMS.txt" --clobber
+          gh release upload "$env:RELEASE_TAG" "src-tauri/target/release/bundle/SHA256SUMS.txt" --clobber

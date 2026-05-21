@@ -4,6 +4,7 @@ import type { UiStateStore, IUIState } from '@/shared/services/state/UiStateStor
 export function createMockStore(initial?: Partial<IUIState>): UiStateStore {
     const state: IUIState = {
         sidebar_collapsed: false,
+        sidebar_manual_override: false,
         sidebar_width: 280,
         hidden_nav_items: [],
         hidden_monitors: [],
