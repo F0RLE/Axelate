@@ -106,6 +106,7 @@ export interface IImageGenerationRequest {
     original_prompt?: string;
     steps?: number | null;
     cfg_scale?: number | null;
+    denoising_strength?: number | null;
     width?: number | null;
     height?: number | null;
     /** Sampler algorithm */
@@ -131,6 +132,11 @@ export interface IImageGenerationResponse {
 export interface IImageGenerationPreview {
     data_url: string;
     updated_at_ms: number;
+    progress?: number | null;
+    step?: number | null;
+    total?: number | null;
+    speed?: string | null;
+    eta_relative?: number | null;
 }
 
 // ============================================================================

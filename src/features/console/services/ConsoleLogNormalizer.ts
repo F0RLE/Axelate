@@ -48,6 +48,21 @@ export class ConsoleLogNormalizer {
             };
         }
 
+        const runtimeLevelMatch = rawMessage.match(
+            /^(?:(\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2})\s+)?\[(TRACE|DEBUG|INFO|WARN|WARNING|ERROR)\]\s+([\s\S]+)$/i,
+        );
+        if (runtimeLevelMatch !== null) {
+            const rawTime = runtimeLevelMatch[1] ?? null;
+            const rawLevel = runtimeLevelMatch[2] ?? log.level;
+            const rawBody = runtimeLevelMatch[3] ?? rawMessage;
+            return {
+                time: rawTime !== null && rawTime.trim() !== '' ? rawTime.slice(11) : null,
+                level: this._normalizeLevel(rawLevel),
+                scope: null,
+                message: rawBody.trim(),
+            };
+        }
+
         const scopedMatch = rawMessage.match(/^\[([^\]]+)\]\s+([\s\S]+)$/);
         if (scopedMatch !== null) {
             return {

@@ -293,7 +293,8 @@ impl EngineManager {
         }
 
         // Pipe engine stdout/stderr to files in logs directory
-        let log_dir = crate::utils::paths::ENGINE_LOGS_DIR.join(&config.engine_id);
+        let log_dir =
+            crate::utils::paths::ENGINE_LOGS_DIR.join(canonical_engine_log_id(&config.engine_id));
         let _ = std::fs::create_dir_all(&log_dir);
 
         let stdout_path = log_dir.join("stdout.log");
@@ -423,6 +424,13 @@ impl EngineManager {
             .find(|d| d.id == id)
             .cloned()
             .ok_or_else(|| AppError::NotFound(format!("Engine '{id}' not found in registry")))
+    }
+}
+
+fn canonical_engine_log_id(engine_id: &str) -> &str {
+    match engine_id {
+        "stable-diffusion" => "sdcpp",
+        value => value,
     }
 }
 

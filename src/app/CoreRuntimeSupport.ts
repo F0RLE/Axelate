@@ -140,7 +140,6 @@ export async function hydrateCriticalServices(args: HydrateCriticalServicesArgs)
     ]);
     args.windowUI.init();
     args.i18nUI.applyTranslations();
-    args.tracer.info('[CoreRuntimeSupport] Critical services hydrated.');
 }
 
 export async function showInitialPage(args: ShowInitialPageArgs): Promise<void> {

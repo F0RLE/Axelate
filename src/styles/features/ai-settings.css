@@ -1062,51 +1062,87 @@
 }
 
 .local-engine-info-btn {
-    width: 46px;
-    min-width: 46px;
+    width: 42px;
+    min-width: 42px;
     height: auto;
     display: inline-flex;
     align-items: center;
     justify-content: center;
     align-self: stretch;
-    border-radius: 14px;
-    border: 1px solid var(--border-color);
-    background: var(--bg-light);
+    border-radius: 12px;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.035);
     color: var(--text-secondary);
     font-family: var(--app-font-family);
-    font-size: 0.88rem;
+    font-size: 1rem;
     font-weight: 700;
+    line-height: 1;
     cursor: pointer;
     transition:
         background 0.18s ease,
         border-color 0.18s ease,
-        color 0.18s ease;
+        color 0.18s ease,
+        transform 0.18s ease;
 }
 
 .local-engine-info-btn:hover {
     background: rgba(255, 255, 255, 0.06);
-    border-color: rgba(255, 255, 255, 0.12);
+    border-color: rgba(179, 112, 255, 0.28);
     color: var(--text-primary);
+    transform: translateY(-1px);
 }
 
 .local-engine-args-popover {
-    position: fixed;
+    position: absolute;
+    top: var(--app-modal-edge-gap, 16px);
+    right: var(--app-modal-edge-gap, 16px);
     z-index: 5200;
     display: flex;
     flex-direction: column;
-    gap: 1rem;
+    gap: 0.85rem;
     padding: 1rem;
-    border-radius: 16px;
-    border: 1px solid var(--glass-border);
-    background:
-        linear-gradient(180deg, rgba(18, 18, 28, 0.18) 0%, rgba(18, 18, 28, 0.1) 100%),
-        rgba(var(--background-raw), 0.08);
+    border-radius: var(--modal-shell-radius);
+    border: 1px solid rgba(255, 255, 255, 0.03);
+    background: rgba(var(--background-raw), 0.065);
     box-shadow:
-        0 8px 24px rgba(0, 0, 0, 0.22),
-        inset -1px 0 0 rgba(255, 255, 255, 0.025);
-    max-height: calc(100vh - 48px);
+        inset -1px 0 0 rgba(255, 255, 255, 0.018),
+        0 18px 48px rgba(0, 0, 0, 0.2);
+    width: calc(var(--app-modal-popover-width, 344px) / var(--module-settings-zoom, 1));
+    height: calc((100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom, 1));
+    max-height: calc(
+        (100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom, 1)
+    );
     box-sizing: border-box;
     overflow: hidden;
+    transform: scale(var(--module-settings-zoom, 1));
+    transform-origin: top right;
+    animation: engineArgsPanelIn 0.24s cubic-bezier(0.22, 1, 0.36, 1);
+    transition:
+        width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        max-height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        right 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        top 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.24s ease;
+}
+
+.local-engine-args-popover.closing {
+    opacity: 0 !important;
+    pointer-events: none;
+    transform: translateX(18px) scale(var(--module-settings-zoom, 1));
+}
+
+@keyframes engineArgsPanelIn {
+    from {
+        opacity: 0;
+        transform: translateX(14px) scale(var(--module-settings-zoom, 1));
+    }
+
+    to {
+        opacity: 1;
+        transform: translateX(0) scale(var(--module-settings-zoom, 1));
+    }
 }
 
 .local-engine-args-popover-title {
@@ -1120,21 +1156,21 @@
 .local-engine-args-popover-subtitle {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 0.84rem;
-    line-height: 1.45;
-    padding-bottom: 0.15rem;
+    font-size: 0.82rem;
+    line-height: 1.42;
 }
 
 .local-engine-args-popover-actions {
     display: flex;
+    gap: 0.5rem;
     justify-content: flex-end;
-    padding-top: 0.1rem;
 }
 
+.local-engine-args-recommended,
 .local-engine-args-copy-all,
 .local-engine-args-copy-btn {
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    background: rgba(255, 255, 255, 0.04);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    background: rgba(255, 255, 255, 0.035);
     color: var(--text-primary);
     border-radius: 12px;
     font-family: var(--app-font-family);
@@ -1147,8 +1183,14 @@
         transform 0.18s ease;
 }
 
+.local-engine-args-recommended {
+    padding: 0.48rem 0.76rem;
+    border-color: rgba(179, 112, 255, 0.28);
+    background: rgba(139, 71, 255, 0.16);
+}
+
 .local-engine-args-copy-all {
-    padding: 0.5rem 0.8rem;
+    padding: 0.48rem 0.76rem;
 }
 
 .local-engine-args-copy-btn {
@@ -1157,6 +1199,7 @@
     align-self: center;
 }
 
+.local-engine-args-recommended:hover,
 .local-engine-args-copy-all:hover,
 .local-engine-args-copy-btn:hover {
     background: rgba(255, 255, 255, 0.08);
@@ -1171,17 +1214,16 @@
     overflow-y: auto;
     padding-right: 0.25rem;
     flex: 1;
+    min-height: 0;
 }
 
 .local-engine-args-item {
-    display: grid;
-    grid-template-columns: minmax(0, 1fr) auto;
-    gap: 0.75rem;
+    display: block;
     align-items: start;
     padding: 0.7rem 0.75rem;
     border-radius: 12px;
     background: rgba(255, 255, 255, 0.025);
-    border: 1px solid rgba(255, 255, 255, 0.038);
+    border: 1px solid rgba(255, 255, 255, 0.045);
     cursor: pointer;
     transition:
         background 0.18s ease,
@@ -1205,14 +1247,14 @@
 .local-engine-args-flag {
     color: #fff;
     font-family: var(--app-font-family);
-    font-size: 0.92rem;
+    font-size: 0.88rem;
     word-break: break-word;
 }
 
 .local-engine-args-desc {
     margin: 0;
     color: var(--text-secondary);
-    font-size: 0.8rem;
+    font-size: 0.78rem;
     line-height: 1.35;
 }
 

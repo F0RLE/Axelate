@@ -72,10 +72,14 @@ export class ChatService {
             const response = await this._aiBridge.sendMessage(text, 'chat', attachments, history);
 
             if (!response.ok) {
-                return {
+                const result: IChatResponse = {
                     ok: false,
                     error: response.error ?? 'Unknown bridge error',
                 };
+                if (response.model !== undefined) {
+                    result.model = response.model;
+                }
+                return result;
             }
 
             const result: IChatResponse = {

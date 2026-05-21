@@ -24,6 +24,83 @@ type StopCrossSlotEnginesArgs = {
     providerPolicy: AIBridgeProviderPolicy;
 };
 
+type ImageGenerationLogProgress = {
+    percent: number | null;
+    step: number | null;
+    total: number | null;
+    speed: string | null;
+};
+
+const parseImageGenerationLogProgress = (line: string): ImageGenerationLogProgress | null => {
+    const stepMatch = line.match(/(\d+)\s*\/\s*(\d+)/u);
+    const percentMatch = line.match(/(\d+(?:\.\d+)?)\s*%/u);
+    const speedMatch = line.match(/(\d+(?:\.\d+)?)\s*(it\/s|s\/it)/iu);
+
+    let step: number | null = null;
+    let total: number | null = null;
+    let percent: number | null = null;
+
+    if (stepMatch !== null) {
+        const parsedStep = Number.parseInt(stepMatch[1] ?? '', 10);
+        const parsedTotal = Number.parseInt(stepMatch[2] ?? '', 10);
+        if (Number.isFinite(parsedStep) && Number.isFinite(parsedTotal) && parsedTotal > 0) {
+            step = parsedStep;
+            total = parsedTotal;
+            percent = Math.max(0, Math.min(100, Math.round((parsedStep / parsedTotal) * 100)));
+        }
+    }
+
+    if (percentMatch !== null) {
+        const parsedPercent = Number.parseFloat(percentMatch[1] ?? '');
+        if (Number.isFinite(parsedPercent)) {
+            percent = Math.max(0, Math.min(100, Math.round(parsedPercent)));
+        }
+    }
+
+    const speed =
+        speedMatch === null ? null : `${speedMatch[1]}${speedMatch[2]?.toLowerCase() ?? 'it/s'}`;
+
+    if (percent === null && step === null && speed === null) {
+        return null;
+    }
+
+    return { percent, step, total, speed };
+};
+
+export const buildImageGenerationProgressChunk = (line: string): string | null => {
+    const progress = parseImageGenerationLogProgress(line);
+    if (progress === null) {
+        return line.toLowerCase().includes('generating image') ? 'image status=running\n' : null;
+    }
+
+    const fields = ['image', 'status=running'];
+    if (progress.percent !== null) fields.push(`percent=${String(progress.percent)}`);
+    if (progress.step !== null) fields.push(`step=${String(progress.step)}`);
+    if (progress.total !== null) fields.push(`total=${String(progress.total)}`);
+    if (progress.speed !== null) fields.push(`speed=${progress.speed}`);
+
+    return `${fields.join(' ')}\n`;
+};
+
+const LOCAL_IMAGE_ENGINE_IDS = new Set(['sdcpp', 'stable-diffusion']);
+
+export const isActiveEngineLog = (activeProviderId: string | null, engineId: string): boolean => {
+    if (LOCAL_IMAGE_ENGINE_IDS.has(engineId)) {
+        return true;
+    }
+
+    if (activeProviderId === null) {
+        return false;
+    }
+
+    const activeBackendId = resolveCustomProviderBackendId(activeProviderId);
+    if (activeBackendId === engineId) {
+        return true;
+    }
+
+    return LOCAL_IMAGE_ENGINE_IDS.has(activeBackendId) && LOCAL_IMAGE_ENGINE_IDS.has(engineId);
+};
+
 export class AIBridgeRuntime {
     public constructor(private readonly _tracer: AIBridgeRuntimeLogger) {}
 
@@ -38,20 +115,13 @@ export class AIBridgeRuntime {
             line: string;
         }>('ai:engine:log', (payload) => {
             const line = payload.line;
-            if (args.getActiveProviderId() !== payload.engine_id) {
+            if (!isActiveEngineLog(args.getActiveProviderId(), payload.engine_id)) {
                 return;
             }
 
-            const progressMatch = line.match(/(\d+\/\d+)|(\d+\.\d+it\/s)|(\d+%)/g);
-            if (progressMatch !== null) {
-                args.events.broadcastReplaceChunk(
-                    `🎨 Generating image... ${progressMatch.join(' - ')}\n`,
-                );
-                return;
-            }
-
-            if (line.includes('generating image')) {
-                args.events.broadcastReplaceChunk('🎨 Generating image...\n');
+            const progressChunk = buildImageGenerationProgressChunk(line);
+            if (progressChunk !== null) {
+                args.events.broadcastReplaceChunk(progressChunk);
             }
         });
 

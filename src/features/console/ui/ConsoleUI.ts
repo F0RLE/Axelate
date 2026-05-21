@@ -1,4 +1,4 @@
-import { type ConsoleLogService, type IConsoleStatusItem } from '../services/ConsoleLogService';
+import type { ConsoleLogService } from '../services/ConsoleLogService';
 import type { EventBus } from '@/shared/services/EventBus';
 import { ConsoleClipboardHelper } from './ConsoleClipboardHelper';
 import { ConsoleFilterControlHelper } from './ConsoleFilterControlHelper';
@@ -8,7 +8,6 @@ import { ConsoleLogRenderHelper } from './ConsoleLogRenderHelper';
 import { ConsoleViewHelper } from './ConsoleViewHelper';
 import { ConsolePollingController } from './ConsolePollingController';
 import { ConsoleRefreshCoordinator } from './ConsoleRefreshCoordinator';
-import { ConsoleRuntimeCardRenderer } from './ConsoleRuntimeCardRenderer';
 import { ConsoleViewStateController } from './ConsoleViewStateController';
 
 type ConsoleFilterLevel = 'ERROR' | 'WARN' | 'INFO' | 'DEBUG';
@@ -55,11 +54,9 @@ export class ConsoleUI {
     private readonly _pollingController: ConsolePollingController;
     private readonly _refreshCoordinator: ConsoleRefreshCoordinator;
     private readonly _renderHelper: ConsoleLogRenderHelper;
-    private readonly _runtimeCardRenderer = new ConsoleRuntimeCardRenderer();
     private readonly _translateFn: ConsoleTranslate;
     private readonly _showToast: ConsoleShowToast;
     private readonly _eventBus: EventBus;
-    private _runtimeStatusItems: IConsoleStatusItem[] = [];
     private _activeTabButton: HTMLElement | null = null;
     private _activePane: HTMLElement | null = null;
     private _syncTabScrollControls: (() => void) | null = null;
@@ -147,7 +144,6 @@ export class ConsoleUI {
         this._interactionHelper.bindDropzone();
         this.bindTabs();
         this._bindTabScrollControls();
-        this._bindRuntimeCards();
         this._filterControlHelper.bindControls();
         this._syncPollingForActivePage();
         void this.refreshLogViews();
@@ -256,17 +252,16 @@ export class ConsoleUI {
         this._viewState.activeViewId = view;
         this._activateTab('.console-tab', '.logs-pane', `logs-${view}`, btn);
         this.renderLogs(true);
-        this._syncRuntimeCardSelection();
     }
 
     public async clearLogs(): Promise<void> {
-        await this.service.clearLogs();
+        await this.service.clearLogs(this._viewState.activeViewId);
         this.renderLogs(true);
         this._clipboardHelper.showLogsCleared();
     }
 
     public async openLogsFolder(): Promise<void> {
-        const opened = await this.service.openLogsFolder();
+        const opened = await this.service.openLogsFolder(this._viewState.activeViewId);
         if (!opened) {
             this._showToast(
                 this._translate('ui.debug.logs_open_folder_failed', 'Failed to open logs folder'),
@@ -328,13 +323,8 @@ export class ConsoleUI {
             return false;
         }
 
-        const [views, statusItems] = await Promise.all([
-            this.service.getAvailableViews(),
-            this.service.getStatusItems(),
-        ]);
-        this._runtimeStatusItems = statusItems;
+        const views = await this.service.getAvailableViews();
         this._viewState.ensureKnownActiveView(new Set(views.map((view) => view.id)));
-        this._renderRuntimeCards(views);
 
         if (!this._viewHelper.shouldRebuildViews(toolbar, views)) {
             this._syncActivePane(`logs-${this._viewState.activeViewId}`);
@@ -357,84 +347,6 @@ export class ConsoleUI {
         this._syncActivePane(`logs-${this._viewState.activeViewId}`);
         this._syncTabScrollControls?.();
         return true;
-    }
-
-    private _bindRuntimeCards(): void {
-        const cardsRoot = document.getElementById('console-runtime-cards');
-        if (!(cardsRoot instanceof HTMLElement)) {
-            return;
-        }
-
-        const handleClick = (event: Event) => {
-            const target = event.target;
-            if (!(target instanceof HTMLElement)) {
-                return;
-            }
-
-            const card = target.closest('.console-runtime-card');
-            if (!(card instanceof HTMLElement)) {
-                return;
-            }
-
-            const view = card.dataset['view'];
-            if (view === undefined || view === '') {
-                return;
-            }
-
-            const button = Array.from(document.querySelectorAll<HTMLElement>('.console-tab')).find(
-                (tab) => tab.dataset['view'] === view,
-            );
-            if (button instanceof HTMLElement) {
-                this.setLogView(view, button);
-            }
-        };
-
-        cardsRoot.addEventListener('click', handleClick);
-        this.unsubscribers.push(() => {
-            cardsRoot.removeEventListener('click', handleClick);
-        });
-    }
-
-    private _renderRuntimeCards(views: readonly { id: string }[]): void {
-        const cardsRoot = document.getElementById('console-runtime-cards');
-        if (!(cardsRoot instanceof HTMLElement)) {
-            return;
-        }
-
-        const viewIds = new Set(views.map((view) => view.id));
-        const visibleItems = this._runtimeStatusItems.filter((item) =>
-            this._shouldRenderRuntimeCard(item, viewIds),
-        );
-
-        if (visibleItems.length === 0) {
-            cardsRoot.replaceChildren();
-            cardsRoot.hidden = true;
-            return;
-        }
-
-        cardsRoot.hidden = false;
-        cardsRoot.replaceChildren(
-            ...this._runtimeCardRenderer.createCards(visibleItems, this._viewState.activeViewId),
-        );
-    }
-
-    private _shouldRenderRuntimeCard(
-        item: IConsoleStatusItem,
-        visibleViewIds: ReadonlySet<string>,
-    ): boolean {
-        if (item.id === 'engine:idle') {
-            return false;
-        }
-
-        return !visibleViewIds.has(this._runtimeCardRenderer.getViewId(item));
-    }
-
-    private _syncRuntimeCardSelection(): void {
-        document.querySelectorAll<HTMLElement>('.console-runtime-card').forEach((card) => {
-            const isActive = card.dataset['view'] === this._viewState.activeViewId;
-            card.classList.toggle('active', isActive);
-            card.setAttribute('aria-pressed', String(isActive));
-        });
     }
 
     private renderLogs(clear = false): void {

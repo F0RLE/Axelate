@@ -33,6 +33,10 @@ export class AIBridgeProviderPolicy {
         return isManagedLocalImageProviderId(providerId);
     }
 
+    public isLocalTextProvider(providerId: string): boolean {
+        return !this.isCloudProvider(providerId) && !this.isImageProvider(providerId);
+    }
+
     public buildRequestOptions(input: RequestOptionInput): AIBridgeRequestOptions {
         if (!input.hasApiKey) {
             return {};

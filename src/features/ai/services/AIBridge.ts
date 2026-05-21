@@ -64,6 +64,8 @@ export class AIBridge implements IAIBridge {
             translate: (key, fallback) => this._translate(key, fallback),
             showToast: (message, type) => this._showToast(message, type),
             onActivity: () => this._inactivityController.reset(),
+            onLongActivityStart: () => this._inactivityController.pause(),
+            onLongActivityEnd: () => this._inactivityController.resume(),
             onSuccessfulResponse: () => {
                 this._context?.chatController.randomizeGreeting();
             },
@@ -204,9 +206,6 @@ export class AIBridge implements IAIBridge {
         attachments: { name: string; type: string; data_base64: string }[] = [],
         history: IChatMessage[] = [],
     ): Promise<IBridgeResponse> {
-        if (this._manager.activeProviderId === null) {
-            return await this._messageController.sendMessage(text, source, attachments, history);
-        }
         return await this._messageController.sendMessage(text, source, attachments, history);
     }
 

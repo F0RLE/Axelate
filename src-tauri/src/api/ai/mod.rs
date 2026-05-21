@@ -49,6 +49,16 @@ pub struct ImageGenerationPreview {
     data_url: String,
     /// File modification timestamp in Unix milliseconds.
     updated_at_ms: f64,
+    /// Current image-generation progress, normalized to 0.0..1.0 when the engine exposes it.
+    progress: Option<f32>,
+    /// Current sampling step when available.
+    step: Option<u32>,
+    /// Total sampling steps when available.
+    total: Option<u32>,
+    /// Latest reported generation speed when available, for example `1.07s/it`.
+    speed: Option<String>,
+    /// Estimated remaining seconds when the engine exposes it.
+    eta_relative: Option<f32>,
 }
 
 fn chat_image_root_dir() -> Result<PathBuf, AppError> {
@@ -303,6 +313,39 @@ async fn cancel_comfyui_job(
     Ok(())
 }
 
+async fn cancel_sdcpp_job(
+    provider: &str,
+    engine_manager: &EngineManager,
+    image_generation_state: &crate::domain::ai::ImageGenerationState,
+) -> Result<(), AppError> {
+    let mut should_stop_engine = true;
+
+    if let Some(job) = image_generation_state.cancel(provider).await
+        && let Some(job_id) = job.prompt_id
+    {
+        let client = reqwest::Client::new();
+        let response = client
+            .post(format!(
+                "{}/sdcpp/v1/jobs/{job_id}/cancel",
+                job.base_url.trim_end_matches('/')
+            ))
+            .send()
+            .await?;
+
+        should_stop_engine = !response.status().is_success();
+        if should_stop_engine && response.status().as_u16() != 409 {
+            let body = response.text().await.unwrap_or_default();
+            tracing::warn!("Failed to cancel stable-diffusion.cpp job via native API: {body}");
+        }
+    }
+
+    if should_stop_engine {
+        engine_manager.stop_slot(Capability::Image).await?;
+    }
+
+    Ok(())
+}
+
 fn read_image_generation_preview_file(path: &Path) -> Option<ImageGenerationPreview> {
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -335,6 +378,11 @@ fn read_image_generation_preview_file(path: &Path) -> Option<ImageGenerationPrev
     Some(ImageGenerationPreview {
         data_url: format!("data:image/png;base64,{}", STANDARD.encode(bytes)),
         updated_at_ms,
+        progress: None,
+        step: None,
+        total: None,
+        speed: None,
+        eta_relative: None,
     })
 }
 
@@ -560,6 +608,9 @@ pub async fn cancel_image_generation(
     if provider == "comfyui" {
         return cancel_comfyui_job(&provider, &image_generation_state).await;
     }
+    if matches!(provider.as_str(), "sdcpp" | "stable-diffusion") {
+        return cancel_sdcpp_job(&provider, &engine_manager, &image_generation_state).await;
+    }
 
     engine_manager.stop_slot(Capability::Image).await
 }
@@ -569,17 +620,71 @@ pub async fn cancel_image_generation(
 /// Returns the latest image-generation preview when the local image engine writes one.
 pub async fn get_image_generation_preview(
     engine_manager: State<'_, Arc<EngineManager>>,
+    image_generation_state: State<'_, Arc<crate::domain::ai::ImageGenerationState>>,
 ) -> Result<Option<ImageGenerationPreview>, AppError> {
+    let log_progress = image_generation_state.latest_progress("sdcpp").await;
+    let merged_progress = log_progress.as_ref().and_then(|snapshot| snapshot.progress);
+    let step = log_progress.as_ref().and_then(|snapshot| snapshot.step);
+    let total = log_progress.as_ref().and_then(|snapshot| snapshot.total);
+    let speed = log_progress
+        .as_ref()
+        .and_then(|snapshot| snapshot.speed.clone());
+    let has_status =
+        merged_progress.is_some() || step.is_some() || total.is_some() || speed.is_some();
+
     let Some(path) = engine_manager.active_image_preview_path().await else {
-        return Ok(None);
+        return Ok(if has_status {
+            Some(ImageGenerationPreview {
+                data_url: String::new(),
+                updated_at_ms: log_progress
+                    .as_ref()
+                    .map_or_else(current_time_ms_f64, |snapshot| snapshot.updated_at_ms),
+                progress: merged_progress,
+                step,
+                total,
+                speed,
+                eta_relative: None,
+            })
+        } else {
+            None
+        });
     };
 
-    tokio::task::spawn_blocking(move || read_image_generation_preview_file(&path))
-        .await
-        .map_err(|error| AppError::Internal {
-            request_id: None,
-            message: format!("Preview read task failed: {error}"),
-        })
+    let mut preview =
+        tokio::task::spawn_blocking(move || read_image_generation_preview_file(&path))
+            .await
+            .map_err(|error| AppError::Internal {
+                request_id: None,
+                message: format!("Preview read task failed: {error}"),
+            })?;
+
+    if let Some(preview) = &mut preview {
+        preview.progress = merged_progress;
+        preview.step = step;
+        preview.total = total;
+        preview.speed.clone_from(&speed);
+        preview.eta_relative = None;
+    } else if has_status {
+        preview = Some(ImageGenerationPreview {
+            data_url: String::new(),
+            updated_at_ms: log_progress
+                .as_ref()
+                .map_or_else(current_time_ms_f64, |snapshot| snapshot.updated_at_ms),
+            progress: merged_progress,
+            step,
+            total,
+            speed,
+            eta_relative: None,
+        });
+    }
+
+    Ok(preview)
+}
+
+fn current_time_ms_f64() -> f64 {
+    std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(0.0, |duration| duration.as_secs_f64() * 1000.0)
 }
 
 #[tauri::command]

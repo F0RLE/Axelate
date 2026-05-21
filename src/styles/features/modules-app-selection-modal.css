@@ -39,28 +39,11 @@ body.snapping .modal-backdrop {
     transition: none;
 }
 
-.modal-backdrop.popover-open {
-    transition: none;
-}
-
 .modal-backdrop {
     --app-modal-width: 95%;
     --app-modal-max-width: 1320px;
     --app-modal-height: min(860px, calc(100% - 32px));
     --app-modal-max-height: var(--app-modal-height);
-    --app-modal-popover-gap: 380px;
-}
-
-.modal-backdrop.popover-open .app-modal {
-    transform: none;
-    margin-right: 344px;
-    width: min(var(--app-modal-max-width), calc(100% - var(--app-modal-popover-gap)));
-    max-width: min(var(--app-modal-max-width), calc(100% - var(--app-modal-popover-gap)));
-    transition:
-        margin-right 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        max-width 0.3s cubic-bezier(0.4, 0, 0.2, 1),
-        transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
 .app-modal {

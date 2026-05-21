@@ -147,6 +147,8 @@ pub struct ImageGenerationRequest {
     pub steps: Option<u32>,
     /// Guidance scale (CFG)
     pub cfg_scale: Option<f32>,
+    /// Denoising strength for image-to-image capable backends
+    pub denoising_strength: Option<f32>,
     /// Image width in pixels
     pub width: Option<u32>,
     /// Image height in pixels

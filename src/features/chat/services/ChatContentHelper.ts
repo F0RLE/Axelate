@@ -29,7 +29,7 @@ export class ChatContentHelper {
             patterns: ['503', 'unavailable', 'overloaded'],
             key: 'ui.chat.error.server',
             fallback:
-                'Error: OpenRouter service is temporarily unavailable. Please try again later.',
+                'Error: The selected AI service is temporarily unavailable. Please try again later.',
         },
         {
             patterns: ['403', 'permission_denied', 'api key'],
@@ -53,6 +53,18 @@ export class ChatContentHelper {
         fallback:
             'Not enough system memory to start the local model. Close other apps or use a smaller model.',
     };
+    private static readonly _localModelUnavailableRule: ErrorRule = {
+        patterns: ['503', 'unavailable', 'overloaded', 'not running'],
+        key: 'ui.chat.error.local_model_unavailable',
+        fallback:
+            'Local model engine is unavailable. Start or restart the selected local model and try again.',
+    };
+    private static readonly _localModelImageInputRule: ErrorRule = {
+        patterns: ['image input is not supported', 'mmproj'],
+        key: 'ui.chat.error.local_model_image_input',
+        fallback:
+            'The selected local text model does not support image input. Remove the image or use a multimodal model with mmproj.',
+    };
     private static readonly _imageVramRule: ErrorRule = {
         patterns: [
             'cudamalloc failed',
@@ -63,6 +75,12 @@ export class ChatContentHelper {
         key: 'ui.chat.error.image_vram',
         fallback:
             'Not enough GPU memory to generate the image. Lower image size, steps, or batch size, or use a smaller model.',
+    };
+    private static readonly _localImageEngineConnectionRule: ErrorRule = {
+        patterns: ['local image engine request failed', 'closed the connection'],
+        key: 'ui.chat.error.local_image_engine_connection',
+        fallback:
+            'Local image engine stopped or closed the connection while generating. Restart the image engine and lower image size, steps, or batch size if it happens again.',
     };
 
     public constructor(
@@ -151,11 +169,29 @@ export class ChatContentHelper {
         }
 
         if (
+            this._matchesRule(msg, ChatContentHelper._localModelUnavailableRule) &&
+            this._isLocalModelContext(msg, modelName)
+        ) {
+            return this._localizeError(ChatContentHelper._localModelUnavailableRule);
+        }
+
+        if (
+            this._matchesRule(msg, ChatContentHelper._localModelImageInputRule) &&
+            this._isLocalModelContext(msg, modelName)
+        ) {
+            return this._localizeError(ChatContentHelper._localModelImageInputRule);
+        }
+
+        if (
             this._matchesRule(msg, ChatContentHelper._imageVramRule) ||
             this._matchesAll(msg, ['out of memory', 'stable-diffusion.cpp']) ||
             this._matchesAll(msg, ['out of memory', 'ggml'])
         ) {
             return this._localizeError(ChatContentHelper._imageVramRule);
+        }
+
+        if (this._matchesRule(msg, ChatContentHelper._localImageEngineConnectionRule)) {
+            return this._localizeError(ChatContentHelper._localImageEngineConnectionRule);
         }
 
         const matchedRule = ChatContentHelper._errorRules.find((rule) =>
@@ -269,6 +305,20 @@ export class ChatContentHelper {
 
     private _matchesAll(message: string, patterns: string[]): boolean {
         return patterns.every((pattern) => message.includes(pattern));
+    }
+
+    private _isLocalModelContext(message: string, modelName: string): boolean {
+        const context = `${message} ${modelName}`.toLowerCase();
+        return [
+            'llamacpp',
+            'llama.cpp',
+            'gguf',
+            'local model',
+            'local ai engine',
+            'local engine',
+            '127.0.0.1',
+            'localhost',
+        ].some((marker) => context.includes(marker));
     }
 
     private _localizeError(rule: ErrorRule, modelName?: string): string {

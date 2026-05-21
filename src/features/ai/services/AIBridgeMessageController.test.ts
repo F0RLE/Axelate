@@ -52,6 +52,8 @@ function createTextController() {
         translate: (_key, fallback) => fallback,
         showToast: vi.fn(),
         onActivity: vi.fn(),
+        onLongActivityStart: vi.fn(),
+        onLongActivityEnd: vi.fn(),
         onSuccessfulResponse: vi.fn(),
     });
 
@@ -94,6 +96,8 @@ function createImageController() {
             close: vi.fn().mockResolvedValue(undefined),
         },
     };
+    const onLongActivityStart = vi.fn();
+    const onLongActivityEnd = vi.fn();
 
     const controller = new AIBridgeMessageController({
         getContext: () => context as never,
@@ -105,10 +109,20 @@ function createImageController() {
         translate: (_key, fallback) => fallback,
         showToast: vi.fn(),
         onActivity: vi.fn(),
+        onLongActivityStart,
+        onLongActivityEnd,
         onSuccessfulResponse: vi.fn(),
     });
 
-    return { controller, transport, events, manager, context };
+    return {
+        controller,
+        transport,
+        events,
+        manager,
+        context,
+        onLongActivityStart,
+        onLongActivityEnd,
+    };
 }
 
 describe('AIBridgeMessageController custom providers', () => {
@@ -127,7 +141,8 @@ describe('AIBridgeMessageController custom providers', () => {
     });
 
     it('routes custom image providers through image generation and keeps raw model ids', async () => {
-        const { controller, transport, events } = createImageController();
+        const { controller, transport, events, onLongActivityStart, onLongActivityEnd } =
+            createImageController();
 
         const response = await controller.sendMessage('сгенерировать кота', 'chat', [], []);
 
@@ -138,12 +153,14 @@ describe('AIBridgeMessageController custom providers', () => {
                 prompt: 'сгенерировать кота',
             }),
         );
-        expect(events.broadcastReplaceChunk).toHaveBeenCalledWith('🎨 Generating image...\n');
+        expect(events.broadcastReplaceChunk).toHaveBeenCalledWith('image status=starting\n');
         expect(response).toEqual({
             ok: true,
             text: '',
             images: ['data:image/png;base64,abc'],
         });
+        expect(onLongActivityStart).toHaveBeenCalledOnce();
+        expect(onLongActivityEnd).toHaveBeenCalledOnce();
     });
 
     it('does not mark failed text responses as successful completions', async () => {
@@ -172,11 +189,114 @@ describe('AIBridgeMessageController custom providers', () => {
             translate: (_key, fallback) => fallback,
             showToast: vi.fn(),
             onActivity: vi.fn(),
+            onLongActivityStart: vi.fn(),
+            onLongActivityEnd: vi.fn(),
             onSuccessfulResponse,
         });
 
         await failingController.sendMessage('ошибка', 'chat', [], []);
 
         expect(onSuccessfulResponse).not.toHaveBeenCalled();
+    });
+
+    it('adds local provider context to failed local text responses', async () => {
+        const { controller, transport, manager } = createTextController();
+        manager.activeProviderId = 'llamacpp';
+        manager.model = 'default';
+        transport.send.mockResolvedValueOnce({
+            ok: false,
+            error: 'API Error 503: Service unavailable',
+        });
+
+        const response = await controller.sendMessage('hello', 'chat', [], []);
+
+        expect(response).toEqual({
+            ok: false,
+            error: 'API Error 503: Service unavailable',
+            model: 'llamacpp',
+        });
+    });
+
+    it('overrides generic failed local response models with the local provider id', async () => {
+        const { controller, transport, manager } = createTextController();
+        manager.activeProviderId = 'llamacpp';
+        manager.model = 'default';
+        transport.send.mockResolvedValueOnce({
+            ok: false,
+            error: 'API Error 503: Service unavailable',
+            model: 'default',
+        });
+
+        const response = await controller.sendMessage('hello', 'chat', [], []);
+
+        expect(response).toEqual({
+            ok: false,
+            error: 'API Error 503: Service unavailable',
+            model: 'llamacpp',
+        });
+    });
+
+    it('strips image content from history for local text providers', async () => {
+        const { controller, transport, manager } = createTextController();
+        manager.activeProviderId = 'llamacpp';
+        manager.model = 'default';
+
+        await controller.sendMessage(
+            'continue',
+            'chat',
+            [],
+            [
+                {
+                    role: 'assistant',
+                    content: [
+                        { type: 'text', text: 'Generated image' },
+                        {
+                            type: 'image_url',
+                            image_url: { url: 'data:image/png;base64,abc' },
+                        },
+                    ],
+                },
+            ],
+        );
+
+        expect(transport.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                provider: 'llamacpp',
+                attachments: [],
+                messages: [
+                    {
+                        role: 'assistant',
+                        content:
+                            'Generated image\n[Image omitted: the selected local text model does not support image input.]',
+                        thought_signature: undefined,
+                    },
+                    {
+                        role: 'user',
+                        content: 'continue',
+                        thought_signature: undefined,
+                    },
+                ],
+            }),
+        );
+    });
+
+    it('rejects image attachments before sending them to local text providers', async () => {
+        const { controller, transport, manager } = createTextController();
+        manager.activeProviderId = 'llamacpp';
+        manager.model = 'default';
+
+        const response = await controller.sendMessage(
+            'look',
+            'chat',
+            [{ name: 'image.png', type: 'image/png', data_base64: 'abc' }],
+            [],
+        );
+
+        expect(response).toEqual({
+            ok: false,
+            error: 'The selected local text model does not support image input. Remove the image or use a multimodal model with mmproj.',
+            model: 'llamacpp',
+        });
+        expect(transport.send).not.toHaveBeenCalled();
     });
 });

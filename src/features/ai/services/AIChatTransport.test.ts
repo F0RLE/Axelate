@@ -211,19 +211,26 @@ describe('AIChatTransport', () => {
             });
         });
 
-        it('should surface invoke failures and timeouts for images', async () => {
+        it('should surface invoke failures for images', async () => {
             mockCore.tauriProvider.invoke.mockRejectedValueOnce({ message: 'gpu busy' });
             await expect(transport.generateImage(request)).resolves.toEqual({
                 ok: false,
                 error: 'gpu busy',
             });
+        });
 
-            mockCore.tauriProvider.invoke.mockReturnValueOnce(new Promise(() => {}));
+        it('should let the backend own long image generation timeout handling', async () => {
+            mockCore.tauriProvider.invoke.mockResolvedValueOnce({
+                ok: true,
+                images: ['file:///late.png'],
+            });
+
             const promise = transport.generateImage(request);
             vi.advanceTimersByTime(300_001);
+
             await expect(promise).resolves.toEqual({
-                ok: false,
-                error: 'Image generation requested timed out',
+                ok: true,
+                images: ['file:///late.png'],
             });
         });
     });

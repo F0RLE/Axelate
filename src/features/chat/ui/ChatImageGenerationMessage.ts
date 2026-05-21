@@ -36,6 +36,47 @@ type CreateChatImageGenerationMessageDeps = {
     };
 };
 
+type ImageGenerationProgress = {
+    percent: number;
+    step: number | null;
+    total: number | null;
+    speed: string | null;
+    elapsed: string | null;
+};
+
+const parseImageGenerationProgress = (text: string): ImageGenerationProgress => {
+    let percent = 0;
+    let step: number | null = null;
+    let total: number | null = null;
+    const percentMatch = text.match(/\bpercent=(\d+(?:\.\d+)?)/u);
+    if (percentMatch !== null) {
+        const parsedPercent = Number.parseFloat(percentMatch[1] ?? '');
+        if (Number.isFinite(parsedPercent)) {
+            percent = Math.max(0, Math.min(100, Math.round(parsedPercent)));
+        }
+    }
+
+    const stepMatch = text.match(/\bstep=(\d+)\s+total=(\d+)/u);
+    if (stepMatch !== null) {
+        const parsedStep = Number.parseInt(stepMatch[1] ?? '', 10);
+        const parsedTotal = Number.parseInt(stepMatch[2] ?? '', 10);
+        if (Number.isFinite(parsedStep) && Number.isFinite(parsedTotal) && parsedTotal > 0) {
+            step = parsedStep;
+            total = parsedTotal;
+            if (percentMatch === null) {
+                percent = Math.max(0, Math.min(100, Math.round((parsedStep / parsedTotal) * 100)));
+            }
+        }
+    }
+
+    const speedMatch = text.match(/\bspeed=([^\s]+)/u);
+    const speed = speedMatch?.[1]?.replace(/(it\/s|s\/it)$/iu, ' $1').toLowerCase() ?? null;
+    const elapsedMatch = text.match(/\belapsed=([^\s]+)/u);
+    const elapsed = elapsedMatch?.[1] ?? null;
+
+    return { percent, step, total, speed, elapsed };
+};
+
 export function createChatImageGenerationMessage(
     deps: CreateChatImageGenerationMessageDeps,
 ): ImageGenerationMessageHandle {
@@ -51,11 +92,22 @@ export function createChatImageGenerationMessage(
     const image = document.createElement('img');
     image.className = 'chat-img chat-generated-image';
     image.alt = 'Generated preview';
+    image.width = 512;
+    image.height = 512;
+    image.decoding = 'async';
     media.appendChild(image);
 
     const status = document.createElement('div');
     status.className = 'chat-generated-status';
-    status.textContent = deps.translate('ui.chat.image_generating', 'Generating image...');
+    status.textContent = deps.translate('ui.chat.image_generating', 'Rendering image');
+
+    const statusRow = document.createElement('div');
+    statusRow.className = 'chat-generated-status-row';
+
+    const progressSummary = document.createElement('span');
+    progressSummary.className = 'chat-generated-progress-summary';
+    progressSummary.textContent = '0%';
+    statusRow.append(status, progressSummary);
 
     const progress = document.createElement('div');
     progress.className = 'chat-generated-progress';
@@ -74,6 +126,8 @@ export function createChatImageGenerationMessage(
     cancelBtn.type = 'button';
     cancelBtn.className = 'chat-generated-control is-cancel';
     cancelBtn.textContent = deps.translate('ui.chat.image_cancel', 'Cancel');
+    cancelBtn.title = deps.translate('ui.chat.image_cancel', 'Cancel');
+    cancelBtn.setAttribute('aria-label', deps.translate('ui.chat.image_cancel', 'Cancel'));
 
     const invokeControl = (button: HTMLButtonElement, action: () => void | Promise<void>): void => {
         button.disabled = true;
@@ -93,7 +147,7 @@ export function createChatImageGenerationMessage(
         invokeControl(cancelBtn, deps.opts.onCancel);
     });
     controls.append(cancelBtn);
-    bubble.append(media, status, progress, caption, controls);
+    bubble.append(media, statusRow, progress, caption, controls);
     row.appendChild(bubble);
     deps.appendRow(row);
     deps.scrollToBottom();
@@ -107,23 +161,22 @@ export function createChatImageGenerationMessage(
     let isCancelled = false;
 
     const setProgressFromStatus = (text: string): void => {
-        const dividerIndex = text.indexOf('/');
-        if (dividerIndex < 0) {
-            progressFill.style.width = '';
-            progress.classList.remove('is-complete');
-            return;
-        }
-
-        const current = Number.parseInt(text.slice(0, dividerIndex).trim(), 10);
-        const total = Number.parseInt(text.slice(dividerIndex + 1).trim(), 10);
-        if (!Number.isFinite(current) || !Number.isFinite(total) || total <= 0) {
-            progressFill.style.width = '';
-            progress.classList.remove('is-complete');
-            return;
-        }
-
-        const percent = Math.max(0, Math.min(100, Math.round((current / total) * 100)));
+        const { elapsed, percent, speed, step, total } = parseImageGenerationProgress(text);
         progressFill.style.width = `${String(percent)}%`;
+        const details: string[] = [];
+        if (step !== null && total !== null) {
+            details.push(`${String(step)}/${String(total)} steps`);
+        }
+        if (speed !== null) {
+            details.push(speed);
+        }
+        if (elapsed !== null) {
+            details.push(elapsed);
+        }
+        progressSummary.textContent =
+            details.length === 0
+                ? `${String(percent)}%`
+                : `${String(percent)}% · ${details.join(' · ')}`;
         progress.classList.toggle('is-complete', percent >= 100);
     };
 
@@ -142,6 +195,7 @@ export function createChatImageGenerationMessage(
 
     const hideProgress = (): void => {
         progress.classList.add('hidden');
+        progressSummary.classList.add('hidden');
         progress.classList.remove('is-complete');
         progressFill.style.width = '';
     };
@@ -160,7 +214,7 @@ export function createChatImageGenerationMessage(
     const handle: ImageGenerationMessageHandle = {
         setStatus: (text: string) => {
             if (isCancelled) return;
-            status.textContent = text;
+            status.textContent = deps.translate('ui.chat.image_generating', 'Rendering image');
             setProgressFromStatus(text);
         },
         setPreview: (dataUrl: string) => {
@@ -176,6 +230,7 @@ export function createChatImageGenerationMessage(
 
             status.textContent = deps.translate('ui.chat.image_ready', 'Generated image');
             progressFill.style.width = '100%';
+            progressSummary.textContent = '100%';
             progress.classList.add('is-complete');
 
             caption.textContent = result.text;

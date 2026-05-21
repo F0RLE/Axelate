@@ -31,10 +31,14 @@ export const commands = {
 	getConsoleOverview: () => typedError<ConsoleOverview, AppError>(__TAURI_INVOKE("get_console_overview")),
 	// Clears all stored log entries
 	clearLogs: () => typedError<null, AppError>(__TAURI_INVOKE("clear_logs")),
+	// Clears log entries and files for a single console view.
+	clearConsoleLogs: (viewId: string) => typedError<null, AppError>(__TAURI_INVOKE("clear_console_logs", { viewId })),
 	// Returns the root folder where launcher logs are stored.
 	getLogDir: () => typedError<string, AppError>(__TAURI_INVOKE("get_log_dir")),
 	// Opens the root folder where launcher logs are stored.
 	openLogDir: () => typedError<null, AppError>(__TAURI_INVOKE("open_log_dir")),
+	// Opens the log folder for a single console view.
+	openConsoleLogTarget: (viewId: string) => typedError<null, AppError>(__TAURI_INVOKE("open_console_log_target", { viewId })),
 	// Adds a single log entry to the log store
 	addLog: (msg: string, source: string, level: string) => typedError<null, AppError>(__TAURI_INVOKE("add_log", { msg, source, level })),
 	// Adds multiple log entries in batch from frontend
@@ -161,6 +165,16 @@ export const commands = {
 	data_url: string,
 	// File modification timestamp in Unix milliseconds.
 	updated_at_ms: number,
+	// Current image-generation progress, normalized to 0.0..1.0 when the engine exposes it.
+	progress: number | null,
+	// Current sampling step when available.
+	step: number | null,
+	// Total sampling steps when available.
+	total: number | null,
+	// Latest reported generation speed when available, for example `1.07s/it`.
+	speed: string | null,
+	// Estimated remaining seconds when the engine exposes it.
+	eta_relative: number | null,
 } | null, AppError>(__TAURI_INVOKE("get_image_generation_preview")),
 	// Deletes a previously saved chat image from disk.
 	deleteChatImage: (filePath: string) => typedError<null, AppError>(__TAURI_INVOKE("delete_chat_image", { filePath })),
@@ -717,6 +731,16 @@ export type ImageGenerationPreview = {
 	data_url: string,
 	// File modification timestamp in Unix milliseconds.
 	updated_at_ms: number,
+	// Current image-generation progress, normalized to 0.0..1.0 when the engine exposes it.
+	progress: number | null,
+	// Current sampling step when available.
+	step: number | null,
+	// Total sampling steps when available.
+	total: number | null,
+	// Latest reported generation speed when available, for example `1.07s/it`.
+	speed: string | null,
+	// Estimated remaining seconds when the engine exposes it.
+	eta_relative: number | null,
 };
 
 // Image generation request parameters
@@ -737,6 +761,8 @@ export type ImageGenerationRequest = {
 	steps: number | null,
 	// Guidance scale (CFG)
 	cfg_scale: number | null,
+	// Denoising strength for image-to-image capable backends
+	denoising_strength: number | null,
 	// Image width in pixels
 	width: number | null,
 	// Image height in pixels

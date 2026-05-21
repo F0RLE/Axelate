@@ -99,6 +99,7 @@ export class ChatAttachmentRenderer {
             const safeBase64 = this.safeBase64Data(file.data_base64);
             if (safeBase64.length > 0) {
                 const image = document.createElement('img');
+                image.className = 'chat-attachment-img';
                 image.src = `data:${this.safeImageMime(file.type, ext)};base64,${safeBase64}`;
                 image.alt = name;
                 image.style.width = '100%';
@@ -145,6 +146,7 @@ export class ChatAttachmentRenderer {
             this._attachmentObjectUrls.add(objectUrl);
 
             const imageEl = document.createElement('img');
+            imageEl.className = 'chat-attachment-img';
             imageEl.src = objectUrl;
             imageEl.alt = name;
             imageEl.style.width = '100%';
@@ -159,7 +161,9 @@ export class ChatAttachmentRenderer {
                 imageEl.onerror = null;
             };
 
-            imageEl.onload = releaseObjectUrl;
+            imageEl.onload = () => {
+                imageEl.onload = null;
+            };
             imageEl.onerror = releaseObjectUrl;
             card.appendChild(imageEl);
 

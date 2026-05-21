@@ -1,4 +1,8 @@
-import { getEngineExtraArgDocs } from './ModuleSettingsEngineFieldSupport';
+import {
+    getEngineExtraArgDocs,
+    getEngineRecommendedExtraArgs,
+    type EngineRecommendedExtraArgsContext,
+} from './ModuleSettingsEngineFieldSupport';
 
 export type EngineInfoPopoverRuntime = {
     requestAnimationFrame: (callback: FrameRequestCallback) => number;
@@ -21,6 +25,8 @@ type EngineInfoPopoverDeps = {
     runtime: EngineInfoPopoverRuntime;
     translate: (key: string, fallback: string) => string;
     appendExtraArgs: (appId: string, groups: string[]) => number;
+    getCurrentExtraArgs: (appId: string) => string[];
+    getRecommendationContext: (appId: string) => EngineRecommendedExtraArgsContext;
     showToast: (message: string, type: 'success' | 'info') => void;
     onClose: () => void;
 };
@@ -47,6 +53,16 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
 
     const actions = document.createElement('div');
     actions.className = 'local-engine-args-popover-actions';
+
+    const recommendedBtn = document.createElement('button');
+    recommendedBtn.type = 'button';
+    recommendedBtn.className = 'local-engine-args-recommended';
+    recommendedBtn.dataset['action'] = 'add-recommended';
+    recommendedBtn.textContent = deps.translate(
+        'ui.settings.engine.extra_args.recommended',
+        'Recommended',
+    );
+    actions.appendChild(recommendedBtn);
 
     const addAllBtn = document.createElement('button');
     addAllBtn.type = 'button';
@@ -136,6 +152,18 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
             return;
         }
 
+        const addRecommendedAction = target.closest<HTMLButtonElement>(
+            '[data-action="add-recommended"]',
+        );
+        if (addRecommendedAction instanceof HTMLButtonElement) {
+            const context = {
+                ...deps.getRecommendationContext(appId),
+                currentGroups: deps.getCurrentExtraArgs(appId),
+            };
+            appendFlags(getEngineRecommendedExtraArgs(appId, context));
+            return;
+        }
+
         const row = target.closest<HTMLElement>('.local-engine-args-item[data-flag]');
         const flag = row?.dataset['flag'];
         if (typeof flag === 'string' && flag !== '') {
@@ -162,15 +190,25 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         appendFlags([flag]);
     });
     const modal = document.getElementById('module-settings-modal');
-    if (modal === null) {
-        document.body.appendChild(popover);
-    } else {
-        modal.appendChild(popover);
-        modal.classList.add('popover-open');
-    }
+    const popoverHost = modal ?? document.body;
+    popoverHost.appendChild(popover);
+
+    const updatePosition = () => {
+        const modalRect = (modal ?? document.body).getBoundingClientRect();
+        const availableWidth = modalRect.width;
+        const edgeGap = Math.max(16, Math.min(32, Math.round(availableWidth * 0.015)));
+        const gap = Math.max(14, Math.min(20, Math.round(availableWidth * 0.008)));
+        const panelWidth = Math.max(300, Math.min(344, Math.round(availableWidth * 0.18)));
+
+        modal?.style.setProperty('--app-modal-edge-gap', `${edgeGap}px`);
+        modal?.style.setProperty('--app-modal-popover-width', `${panelWidth}px`);
+        modal?.style.setProperty('--app-modal-popover-spacing', `${gap}px`);
+    };
+    updatePosition();
+    modal?.classList.add('popover-open');
 
     popover.style.opacity = '0';
-    popover.style.transition = 'opacity 0.25s cubic-bezier(0.4, 0, 0.2, 1)';
+    popover.style.transition = 'opacity 0.22s cubic-bezier(0.22, 1, 0.36, 1)';
     runtime.requestAnimationFrame(() => {
         runtime.requestAnimationFrame(() => {
             if (popover.isConnected) {
@@ -178,24 +216,6 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
             }
         });
     });
-
-    const updatePosition = () => {
-        const appModal = modal?.querySelector('.app-modal');
-        const targetRect = (appModal ?? modal ?? document.body).getBoundingClientRect();
-        const viewportWidth = runtime.getViewportSize().width;
-        const panelWidth = 328;
-        const margin = 16;
-
-        let panelLeft = targetRect.right + 16;
-        if (panelLeft + panelWidth > viewportWidth - margin) {
-            panelLeft = Math.max(margin, viewportWidth - panelWidth - margin);
-        }
-
-        popover.style.width = `${panelWidth}px`;
-        popover.style.left = `${panelLeft}px`;
-        popover.style.top = `${targetRect.top}px`;
-        popover.style.height = `${targetRect.height}px`;
-    };
 
     let isClosed = false;
     const close = () => {
@@ -208,13 +228,20 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
         document.removeEventListener('keydown', handleEscape);
         runtime.removeWindowListener('resize', handleReposition);
         runtime.removeWindowListener('scroll', handleReposition, true);
+        globalThis.clearTimeout(settlePositionTimer);
 
-        if (modal !== null) {
-            modal.classList.remove('popover-open');
-        }
+        popover.classList.add('closing');
+        modal?.classList.remove('popover-open');
+        modal?.classList.add('popover-closing');
 
-        popover.remove();
-        deps.onClose();
+        globalThis.setTimeout(() => {
+            modal?.classList.remove('popover-closing');
+            modal?.style.removeProperty('--app-modal-edge-gap');
+            modal?.style.removeProperty('--app-modal-popover-width');
+            modal?.style.removeProperty('--app-modal-popover-spacing');
+            popover.remove();
+            deps.onClose();
+        }, 280);
     };
 
     const handleDocumentClick = (event: MouseEvent) => {
@@ -235,17 +262,18 @@ export function createEngineInfoPopover(deps: EngineInfoPopoverDeps): EngineInfo
             return;
         }
 
-        if (modal !== null) {
-            modal.classList.add('popover-open');
-        }
         updatePosition();
     };
+
+    const settlePositionTimer = globalThis.setTimeout(updatePosition, 320);
 
     document.addEventListener('click', handleDocumentClick, true);
     document.addEventListener('keydown', handleEscape);
     runtime.addWindowListener('resize', handleReposition);
     runtime.addWindowListener('scroll', handleReposition, true);
-    updatePosition();
+    runtime.requestAnimationFrame(() => {
+        runtime.requestAnimationFrame(updatePosition);
+    });
 
     return {
         popover,

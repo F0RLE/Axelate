@@ -74,6 +74,9 @@
     --app-modal-max-width: calc(100% - 32px);
     --app-modal-height: calc(100% - 32px);
     --app-modal-max-height: var(--app-modal-height);
+    --app-modal-edge-gap: 16px;
+    --app-modal-popover-width: 344px;
+    --app-modal-popover-spacing: 16px;
 }
 
 #app-selection-modal .app-modal,
@@ -87,6 +90,48 @@
     animation: none;
     transition: none;
     backface-visibility: visible;
+}
+
+#module-settings-modal.popover-open:not(.module-settings-modal-custom-ui) .app-modal,
+#module-settings-modal.popover-closing:not(.module-settings-modal-custom-ui) .app-modal {
+    position: absolute;
+    left: var(--app-modal-edge-gap, 16px);
+    top: var(--app-modal-edge-gap, 16px);
+    height: calc((100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom));
+    max-height: calc((100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom));
+    margin: 0;
+    transform-origin: top left;
+    transition:
+        left 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        top 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        max-width 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        max-height 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        transform 0.3s cubic-bezier(0.22, 1, 0.36, 1),
+        opacity 0.2s ease;
+}
+
+#module-settings-modal.popover-open:not(.module-settings-modal-custom-ui) .app-modal {
+    width: calc(
+        (
+                100% - (var(--app-modal-edge-gap, 16px) * 2) -
+                    var(--app-modal-popover-width, 344px) - var(--app-modal-popover-spacing, 16px)
+            ) /
+            var(--module-settings-zoom)
+    );
+    max-width: calc(
+        (
+                100% - (var(--app-modal-edge-gap, 16px) * 2) -
+                    var(--app-modal-popover-width, 344px) - var(--app-modal-popover-spacing, 16px)
+            ) /
+            var(--module-settings-zoom)
+    );
+}
+
+#module-settings-modal.popover-closing:not(.module-settings-modal-custom-ui) .app-modal {
+    width: calc((100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom));
+    max-width: calc((100% - (var(--app-modal-edge-gap, 16px) * 2)) / var(--module-settings-zoom));
 }
 
 #app-selection-modal .app-modal-main,

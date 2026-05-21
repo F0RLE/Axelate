@@ -31,5 +31,6 @@ describe('ModuleSettingsEngineFieldCatalog', () => {
             showInfoButton: true,
             fullWidth: true,
         });
+        expect(catalog.buildImageCompanionFields(t, 'sdcpp')).toEqual([]);
     });
 });

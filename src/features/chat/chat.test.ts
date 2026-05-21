@@ -325,6 +325,23 @@ describe('ChatController', () => {
         );
     });
 
+    it('should localize local image engine connection failures', () => {
+        const controller = createController();
+
+        const message = controller._getFriendlyErrorMessage(
+            'Local image engine request failed at http://localhost:8082/sdapi/v1/txt2img: connection closed. The engine may have stopped, closed the connection, or run out of memory while generating.',
+            'sdcpp',
+        );
+
+        expect(message).toBe(
+            'Local image engine stopped or closed the connection while generating. Restart the image engine and lower image size, steps, or batch size if it happens again.',
+        );
+        expect(i18n.t).toHaveBeenCalledWith(
+            'ui.chat.error.local_image_engine_connection',
+            'Local image engine stopped or closed the connection while generating. Restart the image engine and lower image size, steps, or batch size if it happens again.',
+        );
+    });
+
     it('should map provider auth errors to the shared OpenRouter auth message', () => {
         const controller = createController();
 
@@ -376,7 +393,7 @@ describe('ChatController', () => {
         );
     });
 
-    it('should map upstream availability errors to the shared OpenRouter server message', () => {
+    it('should map upstream availability errors to a generic server message', () => {
         const controller = createController();
 
         const message = controller._getFriendlyErrorMessage(
@@ -385,11 +402,45 @@ describe('ChatController', () => {
         );
 
         expect(message).toBe(
-            'Error: OpenRouter service is temporarily unavailable. Please try again later.',
+            'Error: The selected AI service is temporarily unavailable. Please try again later.',
         );
         expect(i18n.t).toHaveBeenCalledWith(
             'ui.chat.error.server',
-            'Error: OpenRouter service is temporarily unavailable. Please try again later.',
+            'Error: The selected AI service is temporarily unavailable. Please try again later.',
+        );
+    });
+
+    it('should map local engine availability errors without mentioning OpenRouter', () => {
+        const controller = createController();
+
+        const message = controller._getFriendlyErrorMessage(
+            'API Error 503: {"error":{"message":"Service unavailable"}}',
+            'llamacpp',
+        );
+
+        expect(message).toBe(
+            'Local model engine is unavailable. Start or restart the selected local model and try again.',
+        );
+        expect(i18n.t).toHaveBeenCalledWith(
+            'ui.chat.error.local_model_unavailable',
+            'Local model engine is unavailable. Start or restart the selected local model and try again.',
+        );
+    });
+
+    it('should map local image input errors to a clear local model message', () => {
+        const controller = createController();
+
+        const message = controller._getFriendlyErrorMessage(
+            'API Error 500: {"error":{"message":"image input is not supported - provide the mmproj"}}',
+            'llamacpp',
+        );
+
+        expect(message).toBe(
+            'The selected local text model does not support image input. Remove the image or use a multimodal model with mmproj.',
+        );
+        expect(i18n.t).toHaveBeenCalledWith(
+            'ui.chat.error.local_model_image_input',
+            'The selected local text model does not support image input. Remove the image or use a multimodal model with mmproj.',
         );
     });
 
@@ -428,7 +479,7 @@ describe('ChatController', () => {
     });
 
     it('should enable textarea scrolling when input exceeds max height', () => {
-        document.body.innerHTML = '<textarea id="chat-input"></textarea>';
+        document.body.innerHTML = '<textarea id="chat-input">long prompt</textarea>';
 
         const controller = createController();
         const input = document.getElementById('chat-input') as HTMLTextAreaElement;
@@ -442,6 +493,19 @@ describe('ChatController', () => {
 
         expect(input.style.height).toBe('200px');
         expect(input.style.overflowY).toBe('auto');
+    });
+
+    it('should reset empty textarea to base height after resize', () => {
+        document.body.innerHTML = '<textarea id="chat-input"></textarea>';
+
+        const controller = createController();
+        const input = document.getElementById('chat-input') as HTMLTextAreaElement;
+        input.style.height = '200px';
+
+        controller._autoResizeInput();
+
+        expect(input.style.height).toBe('42px');
+        expect(input.style.overflowY).toBe('hidden');
     });
 
     it('should send chat on Enter from the textarea', async () => {

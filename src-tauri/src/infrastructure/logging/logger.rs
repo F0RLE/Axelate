@@ -161,7 +161,10 @@ fn is_frontend_relevant_log(entry: &LogEntry) -> bool {
 
     let is_bot_source = source.contains("CHATSERVICE")
         || source.contains("AIBRIDGE")
-        || source.contains("AI_SERVICE");
+        || source.contains("AI_SERVICE")
+        || source.contains("DOMAIN::AI")
+        || source.contains("DOMAIN::ENGINE")
+        || source.contains("INFRASTRUCTURE::ENGINE");
 
     let is_ai_noise = message.contains("GEMINI_ERROR")
         || message.contains("ERROR 429")
@@ -560,8 +563,15 @@ fn sanitize_module_id(raw: &str) -> Option<String> {
 
 fn infer_runtime_log_source(namespace: RuntimeLogNamespace, runtime_id: &str) -> String {
     match namespace {
-        RuntimeLogNamespace::Engine => runtime_id.to_string(),
+        RuntimeLogNamespace::Engine => canonical_engine_id(runtime_id).to_string(),
         RuntimeLogNamespace::Module => format!("module:{runtime_id}"),
+    }
+}
+
+fn canonical_engine_id(engine_id: &str) -> &str {
+    match engine_id {
+        "stable-diffusion" => "sdcpp",
+        value => value,
     }
 }
 
@@ -600,6 +610,34 @@ pub fn clear_logs() {
         store.entries.clear();
     }
     clear_module_runtime_logs();
+}
+
+/// Clears in-memory log entries that belong to a single console view.
+pub fn clear_logs_for_view(view_id: &str) {
+    if let Ok(mut store) = LOG_STORE.lock() {
+        store
+            .entries
+            .retain(|entry| !is_entry_in_console_view(entry, view_id));
+    }
+}
+
+fn is_entry_in_console_view(entry: &LogEntry, view_id: &str) -> bool {
+    if view_id == "general" {
+        return entry.module_id.is_none()
+            && !entry.source.starts_with("module:")
+            && !RuntimeLogCollector::is_known_engine_source(&entry.source);
+    }
+
+    if let Some(module_id) = view_id.strip_prefix("module:") {
+        return entry.module_id.as_deref() == Some(module_id)
+            || entry.source == format!("module:{module_id}");
+    }
+
+    if let Some(engine_id) = view_id.strip_prefix("engine:") {
+        return canonical_engine_id(&entry.source) == canonical_engine_id(engine_id);
+    }
+
+    false
 }
 
 fn clear_module_runtime_logs() {
@@ -647,6 +685,30 @@ pub fn init_global_logger() -> Result<tracing_appender::non_blocking::WorkerGuar
 }
 
 impl RuntimeLogCollector {
+    fn is_known_engine_source(source: &str) -> bool {
+        let source = canonical_engine_id(source);
+        Self::runtime_ids(&crate::utils::paths::ENGINE_LOGS_DIR)
+            .into_iter()
+            .any(|runtime_id| canonical_engine_id(&runtime_id) == source)
+    }
+
+    fn runtime_ids(root: &Path) -> Vec<String> {
+        let Ok(runtime_dirs) = fs::read_dir(root) else {
+            return Vec::new();
+        };
+
+        runtime_dirs
+            .filter_map(Result::ok)
+            .filter_map(|entry| {
+                if entry.file_type().ok()?.is_dir() {
+                    Some(entry.file_name().to_string_lossy().to_string())
+                } else {
+                    None
+                }
+            })
+            .collect()
+    }
+
     fn collect_since(since: f64) -> Vec<LogEntry> {
         let mut entries = Vec::new();
         entries.extend(Self::collect_root(

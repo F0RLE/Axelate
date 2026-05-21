@@ -101,8 +101,10 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         logs::get_logs,
         logs::get_console_overview,
         logs::clear_logs,
+        logs::clear_console_logs,
         logs::get_log_dir,
         logs::open_log_dir,
+        logs::open_console_log_target,
         logs::add_log,
         logs::log_batch,
         downloader::download_module,
@@ -258,7 +260,10 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
 
     // Engine manager (local AI engine lifecycle)
     let tauri_emitter = std::sync::Arc::new(
-        crate::infrastructure::engine::tauri_emitter::TauriEngineEmitter::new(app.handle().clone()),
+        crate::infrastructure::engine::tauri_emitter::TauriEngineEmitter::new(
+            app.handle().clone(),
+            std::sync::Arc::clone(&image_generation_state),
+        ),
     );
     let engine_manager = std::sync::Arc::new(EngineManager::new(tauri_emitter));
 

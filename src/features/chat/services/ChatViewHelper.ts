@@ -5,6 +5,7 @@ type ChatViewHelperDeps = {
     onFileInputChange: (event: Event) => void;
     onChatInputKeydown: (event: KeyboardEvent) => void;
     onChatInputInput: () => void;
+    onViewportResize: () => void;
 };
 
 export class ChatViewHelper {
@@ -17,6 +18,7 @@ export class ChatViewHelper {
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         chatInput?.addEventListener('keydown', this._deps.onChatInputKeydown);
         chatInput?.addEventListener('input', this._deps.onChatInputInput);
+        globalThis.addEventListener('resize', this._deps.onViewportResize);
     }
 
     public unbindEvents(): void {
@@ -26,6 +28,7 @@ export class ChatViewHelper {
         const chatInput = document.getElementById('chat-input') as HTMLTextAreaElement | null;
         chatInput?.removeEventListener('keydown', this._deps.onChatInputKeydown);
         chatInput?.removeEventListener('input', this._deps.onChatInputInput);
+        globalThis.removeEventListener('resize', this._deps.onViewportResize);
     }
 
     public randomizeGreeting(currentGreetingIndex: number, forceIndex?: number): number {

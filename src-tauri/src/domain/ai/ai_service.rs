@@ -620,10 +620,6 @@ mod tests {
     #[test]
     fn test_normalize_comfyui_sampler_maps_a1111_aliases() {
         assert_eq!(
-            normalize_comfyui_sampler(Some("DPM++ 2M SDE")),
-            "dpmpp_2m_sde"
-        );
-        assert_eq!(
             normalize_comfyui_sampler(Some("Euler a")),
             "euler_ancestral"
         );

@@ -130,8 +130,8 @@ export class ChatUI {
         this._boundDocumentClick = (e: Event) => {
             if (!(e.target instanceof HTMLElement)) return;
             if (e instanceof MouseEvent && e.button !== 0) return;
-            if (!e.target.closest('#chat-messages')) return;
-            this._imageController.handleImageClick(e as MouseEvent);
+            if (!e.target.closest('#chat-messages, #chat-attachments')) return;
+            if (this._imageController.handleImageClick(e as MouseEvent)) return;
             void this._handleMessageClick(e as MouseEvent);
             void this._messageInteractionController.handleCopyClick(e as MouseEvent);
         };
