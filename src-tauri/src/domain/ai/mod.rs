@@ -1,4 +1,5 @@
 mod ai_dispatch;
+mod ai_provider_resolution;
 /// AI service implementation
 pub mod ai_service;
 /// Custom model management service
