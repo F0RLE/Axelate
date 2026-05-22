@@ -21,6 +21,8 @@ export const commands = {
 	rotateAgentProfile: (id: string) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("rotate_agent_profile", { id })),
 	/**  Revokes a trusted local agent profile. */
 	revokeAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("revoke_agent_profile", { id })),
+	/**  Deletes a trusted local agent profile. */
+	deleteAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("delete_agent_profile", { id })),
 	/**  Applies a user decision to a pending agent approval request. */
 	decideAgentApproval: (id: string, approved: boolean) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("decide_agent_approval", { id, approved })),
 	/**  Creates a pending approval request from the UI for tests and manual flows. */

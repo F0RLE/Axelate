@@ -152,6 +152,15 @@ export class SettingsService {
         throw new Error(result.error.message);
     }
 
+    public async deleteAgentProfile(id: string): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.deleteAgentProfile(id));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to delete Agent profile:', result.error);
+        throw new Error(result.error.message);
+    }
+
     public async decideAgentApproval(id: string, approved: boolean): Promise<AgentControlState> {
         const result = await invokeSafe(commands.decideAgentApproval(id, approved));
         if (result.status === 'ok') {

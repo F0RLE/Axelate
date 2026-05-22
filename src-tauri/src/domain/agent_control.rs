@@ -268,6 +268,24 @@ impl AgentControlService {
         Ok(public_state(store, api_base_url))
     }
 
+    /// Deletes a trusted local agent profile and removes its pending approvals.
+    pub async fn delete_profile(
+        &self,
+        id: &str,
+        api_base_url: String,
+    ) -> Result<AgentControlState, AppError> {
+        let _guard = self.lock.lock().await;
+        let mut store = self.load_store_locked().await?;
+        let before = store.profiles.len();
+        store.profiles.retain(|profile| profile.id != id);
+        if store.profiles.len() == before {
+            return Err(AppError::NotFound(format!("Agent profile {id} not found")));
+        }
+        store.approvals.retain(|approval| approval.agent_id != id);
+        self.save_store_locked(&store).await?;
+        Ok(public_state(store, api_base_url))
+    }
+
     /// Authenticates a bearer token against enabled, non-revoked profiles.
     pub async fn authorize_token(&self, token: &str) -> Option<AuthorizedAgent> {
         let _guard = self.lock.lock().await;
@@ -511,6 +529,22 @@ mod tests {
             .await
             .expect("revoke");
 
+        assert!(service.authorize_token(&response.token).await.is_none());
+    }
+
+    #[tokio::test]
+    async fn deleted_profile_is_removed_and_cannot_authorize() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service.create_profile(None, None).await.expect("profile");
+
+        let state = service
+            .delete_profile(&response.profile.id, "http://127.0.0.1:3000".to_string())
+            .await
+            .expect("delete");
+
+        assert!(state.profiles.is_empty());
         assert!(service.authorize_token(&response.token).await.is_none());
     }
 

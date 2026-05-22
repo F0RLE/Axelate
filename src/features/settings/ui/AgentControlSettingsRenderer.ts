@@ -16,6 +16,7 @@ type AgentControlRuntime = {
 type OneTimeToken = {
     profileId: string;
     token: string;
+    revealed: boolean;
 };
 
 const TRUSTED_LOCAL_SCOPES: AgentScope[] = ['observe', 'operate', 'configure', 'draft-create'];
@@ -151,6 +152,7 @@ export class AgentControlSettingsRenderer {
                     this._oneTimeToken = {
                         profileId: response.profile.id,
                         token: response.token,
+                        revealed: false,
                     };
                     this._state = await this._service.getAgentControlState();
                     this._toast(this._t('profile_created', 'Profile created'), 'success');
@@ -177,13 +179,33 @@ export class AgentControlSettingsRenderer {
             'agent-control-token-label',
             this._t('token_once', 'Token shown once'),
         );
-        const value = this._element('div', 'agent-control-code', token?.token ?? '');
+        const value = this._element(
+            'div',
+            'agent-control-code',
+            token?.revealed === true
+                ? token.token
+                : this._t('token_hidden', 'Hidden. Copy it now or reveal it explicitly.'),
+        );
         const copy = this._button(this._t('copy_token', 'Copy token'), 'agent-control-btn', () => {
             if (token !== null) {
                 void this._copy(token.token);
             }
         });
-        box.append(label, value, copy);
+        const reveal = this._button(
+            token?.revealed === true
+                ? this._t('hide_token', 'Hide token')
+                : this._t('show_token', 'Show token'),
+            'agent-control-btn',
+            () => {
+                if (token !== null) {
+                    token.revealed = !token.revealed;
+                    this._render();
+                }
+            },
+        );
+        const actions = this._element('div', 'agent-control-actions');
+        actions.append(copy, reveal);
+        box.append(label, value, actions);
         return box;
     }
 
@@ -221,6 +243,7 @@ export class AgentControlSettingsRenderer {
                         this._oneTimeToken = {
                             profileId: response.profile.id,
                             token: response.token,
+                            revealed: false,
                         };
                         this._state = await this._service.getAgentControlState();
                         this._toast(this._t('token_rotated', 'Token rotated'), 'success');
@@ -242,6 +265,21 @@ export class AgentControlSettingsRenderer {
                     }),
                 );
             }
+            actions.append(
+                this._button(this._t('delete_profile', 'Delete'), 'agent-control-btn', () => {
+                    if (!this._confirmDeleteProfile(profile.name)) {
+                        return;
+                    }
+                    void this._run(async () => {
+                        this._state = await this._service.deleteAgentProfile(profile.id);
+                        if (this._oneTimeToken?.profileId === profile.id) {
+                            this._oneTimeToken = null;
+                        }
+                        this._toast(this._t('profile_deleted', 'Profile deleted'), 'success');
+                        this._render();
+                    });
+                }),
+            );
             row.append(main, actions);
             list.append(row);
         });
@@ -382,6 +420,12 @@ export class AgentControlSettingsRenderer {
         const section = this._element('section', 'agent-control-section');
         section.append(this._element('div', 'agent-control-section-title', title));
         return section;
+    }
+
+    private _confirmDeleteProfile(name: string): boolean {
+        return globalThis.confirm(
+            this._t('delete_profile_confirm', `Delete agent profile "${name}"?`),
+        );
     }
 
     private _button(label: string, className: string, onClick: () => void): HTMLButtonElement {

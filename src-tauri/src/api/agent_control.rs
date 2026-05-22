@@ -60,6 +60,16 @@ pub async fn revoke_agent_profile(
     service.revoke_profile(&id, api_base_url()).await
 }
 
+/// Deletes a trusted local agent profile.
+#[tauri::command]
+#[specta::specta]
+pub async fn delete_agent_profile(
+    service: tauri::State<'_, AgentControlService>,
+    id: String,
+) -> Result<AgentControlState, AppError> {
+    service.delete_profile(&id, api_base_url()).await
+}
+
 /// Applies a user decision to a pending agent approval request.
 #[tauri::command]
 #[specta::specta]
