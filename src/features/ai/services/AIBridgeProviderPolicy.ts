@@ -23,7 +23,7 @@ export class AIBridgeProviderPolicy {
 
     public isCloudProvider(providerId: string): boolean {
         const policy = this._catalogProvider(providerId)?.providerPolicy;
-        return policy?.isCloudProvider ?? true;
+        return policy?.isCloudProvider === true;
     }
 
     public isImageProvider(providerId: string): boolean {
@@ -31,11 +31,19 @@ export class AIBridgeProviderPolicy {
     }
 
     public isManagedLocalImageEngine(providerId: string): boolean {
-        return !this.isCloudProvider(providerId) && this.isImageProvider(providerId);
+        return (
+            this._catalogProvider(providerId) !== null &&
+            !this.isCloudProvider(providerId) &&
+            this.isImageProvider(providerId)
+        );
     }
 
     public isLocalTextProvider(providerId: string): boolean {
-        return !this.isCloudProvider(providerId) && !this.isImageProvider(providerId);
+        return (
+            this._catalogProvider(providerId) !== null &&
+            !this.isCloudProvider(providerId) &&
+            !this.isImageProvider(providerId)
+        );
     }
 
     public buildRequestOptions(input: RequestOptionInput): AIBridgeRequestOptions {

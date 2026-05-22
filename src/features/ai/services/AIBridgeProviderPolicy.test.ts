@@ -50,7 +50,7 @@ describe('AIBridgeProviderPolicy', () => {
         expect(policy.isCloudProvider(CUSTOM_TEXT_PROVIDER_ID)).toBe(true);
         expect(policy.isCloudProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
         expect(policy.isCloudProvider('llamacpp')).toBe(false);
-        expect(policy.isCloudProvider('unknown-provider')).toBe(true);
+        expect(policy.isCloudProvider('unknown-provider')).toBe(false);
         expect(policy.isImageProvider('comfyui')).toBe(true);
         expect(policy.isImageProvider('seedream-image')).toBe(true);
         expect(policy.isImageProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
@@ -61,6 +61,7 @@ describe('AIBridgeProviderPolicy', () => {
         expect(policy.isLocalTextProvider('llamacpp')).toBe(true);
         expect(policy.isLocalTextProvider('sdcpp')).toBe(false);
         expect(policy.isLocalTextProvider(CUSTOM_TEXT_PROVIDER_ID)).toBe(false);
+        expect(policy.isLocalTextProvider('unknown-provider')).toBe(false);
     });
 
     it('should prefer catalog capabilities for provider output type', () => {

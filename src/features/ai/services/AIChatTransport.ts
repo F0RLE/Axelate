@@ -460,21 +460,22 @@ export class AIChatTransport implements IChatTransport {
     }
 
     private _isLocalHostname(hostname: string): boolean {
+        const normalizedHostname = hostname.replace(/^\[(.*)\]$/u, '$1');
         if (
-            hostname === 'localhost' ||
-            hostname === '::1' ||
-            hostname === '0.0.0.0' ||
-            hostname.endsWith('.local') ||
-            hostname.startsWith('127.')
+            normalizedHostname === 'localhost' ||
+            normalizedHostname === '::1' ||
+            normalizedHostname === '0.0.0.0' ||
+            normalizedHostname.endsWith('.local') ||
+            normalizedHostname.startsWith('127.')
         ) {
             return true;
         }
 
-        if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) {
+        if (normalizedHostname.startsWith('10.') || normalizedHostname.startsWith('192.168.')) {
             return true;
         }
 
-        const match = /^172\.(\d+)\./u.exec(hostname);
+        const match = /^172\.(\d+)\./u.exec(normalizedHostname);
         if (match?.[1] === undefined) {
             return false;
         }
