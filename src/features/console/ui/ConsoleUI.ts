@@ -1,4 +1,4 @@
-import type { ConsoleLogService } from '../services/ConsoleLogService';
+import type { ConsoleLogService, IConsoleLogView } from '../services/ConsoleLogService';
 import type { EventBus } from '@/shared/services/EventBus';
 import { ConsoleClipboardHelper } from './ConsoleClipboardHelper';
 import { ConsoleFilterControlHelper } from './ConsoleFilterControlHelper';
@@ -108,6 +108,7 @@ export class ConsoleUI {
             onFiltersChanged: () => {
                 this._applyFiltersToActivePane();
             },
+            translate: (key, fallback) => this._translate(key, fallback),
         });
         this._presentationHelper = new ConsoleLogPresentationHelper({
             getActiveViewId: () => this._viewState.activeViewId,
@@ -291,6 +292,7 @@ export class ConsoleUI {
     private setLogView(view: string, btn: HTMLElement): void {
         this._viewState.activeViewId = view;
         this._activateTab('.console-tab', '.logs-pane', `logs-${view}`, btn);
+        this._syncViewActionState();
         this.renderLogs(true);
         const requestedView = view;
         void this.service
@@ -337,9 +339,18 @@ export class ConsoleUI {
     public async openLogsFolder(): Promise<void> {
         const opened = await this.service.openLogsFolder(this._viewState.activeViewId);
         if (!opened) {
+            const isAgentView = this._viewState.activeViewId === 'agent';
             this._showToast(
-                this._translate('ui.debug.logs_open_folder_failed', 'Failed to open logs folder'),
-                'error',
+                isAgentView
+                    ? this._translate(
+                          'ui.debug.logs_folder_unavailable',
+                          'Agent actions are stored in the launcher audit log',
+                      )
+                    : this._translate(
+                          'ui.debug.logs_open_folder_failed',
+                          'Failed to open logs folder',
+                      ),
+                isAgentView ? 'info' : 'error',
                 1800,
             );
         }
@@ -397,12 +408,15 @@ export class ConsoleUI {
             return false;
         }
 
-        const views = await this.service.getAvailableViews();
+        const views = (await this.service.getAvailableViews()).map((view) =>
+            this._localizeView(view),
+        );
         this._viewState.ensureKnownActiveView(new Set(views.map((view) => view.id)));
 
         if (!this._viewHelper.shouldRebuildViews(toolbar, views)) {
             this._syncActivePane(`logs-${this._viewState.activeViewId}`);
             this._syncTabScrollControls?.();
+            this._syncViewActionState();
             return false;
         }
 
@@ -420,6 +434,7 @@ export class ConsoleUI {
         this._activePane = null;
         this._syncActivePane(`logs-${this._viewState.activeViewId}`);
         this._syncTabScrollControls?.();
+        this._syncViewActionState();
         return true;
     }
 
@@ -469,6 +484,7 @@ export class ConsoleUI {
         button?.classList.add('active');
         this._activeTabButton = button ?? null;
         this._syncActivePane(paneId);
+        this._syncViewActionState();
     }
 
     private _translate(key: string, fallback: string): string {
@@ -518,5 +534,39 @@ export class ConsoleUI {
         }
 
         this._activePane = null;
+    }
+
+    private _localizeView(view: IConsoleLogView): IConsoleLogView {
+        if (view.id === 'general') {
+            return {
+                ...view,
+                label: this._translate('ui.launcher.web.logs_general', view.label),
+            };
+        }
+
+        if (view.id === 'agent') {
+            return {
+                ...view,
+                label: this._translate('ui.launcher.web.logs_agent', view.label),
+            };
+        }
+
+        return view;
+    }
+
+    private _syncViewActionState(): void {
+        const openFolderButton = document.getElementById('open-logs-folder-btn');
+        if (!(openFolderButton instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        const isAgentView = this._viewState.activeViewId === 'agent';
+        openFolderButton.disabled = isAgentView;
+        openFolderButton.classList.toggle('is-disabled', isAgentView);
+        const title = isAgentView
+            ? this._translate('ui.debug.logs_folder_agent_disabled', 'No folder for agent log')
+            : this._translate('ui.debug.logs_open_folder', 'Open Logs Folder');
+        openFolderButton.title = title;
+        openFolderButton.setAttribute('aria-label', title);
     }
 }

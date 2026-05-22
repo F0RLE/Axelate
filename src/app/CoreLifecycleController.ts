@@ -308,7 +308,11 @@ export class CoreLifecycleController {
     }
 
     private async _applyAgentOpenPageRequest(payload: AgentOpenPagePayload): Promise<void> {
-        const pageId = payload.pageId.trim();
+        const rawPageId = (payload as { pageId?: unknown }).pageId;
+        if (typeof rawPageId !== 'string') {
+            return;
+        }
+        const pageId = rawPageId.trim();
         if (pageId === '') {
             return;
         }

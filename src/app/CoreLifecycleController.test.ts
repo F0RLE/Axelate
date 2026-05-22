@@ -40,7 +40,7 @@ function createDeps(isDestroyed: () => boolean): CoreLifecycleDeps {
             i18nUI: {},
             catalog: {},
             navigation: {},
-            navigationUI: {},
+            navigationUI: { showPage: vi.fn().mockResolvedValue(undefined) },
             chatController: { init: vi.fn(), destroy: vi.fn() },
             bridge: {},
             eventHandler: {},
@@ -164,5 +164,32 @@ describe('CoreLifecycleController', () => {
             id: 'telegram-parser',
             name: 'Telegram Parser',
         });
+    });
+
+    it('ignores malformed agent open-page events', async () => {
+        const agentOpenPageHandlers: Array<(payload: unknown) => void> = [];
+        const deps = createDeps(() => false);
+        vi.mocked(deps.backendSelection.tauriProvider.listen).mockImplementation(
+            (event, callback) => {
+                if (event === 'agent-control:open-page') {
+                    agentOpenPageHandlers.push(callback as (payload: unknown) => void);
+                }
+                return Promise.resolve(vi.fn());
+            },
+        );
+        const controller = new CoreLifecycleController(deps);
+
+        await controller.runInit();
+        const handler = agentOpenPageHandlers.at(0);
+        expect(handler).toBeDefined();
+        expect(() => handler?.({ pageId: null })).not.toThrow();
+        handler?.({ pageId: ' console ' });
+
+        expect(deps.bootstrap.navigationUI.showPage).toHaveBeenCalledWith(
+            'console',
+            null,
+            false,
+            false,
+        );
     });
 });

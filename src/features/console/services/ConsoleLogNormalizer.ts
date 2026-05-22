@@ -12,16 +12,17 @@ export class ConsoleLogNormalizer {
             message: parsed.message,
             source,
             module_id: log.module_id ?? this._resolveModuleId(source, parsed.message),
-            display_time: parsed.time,
-            normalized_level: parsed.level,
-            scope: parsed.scope,
-            summary_message: summaryMessage,
-            source_label: this._formatSourceLabel(normalizedSource, source),
+            display_time: log.display_time ?? parsed.time,
+            normalized_level: log.normalized_level ?? parsed.level,
+            scope: log.scope ?? parsed.scope,
+            summary_message: log.summary_message ?? summaryMessage,
+            source_label: log.source_label ?? this._formatSourceLabel(normalizedSource, source),
             source_class:
-                source.startsWith('module:') === true ? 'src-MODULE' : `src-${normalizedSource}`,
-            page: this._extractPage(parsed.message),
-            action: this._extractAction(parsed.message),
-            expected: this._extractExpected(parsed.message),
+                log.source_class ??
+                (source.startsWith('module:') === true ? 'src-MODULE' : `src-${normalizedSource}`),
+            page: log.page ?? this._extractPage(parsed.message),
+            action: log.action ?? this._extractAction(parsed.message),
+            expected: log.expected ?? this._extractExpected(parsed.message),
         };
     }
 

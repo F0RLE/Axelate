@@ -1,6 +1,5 @@
 import type {
     AgentApprovalRequest,
-    AgentAuditEntry,
     AgentControlState,
     AgentProfile,
     AgentScope,
@@ -9,30 +8,27 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAppSettingsUIContext } from './SettingsContext';
 import type { SettingsService } from '../services/SettingsService';
 
-type AgentControlRuntime = {
-    copyText: (text: string) => Promise<void>;
-};
-
 type OneTimeToken = {
     profileId: string;
-    token: string;
-    revealed: boolean;
+    profileName: string;
+    scopes: AgentScope[];
 };
 
 const TRUSTED_LOCAL_SCOPES: AgentScope[] = ['observe', 'operate', 'configure', 'draft-create'];
+const FULL_ACCESS_SCOPES: AgentScope[] = ['full-access'];
 
 export class AgentControlSettingsRenderer {
     private _context: IAppSettingsUIContext | null = null;
     private _panel: HTMLElement | null = null;
     private _state: AgentControlState | null = null;
     private _oneTimeToken: OneTimeToken | null = null;
+    private _confirmResetTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
     private _isDestroyed = false;
     private _isBusy = false;
 
     public constructor(
         private readonly _service: SettingsService,
         private readonly _tracer: Pick<LoggerService, 'error' | 'warn'>,
-        private readonly _runtime: AgentControlRuntime,
     ) {}
 
     public init(context: IAppSettingsUIContext): void {
@@ -61,6 +57,7 @@ export class AgentControlSettingsRenderer {
         this._panel = null;
         this._state = null;
         this._oneTimeToken = null;
+        this._clearPendingConfirmation();
     }
 
     private async _refresh(): Promise<void> {
@@ -74,9 +71,7 @@ export class AgentControlSettingsRenderer {
     }
 
     private _renderLoading(): void {
-        this._replacePanel(
-            this._element('div', 'agent-control-empty', this._t('loading', 'Loading...')),
-        );
+        this._replacePanel(this._element('div', 'agent-control-empty', this._t('loading')));
     }
 
     private _renderError(): void {
@@ -84,7 +79,7 @@ export class AgentControlSettingsRenderer {
             this._element(
                 'div',
                 'agent-control-empty agent-control-empty--error',
-                this._t('load_failed', 'Failed to load Agent Control'),
+                this._t('load_failed'),
             ),
         );
     }
@@ -97,79 +92,87 @@ export class AgentControlSettingsRenderer {
         }
 
         const root = this._element('div', 'agent-control');
+        root.classList.toggle('is-enabled', state.enabled);
         root.append(
             this._renderHeader(state),
             this._renderConnection(state),
             this._renderProfiles(state.profiles),
             this._renderApprovals(state.approvals),
-            this._renderAudit(state.audit),
         );
         this._replacePanel(root);
     }
 
     private _renderHeader(state: AgentControlState): HTMLElement {
         const header = this._element('div', 'agent-control-header');
-        const status = this._element(
-            'span',
-            `agent-control-status ${state.enabled ? 'is-on' : 'is-off'}`,
-            state.enabled ? this._t('enabled', 'Enabled') : this._t('disabled', 'Disabled'),
-        );
         const toggle = this._button(
-            state.enabled ? this._t('disable', 'Disable') : this._t('enable', 'Enable'),
-            'agent-control-btn',
+            state.enabled ? this._t('disable') : this._t('enable'),
+            `agent-control-btn agent-control-engine-btn ${state.enabled ? 'stop-btn' : 'active-module-btn'}`,
             () => {
                 void this._run(async () => {
                     this._state = await this._service.setAgentControlEnabled(!state.enabled);
                     this._toast(
-                        state.enabled
-                            ? this._t('disabled', 'Disabled')
-                            : this._t('enabled', 'Enabled'),
+                        state.enabled ? this._t('disabled') : this._t('enabled'),
                         'success',
                     );
                     this._render();
                 });
             },
         );
-        header.append(status, toggle);
+        header.append(toggle);
         return header;
     }
 
     private _renderConnection(state: AgentControlState): HTMLElement {
-        const section = this._section(this._t('connection', 'Connection'));
-        const base = this._element('div', 'agent-control-code', state.apiBaseUrl);
-        const copyBase = this._button(this._t('copy_base', 'Copy URL'), 'agent-control-btn', () => {
-            void this._copy(state.apiBaseUrl);
-        });
-        const copyConfig = this._button(
-            this._t('copy_config', 'Copy config'),
-            'agent-control-btn agent-control-btn--primary',
-            () => {
-                void this._copy(this._configText(state));
-            },
-        );
         const create = this._button(
-            this._t('create_profile', 'Create Trusted Local'),
+            this._t('create_profile'),
             'agent-control-btn agent-control-btn--primary',
             () => {
                 void this._run(async () => {
                     const response = await this._service.createAgentProfile(
-                        this._t('trusted_local', 'Trusted Local'),
+                        this._t('trusted_local'),
                         TRUSTED_LOCAL_SCOPES,
                     );
                     this._oneTimeToken = {
                         profileId: response.profile.id,
-                        token: response.token,
-                        revealed: false,
+                        profileName: response.profile.name,
+                        scopes: response.profile.scopes,
                     };
                     this._state = await this._service.getAgentControlState();
-                    this._toast(this._t('profile_created', 'Profile created'), 'success');
+                    this._toast(this._t('profile_created'), 'success');
                     this._render();
                 });
             },
         );
-        const actions = this._element('div', 'agent-control-actions');
-        actions.append(copyBase, copyConfig, create);
-        section.append(base, actions);
+        const createFullAccess = this._button(
+            this._t('create_full_access'),
+            'agent-control-btn agent-control-btn--danger',
+            (button) => {
+                if (!this._confirmDangerousButton(button)) {
+                    return;
+                }
+                void this._run(async () => {
+                    const response = await this._service.createAgentProfile(
+                        this._t('full_access'),
+                        FULL_ACCESS_SCOPES,
+                    );
+                    this._oneTimeToken = {
+                        profileId: response.profile.id,
+                        profileName: response.profile.name,
+                        scopes: response.profile.scopes,
+                    };
+                    this._state = await this._service.getAgentControlState();
+                    this._toast(this._t('profile_created'), 'success');
+                    this._render();
+                });
+            },
+        );
+        const section = this._section(this._t('connection'), [create, createFullAccess]);
+        const endpoint = this._element('div', 'agent-control-endpoint');
+        endpoint.append(
+            this._element('div', 'agent-control-field-label', this._t('base_url')),
+            this._element('div', 'agent-control-code', state.apiBaseUrl),
+        );
+        section.append(endpoint);
 
         if (this._oneTimeToken !== null) {
             section.append(this._renderOneTimeToken());
@@ -181,111 +184,102 @@ export class AgentControlSettingsRenderer {
     private _renderOneTimeToken(): HTMLElement {
         const token = this._oneTimeToken;
         const box = this._element('div', 'agent-control-token');
-        const label = this._element(
-            'div',
-            'agent-control-token-label',
-            this._t('token_once', 'Token shown once'),
-        );
-        const value = this._element(
-            'div',
-            'agent-control-code',
-            token?.revealed === true
-                ? token.token
-                : this._t('token_hidden', 'Hidden. Copy it now or reveal it explicitly.'),
-        );
-        const copy = this._button(this._t('copy_token', 'Copy token'), 'agent-control-btn', () => {
+        const label = this._element('div', 'agent-control-token-label', this._t('token_once'));
+        const value = this._element('div', 'agent-control-code', '🔒 ••••••••••••••••');
+        const copyTokenLabel = this._t('copy_token');
+        const copy = this._button('📋', 'agent-control-btn agent-control-btn--icon', () => {
             if (token !== null) {
-                void this._copy(token.token);
+                void this._copyOneTimeToken(token.profileId);
             }
         });
-        const reveal = this._button(
-            token?.revealed === true
-                ? this._t('hide_token', 'Hide token')
-                : this._t('show_token', 'Show token'),
-            'agent-control-btn',
-            () => {
-                if (token !== null) {
-                    token.revealed = !token.revealed;
-                    this._render();
-                }
-            },
-        );
+        copy.title = copyTokenLabel;
+        copy.setAttribute('aria-label', copyTokenLabel);
         const actions = this._element('div', 'agent-control-actions');
-        actions.append(copy, reveal);
+        actions.append(copy);
         box.append(label, value, actions);
         return box;
     }
 
     private _renderProfiles(profiles: AgentProfile[]): HTMLElement {
-        const section = this._section(this._t('profiles', 'Agents'));
+        const section = this._section(this._t('profiles'));
         if (profiles.length === 0) {
-            section.append(
-                this._element(
-                    'div',
-                    'agent-control-empty',
-                    this._t('no_profiles', 'No agents yet'),
-                ),
-            );
+            section.append(this._element('div', 'agent-control-empty', this._t('no_profiles')));
             return section;
         }
 
         const list = this._element('div', 'agent-control-list');
         profiles.forEach((profile) => {
-            const row = this._element('div', 'agent-control-row');
+            const row = this._element(
+                'div',
+                `agent-control-row ${profile.revoked ? 'is-revoked' : 'is-active'}`,
+            );
             const main = this._element('div', 'agent-control-row-main');
-            main.append(
+            const titleLine = this._element('div', 'agent-control-title-line');
+            titleLine.append(
                 this._element('div', 'agent-control-row-title', profile.name),
+                this._element(
+                    'span',
+                    `agent-control-row-status ${profile.revoked ? 'is-revoked' : 'is-active'}`,
+                    profile.revoked ? this._t('revoked') : this._t('active'),
+                ),
+            );
+            main.append(
+                titleLine,
                 this._element(
                     'div',
                     'agent-control-row-meta',
-                    `${profile.revoked ? this._t('revoked', 'Revoked') : this._t('active', 'Active')} · ${profile.tokenPrefix} · ${this._lastSeen(profile.lastSeenAt)}`,
+                    `${profile.tokenPrefix} · ${this._lastSeen(profile.lastSeenAt)}`,
                 ),
                 this._renderScopes(profile.scopes),
             );
             const actions = this._element('div', 'agent-control-row-actions');
             actions.append(
-                this._button(this._t('rotate', 'Rotate'), 'agent-control-btn', () => {
+                this._button(this._t('rotate'), 'agent-control-btn', () => {
                     void this._run(async () => {
                         const response = await this._service.rotateAgentProfile(profile.id);
                         this._oneTimeToken = {
                             profileId: response.profile.id,
-                            token: response.token,
-                            revealed: false,
+                            profileName: response.profile.name,
+                            scopes: response.profile.scopes,
                         };
                         this._state = await this._service.getAgentControlState();
-                        this._toast(this._t('token_rotated', 'Token rotated'), 'success');
+                        this._toast(this._t('token_rotated'), 'success');
                         this._render();
                     });
                 }),
             );
             if (!profile.revoked) {
                 actions.append(
-                    this._button(this._t('revoke', 'Revoke'), 'agent-control-btn', () => {
+                    this._button(this._t('revoke'), 'agent-control-btn', () => {
                         void this._run(async () => {
                             this._state = await this._service.revokeAgentProfile(profile.id);
                             if (this._oneTimeToken?.profileId === profile.id) {
                                 this._oneTimeToken = null;
                             }
-                            this._toast(this._t('profile_revoked', 'Profile revoked'), 'success');
+                            this._toast(this._t('profile_revoked'), 'success');
                             this._render();
                         });
                     }),
                 );
             }
             actions.append(
-                this._button(this._t('delete_profile', 'Delete'), 'agent-control-btn', () => {
-                    if (!this._confirmDeleteProfile(profile.name)) {
-                        return;
-                    }
-                    void this._run(async () => {
-                        this._state = await this._service.deleteAgentProfile(profile.id);
-                        if (this._oneTimeToken?.profileId === profile.id) {
-                            this._oneTimeToken = null;
+                this._button(
+                    this._t('delete_profile'),
+                    'agent-control-btn agent-control-btn--danger',
+                    (button) => {
+                        if (!this._confirmDangerousButton(button)) {
+                            return;
                         }
-                        this._toast(this._t('profile_deleted', 'Profile deleted'), 'success');
-                        this._render();
-                    });
-                }),
+                        void this._run(async () => {
+                            this._state = await this._service.deleteAgentProfile(profile.id);
+                            if (this._oneTimeToken?.profileId === profile.id) {
+                                this._oneTimeToken = null;
+                            }
+                            this._toast(this._t('profile_deleted'), 'success');
+                            this._render();
+                        });
+                    },
+                ),
             );
             row.append(main, actions);
             list.append(row);
@@ -303,16 +297,10 @@ export class AgentControlSettingsRenderer {
     }
 
     private _renderApprovals(approvals: AgentApprovalRequest[]): HTMLElement {
-        const section = this._section(this._t('approvals', 'Approvals'));
+        const section = this._section(this._t('approvals'));
         const pending = approvals.filter((approval) => approval.status === 'pending');
         if (pending.length === 0) {
-            section.append(
-                this._element(
-                    'div',
-                    'agent-control-empty',
-                    this._t('no_approvals', 'No pending approvals'),
-                ),
-            );
+            section.append(this._element('div', 'agent-control-empty', this._t('no_approvals')));
             return section;
         }
 
@@ -320,25 +308,30 @@ export class AgentControlSettingsRenderer {
         pending.forEach((approval) => {
             const row = this._element('div', 'agent-control-row agent-control-row--approval');
             const main = this._element('div', 'agent-control-row-main');
-            main.append(
+            const titleLine = this._element('div', 'agent-control-title-line');
+            titleLine.append(
                 this._element('div', 'agent-control-row-title', approval.action),
+                this._element('span', 'agent-control-risk', approval.risk),
+            );
+            main.append(
+                titleLine,
                 this._element(
                     'div',
                     'agent-control-row-meta',
-                    `${approval.agentName} · ${approval.target} · ${approval.risk}`,
+                    `${approval.agentName} · ${approval.target}`,
                 ),
                 this._element('div', 'agent-control-diff', approval.diff),
             );
             const actions = this._element('div', 'agent-control-row-actions');
             actions.append(
                 this._button(
-                    this._t('approve', 'Approve'),
+                    this._t('approve'),
                     'agent-control-btn agent-control-btn--primary',
                     () => {
                         void this._decideApproval(approval.id, true);
                     },
                 ),
-                this._button(this._t('deny', 'Deny'), 'agent-control-btn', () => {
+                this._button(this._t('deny'), 'agent-control-btn', () => {
                     void this._decideApproval(approval.id, false);
                 }),
             );
@@ -349,35 +342,11 @@ export class AgentControlSettingsRenderer {
         return section;
     }
 
-    private _renderAudit(audit: AgentAuditEntry[]): HTMLElement {
-        const section = this._section(this._t('audit', 'Action log'));
-        if (audit.length === 0) {
-            section.append(
-                this._element('div', 'agent-control-empty', this._t('no_audit', 'No actions yet')),
-            );
-            return section;
-        }
-
-        const list = this._element('div', 'agent-control-audit');
-        audit.slice(0, 6).forEach((entry) => {
-            const item = this._element(
-                'div',
-                'agent-control-audit-item',
-                `${entry.actorName} · ${entry.action} · ${entry.target} · ${entry.result}`,
-            );
-            list.append(item);
-        });
-        section.append(list);
-        return section;
-    }
-
     private async _decideApproval(id: string, approved: boolean): Promise<void> {
         await this._run(async () => {
             this._state = await this._service.decideAgentApproval(id, approved);
             this._toast(
-                approved
-                    ? this._t('approval_approved', 'Approved')
-                    : this._t('approval_denied', 'Denied'),
+                approved ? this._t('approval_approved') : this._t('approval_denied'),
                 'success',
             );
             this._render();
@@ -392,55 +361,90 @@ export class AgentControlSettingsRenderer {
             await action();
         } catch (error) {
             this._tracer.error('[AgentControlSettingsRenderer] Action failed:', error);
-            this._toast(this._t('action_failed', 'Action failed'), 'error');
+            this._toast(this._t('action_failed'), 'error');
         } finally {
             this._isBusy = false;
             this._setButtonsDisabled(false);
         }
     }
 
-    private async _copy(text: string): Promise<void> {
+    private async _copyOneTimeToken(profileId: string): Promise<void> {
         try {
-            await this._runtime.copyText(text);
-            this._toast(this._t('copied', 'Copied'), 'success');
+            await this._service.copyAgentProfileToken(profileId);
+            this._oneTimeToken = null;
+            this._toast(this._t('copied'), 'success');
+            this._render();
         } catch (error) {
             this._tracer.error('[AgentControlSettingsRenderer] Copy failed:', error);
-            this._toast(this._t('copy_failed', 'Copy failed'), 'error');
+            this._toast(this._t('copy_failed'), 'error');
         }
     }
 
-    private _configText(state: AgentControlState): string {
-        const token = this._oneTimeToken?.token ?? '<token>';
-        return JSON.stringify(
-            {
-                name: this._t('trusted_local', 'Trusted Local'),
-                baseUrl: state.apiBaseUrl,
-                authorization: `Bearer ${token}`,
-                scopes: TRUSTED_LOCAL_SCOPES,
-            },
-            null,
-            2,
-        );
-    }
-
-    private _section(title: string): HTMLElement {
+    private _section(title: string, actions: HTMLButtonElement[] = []): HTMLElement {
         const section = this._element('section', 'agent-control-section');
-        section.append(this._element('div', 'agent-control-section-title', title));
+        const header = this._element('div', 'agent-control-section-header');
+        header.append(this._element('div', 'agent-control-section-title', title));
+        if (actions.length > 0) {
+            const actionWrap = this._element('div', 'agent-control-actions');
+            actionWrap.append(...actions);
+            header.append(actionWrap);
+        }
+        section.append(header);
         return section;
     }
 
-    private _confirmDeleteProfile(name: string): boolean {
-        return globalThis.confirm(
-            this._t('delete_profile_confirm', `Delete agent profile "${name}"?`),
-        );
+    private _confirmDangerousButton(button: HTMLButtonElement): boolean {
+        if (button.dataset['confirming'] === 'true') {
+            this._clearPendingConfirmation();
+            return true;
+        }
+
+        this._clearPendingConfirmation();
+        button.dataset['confirming'] = 'true';
+        button.dataset['label'] = button.textContent;
+        button.classList.add('is-confirming');
+        button.textContent = this._t('confirm_action');
+        this._confirmResetTimer = globalThis.setTimeout(() => {
+            this._resetConfirmingButton(button);
+            this._confirmResetTimer = null;
+        }, 2400);
+        return false;
     }
 
-    private _button(label: string, className: string, onClick: () => void): HTMLButtonElement {
+    private _clearPendingConfirmation(): void {
+        if (this._confirmResetTimer !== null) {
+            globalThis.clearTimeout(this._confirmResetTimer);
+            this._confirmResetTimer = null;
+        }
+        this._panel
+            ?.querySelectorAll<HTMLButtonElement>('.agent-control-btn.is-confirming')
+            .forEach((button) => {
+                this._resetConfirmingButton(button);
+            });
+    }
+
+    private _resetConfirmingButton(button: HTMLButtonElement): void {
+        button.classList.remove('is-confirming');
+        delete button.dataset['confirming'];
+        const label = button.dataset['label'];
+        if (label !== undefined) {
+            button.textContent = label;
+            delete button.dataset['label'];
+        }
+    }
+
+    private _button(
+        label: string,
+        className: string,
+        onClick: (button: HTMLButtonElement) => void,
+    ): HTMLButtonElement {
         const button = document.createElement('button');
         button.type = 'button';
         button.className = className;
         button.textContent = label;
-        button.addEventListener('click', onClick);
+        button.addEventListener('click', () => {
+            onClick(button);
+        });
         return button;
     }
 
@@ -469,9 +473,9 @@ export class AgentControlSettingsRenderer {
 
     private _lastSeen(value: string | null): string {
         if (value === null) {
-            return this._t('never_seen', 'Never connected');
+            return this._t('never_seen');
         }
-        return `${this._t('last_seen', 'Last seen')} ${this._formatDate(value)}`;
+        return `${this._t('last_seen')} ${this._formatDate(value)}`;
     }
 
     private _formatDate(value: string): string {
@@ -483,11 +487,12 @@ export class AgentControlSettingsRenderer {
     }
 
     private _scopeLabel(scope: AgentScope): string {
-        return this._t(`scope_${scope}`, scope);
+        return this._t(`scope_${scope}`);
     }
 
-    private _t(key: string, fallback: string): string {
-        return this._context?.t(`ui.launcher.settings.agent_control_${key}`, fallback) ?? fallback;
+    private _t(key: string): string {
+        const i18nKey = `ui.launcher.settings.agent_control_${key}`;
+        return this._context?.t(i18nKey, i18nKey) ?? i18nKey;
     }
 
     private _toast(message: string, type: 'success' | 'error' | 'info'): void {

@@ -1,6 +1,7 @@
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { invokeSafe } from '@/shared/api/invoke';
 import type { IBridge } from '@/shared/types/IBridge';
+import type { AgentAuditEntry, AgentControlState } from '@/shared/types/bindings';
 import { ConsoleLogNormalizer } from './ConsoleLogNormalizer';
 
 export interface ILogEntry {
@@ -50,12 +51,14 @@ type ConsoleLogServiceLogger = Pick<LoggerService, 'warn' | 'error'>;
 
 export class ConsoleLogService {
     private static readonly _MAX_LOG_COUNT_PER_VIEW = 1200;
+    private static readonly _AGENT_VIEW_ID = 'agent';
 
     private readonly _logsByView = new Map<string, ILogEntry[]>();
     private readonly _lastTimestampByView = new Map<string, number>();
     private readonly _modulePathCache = new Map<string, string | null>();
-    private readonly _knownViewIds = new Set<string>(['general']);
+    private readonly _knownViewIds = new Set<string>(['general', ConsoleLogService._AGENT_VIEW_ID]);
     private readonly _normalizer = new ConsoleLogNormalizer();
+    private _agentAuditClearTimestamp = 0;
 
     constructor(
         private readonly bridge: IBridge,
@@ -71,11 +74,18 @@ export class ConsoleLogService {
         this._lastTimestampByView.clear();
         this._knownViewIds.clear();
         this._knownViewIds.add('general');
+        this._knownViewIds.add(ConsoleLogService._AGENT_VIEW_ID);
+        this._agentAuditClearTimestamp = 0;
     }
 
     public async fetchLogs(viewId = 'general'): Promise<ILogEntry[]> {
         const normalizedViewId = this._canonicalViewId(viewId);
-        const since = this._lastTimestampByView.get(normalizedViewId) ?? 0;
+        const since = Math.max(
+            this._lastTimestampByView.get(normalizedViewId) ?? 0,
+            normalizedViewId === ConsoleLogService._AGENT_VIEW_ID
+                ? this._agentAuditClearTimestamp
+                : 0,
+        );
 
         try {
             const logs = await this._fetchTauriLogs(normalizedViewId, since);
@@ -90,6 +100,11 @@ export class ConsoleLogService {
         const normalizedViewId = this._canonicalViewId(viewId);
 
         try {
+            if (normalizedViewId === ConsoleLogService._AGENT_VIEW_ID) {
+                this._clearLocalAgentLogs();
+                return true;
+            }
+
             await this.bridge.invoke('clear_console_logs', { viewId: normalizedViewId });
             this._logsByView.set(normalizedViewId, []);
             this._lastTimestampByView.set(normalizedViewId, 0);
@@ -105,6 +120,7 @@ export class ConsoleLogService {
             await this.bridge.invoke('clear_logs');
             this._logsByView.clear();
             this._lastTimestampByView.clear();
+            this._clearLocalAgentLogs();
             return true;
         } catch (error) {
             this._tracer.error('[ConsoleLogService] Clear all logs failed:', error);
@@ -128,7 +144,7 @@ export class ConsoleLogService {
         try {
             const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
-                const views = this._normalizeViews(result.data.views);
+                const views = this._withAgentView(this._normalizeViews(result.data.views));
                 this._rememberKnownViews(views);
                 return views;
             }
@@ -138,7 +154,7 @@ export class ConsoleLogService {
             );
         }
 
-        return [{ id: 'general', label: 'Platform' }];
+        return this._withAgentView([{ id: 'general', label: 'Platform' }]);
     }
 
     public async getStatusItems(): Promise<IConsoleStatusItem[]> {
@@ -207,9 +223,14 @@ export class ConsoleLogService {
             return false;
         }
 
+        const normalizedViewId = this._canonicalViewId(viewId);
+        if (normalizedViewId === ConsoleLogService._AGENT_VIEW_ID) {
+            return false;
+        }
+
         try {
             await this.bridge.invoke('open_console_log_target', {
-                viewId: this._canonicalViewId(viewId),
+                viewId: normalizedViewId,
             });
             return true;
         } catch (error) {
@@ -219,11 +240,53 @@ export class ConsoleLogService {
     }
 
     private async _fetchTauriLogs(viewId: string, since: number): Promise<ILogEntry[]> {
+        if (viewId === ConsoleLogService._AGENT_VIEW_ID) {
+            return await this._fetchAgentAuditLogs(since);
+        }
+
         if (!this.bridge.isTauri()) {
             return await this.bridge.invoke<ILogEntry[]>('get_logs', { since });
         }
 
         return await this.bridge.invoke<ILogEntry[]>('get_console_logs', { viewId, since });
+    }
+
+    private async _fetchAgentAuditLogs(since: number): Promise<ILogEntry[]> {
+        const result = await invokeSafe<AgentControlState>('get_agent_control_state');
+        if (result.status !== 'ok') {
+            throw new Error(result.error.message);
+        }
+
+        return result.data.audit
+            .map((entry) => this._mapAgentAuditEntry(entry))
+            .filter((entry) => entry.timestamp > since)
+            .sort((left, right) => left.timestamp - right.timestamp);
+    }
+
+    private _mapAgentAuditEntry(entry: AgentAuditEntry): ILogEntry {
+        const timestamp = this._agentAuditTimestamp(entry.createdAt);
+        const action = entry.action.trim();
+        const target = entry.target.trim();
+        const result = entry.result.trim();
+        const level = this._agentAuditLevel(result);
+        const actorName = entry.actorName.trim() || 'Agent';
+        const targetText = target === '' ? 'launcher' : target;
+        const resultText = result === '' ? 'recorded' : result;
+
+        return {
+            timestamp,
+            source: 'agent-control',
+            level,
+            message: `target=${targetText} result=${resultText}`,
+            module_id: null,
+            display_time: this._formatAgentAuditTime(timestamp),
+            normalized_level: level,
+            scope: action === '' ? null : action,
+            summary_message: `${targetText} -> ${resultText}`,
+            source_label: actorName,
+            source_class: 'src-AGENT',
+            action: action === '' ? null : action,
+        };
     }
 
     private _appendLogs(viewId: string, newLogs: ILogEntry[]): ILogEntry[] {
@@ -285,9 +348,24 @@ export class ConsoleLogService {
         return [...byId.values()];
     }
 
+    private _withAgentView(views: readonly IConsoleLogView[]): IConsoleLogView[] {
+        if (views.some((view) => view.id === ConsoleLogService._AGENT_VIEW_ID)) {
+            return [...views];
+        }
+
+        const agentView = { id: ConsoleLogService._AGENT_VIEW_ID, label: 'Agent' };
+        const generalIndex = views.findIndex((view) => view.id === 'general');
+        if (generalIndex < 0) {
+            return [agentView, ...views];
+        }
+
+        return [...views.slice(0, generalIndex + 1), agentView, ...views.slice(generalIndex + 1)];
+    }
+
     private _rememberKnownViews(views: readonly IConsoleLogView[]): void {
         this._knownViewIds.clear();
         this._knownViewIds.add('general');
+        this._knownViewIds.add(ConsoleLogService._AGENT_VIEW_ID);
         views.forEach((view) => {
             const id = this._canonicalViewId(view.id);
             if (id !== '') {
@@ -355,5 +433,56 @@ export class ConsoleLogService {
             default:
                 return 'failed';
         }
+    }
+
+    private _clearLocalAgentLogs(): void {
+        const cached = this._logsByView.get(ConsoleLogService._AGENT_VIEW_ID) ?? [];
+        const latestCachedTimestamp = cached.reduce(
+            (latest, entry) => Math.max(latest, entry.timestamp),
+            0,
+        );
+        const cursor = Math.max(
+            latestCachedTimestamp,
+            this._lastTimestampByView.get(ConsoleLogService._AGENT_VIEW_ID) ?? 0,
+            Date.now() / 1000,
+        );
+        this._agentAuditClearTimestamp = cursor;
+        this._logsByView.set(ConsoleLogService._AGENT_VIEW_ID, []);
+        this._lastTimestampByView.set(ConsoleLogService._AGENT_VIEW_ID, cursor);
+    }
+
+    private _agentAuditTimestamp(value: string): number {
+        const parsed = Date.parse(value);
+        if (!Number.isFinite(parsed)) {
+            return 0;
+        }
+        return parsed / 1000;
+    }
+
+    private _formatAgentAuditTime(timestamp: number): string | null {
+        if (!Number.isFinite(timestamp) || timestamp <= 0) {
+            return null;
+        }
+
+        return new Date(timestamp * 1000).toLocaleTimeString();
+    }
+
+    private _agentAuditLevel(result: string): string {
+        const normalized = result.trim().toLowerCase();
+        if (
+            normalized.includes('failed') ||
+            normalized.includes('error') ||
+            normalized.includes('rejected')
+        ) {
+            return 'ERROR';
+        }
+        if (
+            normalized.includes('denied') ||
+            normalized.includes('pending') ||
+            normalized.includes('revoked')
+        ) {
+            return 'WARN';
+        }
+        return 'INFO';
     }
 }

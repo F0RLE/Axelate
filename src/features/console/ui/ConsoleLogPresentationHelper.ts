@@ -192,7 +192,7 @@ export class ConsoleLogPresentationHelper {
         const activeViewId = this._deps.getActiveViewId();
         const fromView = activeViewId.startsWith('module:')
             ? activeViewId.slice('module:'.length)
-            : activeViewId !== 'general'
+            : activeViewId.startsWith('engine:')
               ? activeViewId
               : null;
         if (fromView !== null) {

@@ -495,6 +495,49 @@ describe('ConsoleUI lifecycle', () => {
         );
     });
 
+    it('should render the Agent console tab as a separate audit view', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn((view: string) =>
+                normalizeLogs(
+                    view === 'agent'
+                        ? [
+                              {
+                                  level: 'INFO',
+                                  message: 'settings -> success',
+                                  source: 'agent-control',
+                                  source_label: 'Trusted Local',
+                                  source_class: 'src-AGENT',
+                                  scope: 'launcher.open-page',
+                                  timestamp: 1,
+                              },
+                          ]
+                        : [],
+                ),
+            ),
+            getAvailableViews: vi.fn().mockResolvedValue([
+                { id: 'general', label: 'General' },
+                { id: 'agent', label: 'Agent' },
+            ]),
+            fetchLogs: vi.fn().mockResolvedValue([]),
+            openLogsFolder: vi.fn().mockResolvedValue(false),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await flushPromises();
+
+        const agentTab = document.querySelector('[data-view="agent"]') as HTMLElement;
+        agentTab.click();
+
+        const openFolderButton = document.getElementById(
+            'open-logs-folder-btn',
+        ) as HTMLButtonElement;
+        expect(agentTab.textContent).toContain('ui.launcher.web.logs_agent');
+        expect(document.getElementById('logs-agent')?.hidden).toBe(false);
+        expect(document.getElementById('logs-agent')?.textContent).toContain('settings -> success');
+        expect(openFolderButton.disabled).toBe(true);
+    });
+
     it('should expose tab scroll controls when log tabs overflow', async () => {
         const toolbar = document.querySelector('.console-toolbar-left') as HTMLElement;
         Object.defineProperty(toolbar, 'clientWidth', { configurable: true, value: 160 });

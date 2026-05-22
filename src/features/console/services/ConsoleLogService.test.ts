@@ -132,9 +132,96 @@ describe('ConsoleLogService', () => {
 
         await expect(service.getAvailableViews()).resolves.toEqual([
             { id: 'general', label: 'Platform' },
+            { id: 'agent', label: 'Agent' },
             { id: 'module:custom-text', label: 'Custom' },
             { id: 'module:axelate-telegram-parser', label: 'Parser' },
         ]);
+    });
+
+    it('maps Agent Control audit entries into the agent console view', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                enabled: true,
+                apiBaseUrl: 'http://127.0.0.1:3000',
+                profiles: [],
+                approvals: [],
+                audit: [
+                    {
+                        id: 'audit-2',
+                        actorId: 'agent-1',
+                        actorName: 'Trusted Local',
+                        action: 'module.stop',
+                        target: 'llamacpp',
+                        result: 'denied',
+                        createdAt: '2026-05-22T12:00:02Z',
+                    },
+                    {
+                        id: 'audit-1',
+                        actorId: 'agent-1',
+                        actorName: 'Trusted Local',
+                        action: 'launcher.open-page',
+                        target: 'settings',
+                        result: 'success',
+                        createdAt: '2026-05-22T12:00:01Z',
+                    },
+                ],
+            },
+        });
+
+        const logs = await service.fetchLogs('agent');
+
+        expect(logs).toEqual([
+            expect.objectContaining({
+                source: 'agent-control',
+                source_label: 'Trusted Local',
+                normalized_level: 'INFO',
+                scope: 'launcher.open-page',
+                summary_message: 'settings -> success',
+            }),
+            expect.objectContaining({
+                source_label: 'Trusted Local',
+                normalized_level: 'WARN',
+                scope: 'module.stop',
+                summary_message: 'llamacpp -> denied',
+            }),
+        ]);
+        expect(service.getLogsForView('agent').map((entry) => entry.summary_message)).toEqual([
+            'settings -> success',
+            'llamacpp -> denied',
+        ]);
+    });
+
+    it('clears the agent console view locally without calling log file commands', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                enabled: true,
+                apiBaseUrl: 'http://127.0.0.1:3000',
+                profiles: [],
+                approvals: [],
+                audit: [
+                    {
+                        id: 'audit-1',
+                        actorId: 'agent-1',
+                        actorName: 'Trusted Local',
+                        action: 'launcher.open-page',
+                        target: 'console',
+                        result: 'success',
+                        createdAt: '2026-05-22T12:00:01Z',
+                    },
+                ],
+            },
+        });
+
+        await service.fetchLogs('agent');
+        const cleared = await service.clearLogs('agent');
+
+        expect(cleared).toBe(true);
+        expect(bridge.invoke).not.toHaveBeenCalledWith('clear_console_logs', expect.anything());
+        expect(service.getLogsForView('agent')).toEqual([]);
     });
 
     it('keeps known runtime logs out of the general view after overview sync', async () => {

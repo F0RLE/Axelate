@@ -40,9 +40,7 @@ export class SettingsUI {
         private readonly _deps: SettingsUIDeps,
     ) {
         this._generalRenderer = new GeneralSettingsRenderer(uiSettings, this._deps.tracer);
-        this._agentControlRenderer = new AgentControlSettingsRenderer(service, this._deps.tracer, {
-            copyText: (text) => this._tauri.writeToClipboard(text),
-        });
+        this._agentControlRenderer = new AgentControlSettingsRenderer(service, this._deps.tracer);
     }
 
     public async init(): Promise<void> {

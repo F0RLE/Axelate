@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
         setAgentControlEnabled: vi.fn(),
         createAgentProfile: vi.fn(),
         rotateAgentProfile: vi.fn(),
+        copyAgentProfileToken: vi.fn(),
         revokeAgentProfile: vi.fn(),
         deleteAgentProfile: vi.fn(),
         decideAgentApproval: vi.fn(),
@@ -33,6 +34,7 @@ vi.mock('@/shared/types/bindings', async (importOriginal) => {
             setAgentControlEnabled: mocks.commands.setAgentControlEnabled,
             createAgentProfile: mocks.commands.createAgentProfile,
             rotateAgentProfile: mocks.commands.rotateAgentProfile,
+            copyAgentProfileToken: mocks.commands.copyAgentProfileToken,
             revokeAgentProfile: mocks.commands.revokeAgentProfile,
             deleteAgentProfile: mocks.commands.deleteAgentProfile,
             decideAgentApproval: mocks.commands.decideAgentApproval,
@@ -216,7 +218,6 @@ describe('SettingsService', () => {
                             lastSeenAt: null,
                             revoked: false,
                         },
-                        token: 'axl_agent_123secret',
                     },
                 }),
             );
@@ -226,7 +227,7 @@ describe('SettingsService', () => {
                 'operate',
             ]);
 
-            expect(result.token).toBe('axl_agent_123secret');
+            expect(result.profile.tokenPrefix).toBe('axl_agent_123');
             expect(mocks.commands.createAgentProfile).toHaveBeenCalledWith('Trusted Local', [
                 'observe',
                 'operate',
@@ -261,22 +262,42 @@ describe('SettingsService', () => {
                             lastSeenAt: null,
                             revoked: false,
                         },
-                        token: 'axl_agent_456secret',
                     },
+                }),
+            );
+            mocks.commands.copyAgentProfileToken.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'ok',
+                    data: null,
                 }),
             );
 
             await service.setAgentControlEnabled(true);
             await service.rotateAgentProfile('agent-1');
+            await service.copyAgentProfileToken('agent-1');
             await service.revokeAgentProfile('agent-1');
             await service.deleteAgentProfile('agent-1');
             await service.decideAgentApproval('approval-1', false);
 
             expect(mocks.commands.setAgentControlEnabled).toHaveBeenCalledWith(true);
             expect(mocks.commands.rotateAgentProfile).toHaveBeenCalledWith('agent-1');
+            expect(mocks.commands.copyAgentProfileToken).toHaveBeenCalledWith('agent-1');
             expect(mocks.commands.revokeAgentProfile).toHaveBeenCalledWith('agent-1');
             expect(mocks.commands.deleteAgentProfile).toHaveBeenCalledWith('agent-1');
             expect(mocks.commands.decideAgentApproval).toHaveBeenCalledWith('approval-1', false);
+        });
+
+        it('should preserve AppError messages from generated command failures', async () => {
+            mocks.commands.copyAgentProfileToken.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'error',
+                    error: { Validation: 'token unavailable' },
+                }),
+            );
+
+            await expect(service.copyAgentProfileToken('agent-1')).rejects.toThrow(
+                'token unavailable',
+            );
         });
     });
 

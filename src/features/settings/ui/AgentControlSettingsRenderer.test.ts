@@ -23,17 +23,45 @@ describe('AgentControlSettingsRenderer', () => {
         | 'setAgentControlEnabled'
         | 'createAgentProfile'
         | 'rotateAgentProfile'
+        | 'copyAgentProfileToken'
         | 'revokeAgentProfile'
         | 'deleteAgentProfile'
         | 'decideAgentApproval'
     >;
-    let copyText: (text: string) => Promise<void>;
     let context: IAppSettingsUIContext;
+    let translations: Record<string, string>;
 
     beforeEach(() => {
         document.body.innerHTML = '<div id="agent-control-panel"></div>';
-        copyText = vi.fn().mockResolvedValue(undefined);
         vi.spyOn(globalThis, 'confirm').mockReturnValue(true);
+        translations = {
+            'ui.launcher.settings.agent_control_create_profile': 'Create Trusted Local',
+            'ui.launcher.settings.agent_control_trusted_local': 'Trusted Local',
+            'ui.launcher.settings.agent_control_create_full_access': 'Create Full Access',
+            'ui.launcher.settings.agent_control_full_access': 'Full Access',
+            'ui.launcher.settings.agent_control_connection': 'Connection',
+            'ui.launcher.settings.agent_control_base_url': 'Base URL',
+            'ui.launcher.settings.agent_control_token_once': 'Token shown once',
+            'ui.launcher.settings.agent_control_copy_token': 'Copy token',
+            'ui.launcher.settings.agent_control_show_token': 'Show token',
+            'ui.launcher.settings.agent_control_profiles': 'Agents',
+            'ui.launcher.settings.agent_control_no_profiles': 'No agents yet',
+            'ui.launcher.settings.agent_control_approvals': 'Approvals',
+            'ui.launcher.settings.agent_control_no_approvals': 'No pending approvals',
+            'ui.launcher.settings.agent_control_deny': 'Deny',
+            'ui.launcher.settings.agent_control_delete_profile': 'Delete',
+            'ui.launcher.settings.agent_control_confirm_action': 'Confirm',
+            'ui.launcher.settings.agent_control_revoked': 'Revoked',
+            'ui.launcher.settings.agent_control_active': 'Active',
+            'ui.launcher.settings.agent_control_rotate': 'Rotate',
+            'ui.launcher.settings.agent_control_revoke': 'Revoke',
+            'ui.launcher.settings.agent_control_never_seen': 'Never connected',
+            'ui.launcher.settings.agent_control_scope_observe': 'observe',
+            'ui.launcher.settings.agent_control_scope_operate': 'operate',
+            'ui.launcher.settings.agent_control_scope_configure': 'configure',
+            'ui.launcher.settings.agent_control_scope_draft-create': 'draft-create',
+            'ui.launcher.settings.agent_control_scope_full-access': 'full access',
+        };
         service = {
             getAgentControlState: vi.fn().mockResolvedValue(state()),
             setAgentControlEnabled: vi.fn().mockResolvedValue(state({ enabled: true })),
@@ -47,15 +75,15 @@ describe('AgentControlSettingsRenderer', () => {
                     lastSeenAt: null,
                     revoked: false,
                 },
-                token: 'axl_agent_abc_secret',
             }),
             rotateAgentProfile: vi.fn(),
+            copyAgentProfileToken: vi.fn().mockResolvedValue(undefined),
             revokeAgentProfile: vi.fn(),
             deleteAgentProfile: vi.fn().mockResolvedValue(state()),
             decideAgentApproval: vi.fn(),
         };
         context = {
-            t: (_key: string, fallback = '') => fallback,
+            t: (key: string, fallback = '') => translations[key] ?? fallback,
             showToast: vi.fn(),
             toggleNavItem: vi.fn(),
             toggleMonitorItem: vi.fn(),
@@ -71,7 +99,6 @@ describe('AgentControlSettingsRenderer', () => {
         const renderer = new AgentControlSettingsRenderer(
             service as SettingsService,
             { error: vi.fn(), warn: vi.fn() } as unknown as LoggerService,
-            { copyText },
         );
 
         renderer.init(context);
@@ -85,7 +112,7 @@ describe('AgentControlSettingsRenderer', () => {
         createButton?.click();
 
         await vi.waitFor(() => {
-            expect(document.body.textContent).toContain('Hidden');
+            expect(document.body.textContent).toContain('🔒');
         });
         expect(document.body.textContent).not.toContain('axl_agent_abc_secret');
         expect(service.createAgentProfile).toHaveBeenCalledWith('Trusted Local', [
@@ -97,19 +124,12 @@ describe('AgentControlSettingsRenderer', () => {
 
         const copyTokenButton = Array.from(
             document.querySelectorAll<HTMLButtonElement>('button'),
-        ).find((button) => button.textContent === 'Copy token');
+        ).find((button) => button.getAttribute('aria-label') === 'Copy token');
         copyTokenButton?.click();
         await vi.waitFor(() => {
-            expect(copyText).toHaveBeenCalledWith('axl_agent_abc_secret');
+            expect(service.copyAgentProfileToken).toHaveBeenCalledWith('agent-1');
         });
-
-        const showTokenButton = Array.from(
-            document.querySelectorAll<HTMLButtonElement>('button'),
-        ).find((button) => button.textContent === 'Show token');
-        showTokenButton?.click();
-        await vi.waitFor(() => {
-            expect(document.body.textContent).toContain('axl_agent_abc_secret');
-        });
+        expect(document.body.textContent).not.toContain('axl_agent_abc_secret');
     });
 
     it('renders pending approval requests and denies without mutating directly', async () => {
@@ -135,7 +155,6 @@ describe('AgentControlSettingsRenderer', () => {
         const renderer = new AgentControlSettingsRenderer(
             service as SettingsService,
             { error: vi.fn(), warn: vi.fn() } as unknown as LoggerService,
-            { copyText },
         );
 
         renderer.init(context);
@@ -151,6 +170,77 @@ describe('AgentControlSettingsRenderer', () => {
         await vi.waitFor(() => {
             expect(service.decideAgentApproval).toHaveBeenCalledWith('approval-1', false);
         });
+    });
+
+    it('creates a manual Full Access profile only after confirmation', async () => {
+        service.createAgentProfile = vi.fn().mockResolvedValue({
+            profile: {
+                id: 'agent-full',
+                name: 'Full Access',
+                scopes: ['full-access'],
+                tokenPrefix: 'axl_agent_full',
+                createdAt: '2026-05-22T00:00:00Z',
+                lastSeenAt: null,
+                revoked: false,
+            },
+        });
+        const renderer = new AgentControlSettingsRenderer(
+            service as SettingsService,
+            { error: vi.fn(), warn: vi.fn() } as unknown as LoggerService,
+        );
+
+        renderer.init(context);
+        await vi.waitFor(() => {
+            expect(document.body.textContent).toContain('Create Full Access');
+        });
+
+        const fullAccessButton = Array.from(
+            document.querySelectorAll<HTMLButtonElement>('button'),
+        ).find((button) => button.textContent === 'Create Full Access');
+        fullAccessButton?.click();
+
+        expect(service.createAgentProfile).not.toHaveBeenCalled();
+        expect(fullAccessButton?.textContent).toBe('Confirm');
+        fullAccessButton?.click();
+
+        await vi.waitFor(() => {
+            expect(service.createAgentProfile).toHaveBeenCalledWith('Full Access', ['full-access']);
+        });
+        expect(globalThis.confirm).not.toHaveBeenCalled();
+        await vi.waitFor(() => {
+            expect(document.body.textContent).toContain('🔒');
+        });
+        expect(document.body.textContent).not.toContain('axl_agent_full_secret');
+    });
+
+    it('keeps audit entries out of the settings panel', async () => {
+        service.getAgentControlState = vi.fn().mockResolvedValue(
+            state({
+                audit: [
+                    {
+                        id: 'audit-1',
+                        actorId: 'agent-1',
+                        actorName: 'Trusted Local',
+                        action: 'launcher.open-page',
+                        target: 'console',
+                        result: 'success',
+                        createdAt: '2026-05-22T00:00:00Z',
+                    },
+                ],
+            }),
+        );
+        const renderer = new AgentControlSettingsRenderer(
+            service as SettingsService,
+            { error: vi.fn(), warn: vi.fn() } as unknown as LoggerService,
+        );
+
+        renderer.init(context);
+        await vi.waitFor(() => {
+            expect(document.body.textContent).toContain('Connection');
+        });
+
+        expect(document.body.textContent).not.toContain('Action log');
+        expect(document.body.textContent).not.toContain('launcher.open-page');
     });
 
     it('keeps revoked profiles visible without offering another revoke action', async () => {
@@ -172,7 +262,6 @@ describe('AgentControlSettingsRenderer', () => {
         const renderer = new AgentControlSettingsRenderer(
             service as SettingsService,
             { error: vi.fn(), warn: vi.fn() } as unknown as LoggerService,
-            { copyText },
         );
 
         renderer.init(context);
@@ -212,7 +301,6 @@ describe('AgentControlSettingsRenderer', () => {
         const renderer = new AgentControlSettingsRenderer(
             service as SettingsService,
             { error: vi.fn(), warn: vi.fn() } as unknown as LoggerService,
-            { copyText },
         );
 
         renderer.init(context);
@@ -223,6 +311,10 @@ describe('AgentControlSettingsRenderer', () => {
         const deleteButton = Array.from(
             document.querySelectorAll<HTMLButtonElement>('button'),
         ).find((button) => button.textContent === 'Delete');
+        deleteButton?.click();
+
+        expect(service.deleteAgentProfile).not.toHaveBeenCalled();
+        expect(deleteButton?.textContent).toBe('Confirm');
         deleteButton?.click();
 
         await vi.waitFor(() => {

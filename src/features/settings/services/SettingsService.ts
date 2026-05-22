@@ -24,6 +24,59 @@ export interface ICustomModel {
     base_model_id?: string;
 }
 
+function appErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    if (typeof error === 'string') {
+        return error;
+    }
+    if (typeof error !== 'object' || error === null) {
+        return String(error);
+    }
+
+    const record = error as Record<string, unknown>;
+    if (typeof record['message'] === 'string') {
+        return record['message'];
+    }
+
+    const details = record['details'];
+    if (typeof details === 'object' && details !== null) {
+        return appErrorMessage(details);
+    }
+
+    for (const key of [
+        'Validation',
+        'NotFound',
+        'PermissionDenied',
+        'FrontendSecretForbidden',
+        'Io',
+        'Serialization',
+        'Config',
+    ]) {
+        const value = record[key];
+        if (typeof value === 'string') {
+            return value;
+        }
+    }
+
+    for (const key of ['External', 'Internal']) {
+        const value = record[key];
+        if (typeof value === 'object' && value !== null) {
+            const message = (value as Record<string, unknown>)['message'];
+            if (typeof message === 'string') {
+                return message;
+            }
+        }
+    }
+
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return String(error);
+    }
+}
+
 export class SettingsService {
     private settings: ISettings = {} as ISettings;
     private _gpuInfoPromise: Promise<IGpuInfo> | null = null;
@@ -110,7 +163,7 @@ export class SettingsService {
             return result.data;
         }
         this._tracer.error('[SettingsService] Failed to load Agent Control state:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(appErrorMessage(result.error));
     }
 
     public async setAgentControlEnabled(enabled: boolean): Promise<AgentControlState> {
@@ -119,7 +172,7 @@ export class SettingsService {
             return result.data;
         }
         this._tracer.error('[SettingsService] Failed to update Agent Control:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(appErrorMessage(result.error));
     }
 
     public async createAgentProfile(
@@ -131,7 +184,7 @@ export class SettingsService {
             return result.data;
         }
         this._tracer.error('[SettingsService] Failed to create Agent profile:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(appErrorMessage(result.error));
     }
 
     public async rotateAgentProfile(id: string): Promise<AgentProfileTokenResponse> {
@@ -140,7 +193,16 @@ export class SettingsService {
             return result.data;
         }
         this._tracer.error('[SettingsService] Failed to rotate Agent profile:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(appErrorMessage(result.error));
+    }
+
+    public async copyAgentProfileToken(id: string): Promise<void> {
+        const result = await invokeSafe(commands.copyAgentProfileToken(id));
+        if (result.status === 'ok') {
+            return;
+        }
+        this._tracer.error('[SettingsService] Failed to copy Agent profile token:', result.error);
+        throw new Error(appErrorMessage(result.error));
     }
 
     public async revokeAgentProfile(id: string): Promise<AgentControlState> {
@@ -149,7 +211,7 @@ export class SettingsService {
             return result.data;
         }
         this._tracer.error('[SettingsService] Failed to revoke Agent profile:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(appErrorMessage(result.error));
     }
 
     public async deleteAgentProfile(id: string): Promise<AgentControlState> {
@@ -158,7 +220,7 @@ export class SettingsService {
             return result.data;
         }
         this._tracer.error('[SettingsService] Failed to delete Agent profile:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(appErrorMessage(result.error));
     }
 
     public async decideAgentApproval(id: string, approved: boolean): Promise<AgentControlState> {
@@ -167,7 +229,7 @@ export class SettingsService {
             return result.data;
         }
         this._tracer.error('[SettingsService] Failed to decide Agent approval:', result.error);
-        throw new Error(result.error.message);
+        throw new Error(appErrorMessage(result.error));
     }
 
     public async loadGpuInfo(): Promise<IGpuInfo> {
