@@ -5,6 +5,7 @@ use super::http::{
     find_header_end, json_error, json_response, parse_header_line, parse_header_lines,
     parse_json_body, read_http_request, status_for_app_error, status_text,
 };
+use super::preflight_http_request;
 use super::routing::{
     agent_provider_summary, backend_provider_id, ensure_launcher_client, ensure_module_route_owner,
     merge_json_settings, model_api_id, modules_visible_to_client, parse_agent_logs_query,
@@ -84,13 +85,13 @@ fn authorization_accepts_bearer_token() {
         "authorization".to_string(),
         format!("Bearer {}", super::api_token()),
     );
-    assert!(auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_some());
 
     headers.insert(
         "authorization".to_string(),
         format!("bearer {}", super::api_token()),
     );
-    assert!(auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_some());
 }
 
 #[test]
@@ -111,7 +112,7 @@ fn authorization_rejects_old_header_token() {
         super::api_token().to_string(),
     );
 
-    assert!(!auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_none());
 }
 
 #[test]
@@ -213,13 +214,30 @@ fn authorization_rejects_malformed_bearer_values() {
         "authorization".to_string(),
         format!("Bearer {} extra", super::api_token()),
     );
-    assert!(!auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_none());
 
     headers.insert(
         "authorization".to_string(),
         format!("Token {}", super::api_token()),
     );
-    assert!(!auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_none());
+}
+
+#[test]
+fn preflight_keeps_profile_tokens_for_dispatch_authorization() {
+    let request = super::types::HttpRequest {
+        method: "GET".to_string(),
+        path: "/v1/agent/state".to_string(),
+        headers: HashMap::from([(
+            "authorization".to_string(),
+            "Bearer axl_agent_profile_token".to_string(),
+        )]),
+        body: Vec::new(),
+    };
+
+    assert!(
+        preflight_http_request(&request, Some("127.0.0.1:3000".parse().expect("peer"))).is_none()
+    );
 }
 
 #[test]

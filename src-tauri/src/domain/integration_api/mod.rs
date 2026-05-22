@@ -302,10 +302,6 @@ fn preflight_http_request(
         return None;
     }
 
-    if !auth::is_authorized(&request.headers) {
-        return Some(json_error(401, "Missing or invalid launcher API token"));
-    }
-
     None
 }
 

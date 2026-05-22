@@ -48,10 +48,6 @@ pub(super) fn is_loopback_peer(peer_addr: Option<std::net::SocketAddr>) -> bool 
     peer_addr.is_some_and(|addr| addr.ip().is_loopback())
 }
 
-pub(super) fn is_authorized(headers: &HashMap<String, String>) -> bool {
-    authorize_request(headers).is_some()
-}
-
 pub(super) fn authorize_request(headers: &HashMap<String, String>) -> Option<AuthorizedClient> {
     headers
         .get("authorization")
