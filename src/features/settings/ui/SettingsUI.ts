@@ -129,25 +129,59 @@ export class SettingsUI {
         button.title = label;
         button.setAttribute('aria-label', label);
 
+        const sectionScrollTop = (section: HTMLElement | undefined) =>
+            Math.min(
+                Math.max(0, page.scrollHeight - page.clientHeight),
+                Math.max(0, (section?.offsetTop ?? 0) - page.offsetTop),
+            );
+        const getTopScroll = () => sectionScrollTop(sections[0]);
+        const getAgentScroll = () => sectionScrollTop(sections[1]);
+        const getIsAgentSection = () => page.scrollTop >= (getTopScroll() + getAgentScroll()) / 2;
+        const syncButtonPosition = () => {
+            button.style.top = `${page.scrollTop + page.clientHeight - 48}px`;
+        };
+
         const update = () => {
-            const isAgentSection = page.scrollTop > Math.max(48, page.clientHeight * 0.25);
+            const isAgentSection = getIsAgentSection();
             button.classList.toggle('is-up', isAgentSection);
+            syncButtonPosition();
+        };
+
+        const scrollToSection = (toTop: boolean) => {
+            page.scrollTo({
+                top: toTop ? getTopScroll() : getAgentScroll(),
+                behavior: 'smooth',
+            });
+            requestAnimationFrame(update);
         };
 
         const handleClick = () => {
-            const isAgentSection = button.classList.contains('is-up');
-            sections[isAgentSection ? 0 : 1]?.scrollIntoView({
-                behavior: 'smooth',
-                block: 'start',
-            });
+            scrollToSection(getIsAgentSection());
+        };
+
+        let wheelLocked = false;
+        const handleWheel = (event: WheelEvent) => {
+            if (Math.abs(event.deltaY) < 8 || wheelLocked) {
+                return;
+            }
+            event.preventDefault();
+            wheelLocked = true;
+            scrollToSection(event.deltaY < 0);
+            globalThis.setTimeout(() => {
+                wheelLocked = false;
+            }, 420);
         };
 
         page.addEventListener('scroll', update, { passive: true });
+        page.addEventListener('wheel', handleWheel, { passive: false });
+        globalThis.addEventListener('resize', update);
         button.addEventListener('click', handleClick);
         update();
 
         this._sectionJumpUnlisten = () => {
             page.removeEventListener('scroll', update);
+            page.removeEventListener('wheel', handleWheel);
+            globalThis.removeEventListener('resize', update);
             button.removeEventListener('click', handleClick);
         };
     }

@@ -15,18 +15,26 @@
 #page-settings {
     overflow-y: auto;
     overflow-x: hidden;
-    padding: var(--content-padding-top) 1.5rem 1.5rem 1.5rem;
+    padding: 0 1.5rem;
     align-items: stretch;
     position: relative;
     background: transparent;
     scroll-snap-type: y mandatory;
-    scroll-padding-top: var(--content-padding-top);
+    scroll-padding-top: 0;
     scroll-behavior: smooth;
+    scrollbar-width: none;
+    -ms-overflow-style: none;
+}
+
+#page-settings::-webkit-scrollbar {
+    width: 0;
+    height: 0;
 }
 
 .settings-wrapper {
     width: 100%;
     max-width: 1240px;
+    height: 100%;
     min-height: 100%;
     margin: 0 auto;
     padding: 0;
@@ -36,55 +44,60 @@
 }
 
 .settings-section-jump {
-    position: sticky;
-    bottom: 1rem;
-    justify-self: center;
+    position: absolute;
+    left: 50%;
+    top: calc(100% - 3rem);
     z-index: 30;
-    width: 2.55rem;
-    height: 2.55rem;
-    margin-top: -3.55rem;
-    border: 1px solid rgba(255, 255, 255, 0.06);
-    border-radius: var(--radius-md);
-    background: rgba(30, 30, 35, 0.82);
-    box-shadow:
-        0 10px 24px rgba(0, 0, 0, 0.28),
-        inset 0 1px 0 rgba(255, 255, 255, 0.05);
-    color: rgba(248, 246, 252, 0.88);
+    width: 2rem;
+    height: 2rem;
+    margin: 0;
+    border: 1px solid transparent;
+    border-radius: 8px;
+    background: transparent;
+    box-shadow: none;
+    color: rgba(248, 246, 252, 0.72);
     cursor: pointer;
     display: flex;
     align-items: center;
     justify-content: center;
-    opacity: 0.78;
+    opacity: 0.34;
     transition:
         opacity 0.16s ease,
         background 0.16s ease,
         border-color 0.16s ease,
         transform 0.16s ease;
+    transform: translateX(-50%);
 }
 
 .settings-section-jump::before {
     content: '';
-    width: 0.62rem;
-    height: 0.62rem;
-    border-right: 2px solid currentColor;
-    border-bottom: 2px solid currentColor;
-    transform: translateY(-0.12rem) rotate(45deg);
+    width: 4px;
+    height: 4px;
+    background: transparent;
+    box-shadow:
+        -8px -4px 0 currentColor,
+        8px -4px 0 currentColor,
+        -4px 0 0 currentColor,
+        4px 0 0 currentColor,
+        0 4px 0 currentColor;
+    image-rendering: pixelated;
+    transform: translateY(1px);
     transition: transform 0.18s ease;
 }
 
 .settings-section-jump.is-up::before {
-    transform: translateY(0.12rem) rotate(225deg);
+    transform: translateY(-1px) rotate(180deg);
 }
 
 .settings-section-jump:hover,
 .settings-section-jump:focus-visible {
-    opacity: 1;
-    background: rgba(255, 255, 255, 0.12);
-    border-color: rgba(255, 255, 255, 0.1);
+    opacity: 0.72;
+    background: rgba(255, 255, 255, 0.035);
+    border-color: rgba(255, 255, 255, 0.035);
 }
 
 .settings-section-jump:active {
-    transform: translateY(1px);
+    transform: translateX(-50%) translateY(1px);
 }
 
 #page-settings.active .settings-wrapper {
@@ -92,7 +105,7 @@
 }
 
 .settings-section {
-    min-height: calc(100dvh - var(--content-padding-top) - 1.5rem);
+    min-height: 100%;
     scroll-snap-align: start;
     scroll-snap-stop: always;
     display: flex;
