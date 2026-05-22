@@ -2,11 +2,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const initRenderer = vi.fn();
 const destroyRenderer = vi.fn();
+const initAgentRenderer = vi.fn();
+const destroyAgentRenderer = vi.fn();
 
 vi.mock('./GeneralSettingsRenderer', () => ({
     GeneralSettingsRenderer: class {
         public init = initRenderer;
         public destroy = destroyRenderer;
+    },
+}));
+
+vi.mock('./AgentControlSettingsRenderer', () => ({
+    AgentControlSettingsRenderer: class {
+        public init = initAgentRenderer;
+        public destroy = destroyAgentRenderer;
     },
 }));
 
@@ -27,6 +36,8 @@ describe('SettingsUI page lifecycle', () => {
     beforeEach(() => {
         initRenderer.mockReset();
         destroyRenderer.mockReset();
+        initAgentRenderer.mockReset();
+        destroyAgentRenderer.mockReset();
         document.body.innerHTML = '';
         (
             globalThis as unknown as {
@@ -55,6 +66,7 @@ describe('SettingsUI page lifecycle', () => {
             {
                 tracer: {
                     info: vi.fn(),
+                    warn: vi.fn(),
                     error: vi.fn(),
                 } as unknown as LoggerService,
                 showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => {
@@ -78,6 +90,7 @@ describe('SettingsUI page lifecycle', () => {
         await ui.init();
 
         expect(initRenderer).toHaveBeenCalledTimes(1);
+        expect(initAgentRenderer).toHaveBeenCalledTimes(1);
     });
 
     it('should wait for container insertion without polling loops', async () => {
@@ -93,6 +106,7 @@ describe('SettingsUI page lifecycle', () => {
         await initPromise;
 
         expect(initRenderer).toHaveBeenCalledTimes(1);
+        expect(initAgentRenderer).toHaveBeenCalledTimes(1);
     });
 
     it('should abort pending wait when destroyed before container appears', async () => {
@@ -103,6 +117,8 @@ describe('SettingsUI page lifecycle', () => {
         await initPromise;
 
         expect(initRenderer).not.toHaveBeenCalled();
+        expect(initAgentRenderer).not.toHaveBeenCalled();
         expect(destroyRenderer).toHaveBeenCalledTimes(1);
+        expect(destroyAgentRenderer).toHaveBeenCalledTimes(1);
     });
 });

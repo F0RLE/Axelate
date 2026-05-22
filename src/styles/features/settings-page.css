@@ -87,6 +87,202 @@
     line-height: 1.35;
 }
 
+#settings-grid .module-card--agent-control {
+    grid-column: 1 / -1;
+    text-align: left;
+}
+
+#settings-grid .module-card--agent-control .module-title,
+#settings-grid .module-card--agent-control .module-desc {
+    align-self: flex-start;
+    text-align: left;
+}
+
+#agent-control-panel {
+    width: 100%;
+}
+
+.agent-control {
+    display: grid;
+    gap: 1rem;
+    color: rgba(248, 246, 252, 0.92);
+}
+
+.agent-control-header,
+.agent-control-actions,
+.agent-control-row,
+.agent-control-row-actions,
+.agent-control-scopes {
+    display: flex;
+    align-items: center;
+}
+
+.agent-control-header {
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.agent-control-status {
+    display: inline-flex;
+    align-items: center;
+    min-height: 2rem;
+    padding: 0 0.85rem;
+    border-radius: 999px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: rgba(245, 248, 246, 0.94);
+    background: rgba(114, 125, 142, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.agent-control-status.is-on {
+    background: rgba(38, 133, 87, 0.24);
+    border-color: rgba(73, 214, 143, 0.28);
+}
+
+.agent-control-status.is-off {
+    background: rgba(154, 64, 74, 0.22);
+    border-color: rgba(255, 122, 132, 0.24);
+}
+
+.agent-control-section {
+    display: grid;
+    gap: 0.7rem;
+    padding-top: 0.9rem;
+    border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.agent-control-section-title {
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgba(246, 241, 255, 0.62);
+}
+
+.agent-control-actions {
+    flex-wrap: wrap;
+    gap: 0.55rem;
+}
+
+.agent-control-btn {
+    min-height: 2.15rem;
+    padding: 0 0.78rem;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    color: rgba(250, 248, 255, 0.88);
+    background: rgba(255, 255, 255, 0.06);
+    font: inherit;
+    font-size: 0.8rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+        background 0.16s ease,
+        border-color 0.16s ease,
+        color 0.16s ease;
+}
+
+.agent-control-btn:hover {
+    background: rgba(255, 255, 255, 0.09);
+    border-color: rgba(255, 255, 255, 0.13);
+}
+
+.agent-control-btn:disabled {
+    cursor: default;
+    opacity: 0.55;
+}
+
+.agent-control-btn--primary {
+    background: rgba(124, 94, 186, 0.32);
+    border-color: rgba(172, 145, 232, 0.28);
+}
+
+.agent-control-code,
+.agent-control-diff {
+    width: 100%;
+    box-sizing: border-box;
+    overflow-wrap: anywhere;
+    border-radius: 8px;
+    border: 1px solid rgba(255, 255, 255, 0.07);
+    background: rgba(0, 0, 0, 0.18);
+    color: rgba(245, 244, 248, 0.86);
+    font-family: ui-monospace, SFMono-Regular, Consolas, 'Liberation Mono', monospace;
+    font-size: 0.76rem;
+    line-height: 1.45;
+    padding: 0.72rem 0.78rem;
+}
+
+.agent-control-token {
+    display: grid;
+    gap: 0.55rem;
+}
+
+.agent-control-token-label,
+.agent-control-row-meta,
+.agent-control-audit-item,
+.agent-control-empty {
+    color: rgba(246, 241, 255, 0.62);
+    font-size: 0.78rem;
+    line-height: 1.4;
+}
+
+.agent-control-empty--error {
+    color: rgba(255, 146, 154, 0.9);
+}
+
+.agent-control-list,
+.agent-control-audit {
+    display: grid;
+    gap: 0.65rem;
+}
+
+.agent-control-row {
+    justify-content: space-between;
+    gap: 1rem;
+    min-width: 0;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.055);
+}
+
+.agent-control-row:last-child {
+    border-bottom: 0;
+}
+
+.agent-control-row--approval {
+    align-items: flex-start;
+}
+
+.agent-control-row-main {
+    display: grid;
+    gap: 0.42rem;
+    min-width: 0;
+}
+
+.agent-control-row-title {
+    font-size: 0.9rem;
+    font-weight: 800;
+    color: rgba(252, 249, 255, 0.94);
+    overflow-wrap: anywhere;
+}
+
+.agent-control-row-actions,
+.agent-control-scopes {
+    flex-wrap: wrap;
+    gap: 0.4rem;
+}
+
+.agent-control-scope {
+    display: inline-flex;
+    align-items: center;
+    min-height: 1.45rem;
+    padding: 0 0.5rem;
+    border-radius: 999px;
+    background: rgba(73, 92, 118, 0.26);
+    color: rgba(230, 238, 250, 0.74);
+    font-size: 0.68rem;
+    font-weight: 700;
+}
+
 #taskbar-toggles,
 #monitor-toggles {
     display: grid !important;
@@ -277,6 +473,15 @@
     #taskbar-toggles,
     #monitor-toggles {
         grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+
+    .agent-control-row {
+        align-items: stretch;
+        flex-direction: column;
+    }
+
+    .agent-control-row-actions {
+        justify-content: flex-start;
     }
 }
 

@@ -4,6 +4,7 @@
  */
 
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
+import { AgentControlSettingsRenderer } from './AgentControlSettingsRenderer';
 import type { IAppSettingsUIContext } from './SettingsContext';
 import type { SettingsService } from '../services/SettingsService';
 import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
@@ -21,22 +22,26 @@ type SettingsUIDeps = {
 
 export class SettingsUI {
     private readonly _generalRenderer: GeneralSettingsRenderer;
+    private readonly _agentControlRenderer: AgentControlSettingsRenderer;
     private _context!: IAppSettingsUIContext;
     private _isInitialized = false;
     private _isDestroyed = false;
     private _initAbortController: AbortController | null = null;
 
     public constructor(
-        _service: SettingsService,
+        service: SettingsService,
         uiSettings: UISettingsService,
         _aiSettings: AISettingsService,
         private readonly _i18n: I18nService,
         private readonly _i18nUI: I18nUI,
-        _tauri: TauriProvider,
+        tauri: TauriProvider,
         _navigation: NavigationService,
         private readonly _deps: SettingsUIDeps,
     ) {
         this._generalRenderer = new GeneralSettingsRenderer(uiSettings, this._deps.tracer);
+        this._agentControlRenderer = new AgentControlSettingsRenderer(service, this._deps.tracer, {
+            copyText: (text) => tauri.writeToClipboard(text),
+        });
     }
 
     public async init(): Promise<void> {
@@ -77,6 +82,7 @@ export class SettingsUI {
         }
 
         this._generalRenderer.init(this._context);
+        this._agentControlRenderer.init(this._context);
     }
 
     public close(): void {
@@ -90,6 +96,7 @@ export class SettingsUI {
         this._initAbortController?.abort();
         this._initAbortController = null;
         this._generalRenderer.destroy();
+        this._agentControlRenderer.destroy();
         this._deps.tracer.info('[SettingsUI] Destroyed.');
     }
 

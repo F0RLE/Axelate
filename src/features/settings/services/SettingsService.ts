@@ -2,7 +2,13 @@ import type { SecureKeyMeta, TauriProvider } from '@/infrastructure/tauri/TauriP
 import type { IApp } from '@/shared/types/coreTypes';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { AppSettings, GpuInfo } from '@/shared/types/bindings';
+import type {
+    AgentControlState,
+    AgentProfileTokenResponse,
+    AgentScope,
+    AppSettings,
+    GpuInfo,
+} from '@/shared/types/bindings';
 import { commands } from '@/shared/types/bindings';
 import { invokeSafe } from '@/shared/api/invoke';
 export type ISettings = AppSettings;
@@ -96,6 +102,63 @@ export class SettingsService {
             this._tracer.error('[SettingsService] Control service failed:', e);
             return false;
         }
+    }
+
+    public async getAgentControlState(): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.getAgentControlState());
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to load Agent Control state:', result.error);
+        throw new Error(result.error.message);
+    }
+
+    public async setAgentControlEnabled(enabled: boolean): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.setAgentControlEnabled(enabled));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to update Agent Control:', result.error);
+        throw new Error(result.error.message);
+    }
+
+    public async createAgentProfile(
+        name: string | null = null,
+        scopes: AgentScope[] | null = null,
+    ): Promise<AgentProfileTokenResponse> {
+        const result = await invokeSafe(commands.createAgentProfile(name, scopes));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to create Agent profile:', result.error);
+        throw new Error(result.error.message);
+    }
+
+    public async rotateAgentProfile(id: string): Promise<AgentProfileTokenResponse> {
+        const result = await invokeSafe(commands.rotateAgentProfile(id));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to rotate Agent profile:', result.error);
+        throw new Error(result.error.message);
+    }
+
+    public async revokeAgentProfile(id: string): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.revokeAgentProfile(id));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to revoke Agent profile:', result.error);
+        throw new Error(result.error.message);
+    }
+
+    public async decideAgentApproval(id: string, approved: boolean): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.decideAgentApproval(id, approved));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to decide Agent approval:', result.error);
+        throw new Error(result.error.message);
     }
 
     public async loadGpuInfo(): Promise<IGpuInfo> {

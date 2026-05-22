@@ -8,6 +8,12 @@ const mocks = vi.hoisted(() => ({
     invokeSafe: vi.fn(),
     commands: {
         controlModule: vi.fn(),
+        getAgentControlState: vi.fn(),
+        setAgentControlEnabled: vi.fn(),
+        createAgentProfile: vi.fn(),
+        rotateAgentProfile: vi.fn(),
+        revokeAgentProfile: vi.fn(),
+        decideAgentApproval: vi.fn(),
     },
 }));
 
@@ -22,6 +28,12 @@ vi.mock('@/shared/types/bindings', async (importOriginal) => {
         commands: {
             ...actual.commands,
             controlModule: mocks.commands.controlModule,
+            getAgentControlState: mocks.commands.getAgentControlState,
+            setAgentControlEnabled: mocks.commands.setAgentControlEnabled,
+            createAgentProfile: mocks.commands.createAgentProfile,
+            rotateAgentProfile: mocks.commands.rotateAgentProfile,
+            revokeAgentProfile: mocks.commands.revokeAgentProfile,
+            decideAgentApproval: mocks.commands.decideAgentApproval,
         },
     };
 });
@@ -56,6 +68,18 @@ describe('SettingsService', () => {
             }),
         );
         mocks.invokeSafe.mockImplementation((promise: Promise<unknown>) => promise);
+        mocks.commands.getAgentControlState.mockReturnValue(
+            Promise.resolve({
+                status: 'ok',
+                data: {
+                    enabled: false,
+                    apiBaseUrl: 'http://127.0.0.1:17878',
+                    profiles: [],
+                    audit: [],
+                    approvals: [],
+                },
+            }),
+        );
     });
 
     describe('loadSettings', () => {
@@ -165,6 +189,89 @@ describe('SettingsService', () => {
             const result = await service.controlService('restart', 'ollama');
 
             expect(result).toBe(false);
+        });
+    });
+
+    describe('Agent Control', () => {
+        it('should load redacted agent control state', async () => {
+            const result = await service.getAgentControlState();
+
+            expect(result.apiBaseUrl).toBe('http://127.0.0.1:17878');
+            expect(mocks.commands.getAgentControlState).toHaveBeenCalled();
+        });
+
+        it('should create trusted local profiles through generated commands', async () => {
+            mocks.commands.createAgentProfile.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'ok',
+                    data: {
+                        profile: {
+                            id: 'agent-1',
+                            name: 'Trusted Local',
+                            scopes: ['observe', 'operate'],
+                            tokenPrefix: 'axl_agent_123',
+                            createdAt: '2026-05-22T00:00:00Z',
+                            lastSeenAt: null,
+                            revoked: false,
+                        },
+                        token: 'axl_agent_123secret',
+                    },
+                }),
+            );
+
+            const result = await service.createAgentProfile('Trusted Local', [
+                'observe',
+                'operate',
+            ]);
+
+            expect(result.token).toBe('axl_agent_123secret');
+            expect(mocks.commands.createAgentProfile).toHaveBeenCalledWith('Trusted Local', [
+                'observe',
+                'operate',
+            ]);
+        });
+
+        it('should rotate, revoke, toggle, and decide approvals via backend-owned state', async () => {
+            const stateResponse = Promise.resolve({
+                status: 'ok',
+                data: {
+                    enabled: true,
+                    apiBaseUrl: 'http://127.0.0.1:17878',
+                    profiles: [],
+                    audit: [],
+                    approvals: [],
+                },
+            });
+            mocks.commands.setAgentControlEnabled.mockReturnValueOnce(stateResponse);
+            mocks.commands.revokeAgentProfile.mockReturnValueOnce(stateResponse);
+            mocks.commands.decideAgentApproval.mockReturnValueOnce(stateResponse);
+            mocks.commands.rotateAgentProfile.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'ok',
+                    data: {
+                        profile: {
+                            id: 'agent-1',
+                            name: 'Trusted Local',
+                            scopes: ['observe'],
+                            tokenPrefix: 'axl_agent_456',
+                            createdAt: '2026-05-22T00:00:00Z',
+                            lastSeenAt: null,
+                            revoked: false,
+                        },
+                        token: 'axl_agent_456secret',
+                    },
+                }),
+            );
+
+            await service.setAgentControlEnabled(true);
+            await service.rotateAgentProfile('agent-1');
+            await service.revokeAgentProfile('agent-1');
+            await service.decideAgentApproval('approval-1', false);
+
+            expect(mocks.commands.setAgentControlEnabled).toHaveBeenCalledWith(true);
+            expect(mocks.commands.rotateAgentProfile).toHaveBeenCalledWith('agent-1');
+            expect(mocks.commands.revokeAgentProfile).toHaveBeenCalledWith('agent-1');
+            expect(mocks.commands.decideAgentApproval).toHaveBeenCalledWith('approval-1', false);
         });
     });
 
