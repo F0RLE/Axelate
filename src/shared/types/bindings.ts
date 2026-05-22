@@ -13,6 +13,8 @@ export const commands = {
 	getHealth: () => typedError<string, AppError>(__TAURI_INVOKE("get_health")),
 	/**  Loads application configuration with module installation status */
 	getConfig: () => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("get_config")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,apiProviders:v.data.apiProviders.map(i=>({...i,models:i.models==null?i.models:i.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})),catalog:({...v.data.catalog,ai:v.data.catalog.ai.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema})),services:v.data.catalog.services.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema}))})}) } : v) as typeof v)),
+	/**  Returns a frontend-ready catalog snapshot with backend-owned installation and provider metadata. */
+	getCatalogSnapshot: () => typedError<CatalogSnapshot, AppError>(__TAURI_INVOKE("get_catalog_snapshot")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,ai:v.data.ai.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:Object.fromEntries(Object.entries(i.configSchema).map(([k,v])=>[k,({...v,default:v.default==null?v.default:v.default,min:v.min==null?v.min:v.min,max:v.max==null?v.max:v.max,step:v.step==null?v.step:v.step})])),apiProviderData:i.apiProviderData==null?i.apiProviderData:({...i.apiProviderData,models:i.apiProviderData.models==null?i.apiProviderData.models:i.apiProviderData.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})})),services:v.data.services.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:Object.fromEntries(Object.entries(i.configSchema).map(([k,v])=>[k,({...v,default:v.default==null?v.default:v.default,min:v.min==null?v.min:v.min,max:v.max==null?v.max:v.max,step:v.step==null?v.step:v.step})])),apiProviderData:i.apiProviderData==null?i.apiProviderData:({...i.apiProviderData,models:i.apiProviderData.models==null?i.apiProviderData.models:i.apiProviderData.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})}))}) } : v) as typeof v)),
 	/**  Retrieves application settings (theme, language, GPU, debug) */
 	getSettings: () => typedError<AppSettings, AppError>(__TAURI_INVOKE("get_settings")),
 	/**  Saves application settings */
@@ -400,6 +402,96 @@ export type Capability =
 "image" |
 /**  Image understanding (multimodal LLM) */
 "vision";
+
+/**  Frontend-ready catalog application item. */
+export type CatalogAppItem = {
+	/**  Unique item identifier. */
+	id: string,
+	/**  Localization key for name. */
+	nameKey: string | null,
+	/**  Localization key for description. */
+	descKey: string | null,
+	/**  Display name. */
+	name: string | null,
+	/**  Description text. */
+	desc: string | null,
+	/**  Icon/emoji. */
+	icon: string | null,
+	/**  Optional module-owned card preview metadata. */
+	preview?: ModulePreview | null,
+	/**  Catalog category. */
+	category: string,
+	/**  Runtime type used by the launcher UI. */
+	type: string,
+	/**  Primary AI output capability. */
+	capability: string | null,
+	/**  Whether item files/runtime are currently present. */
+	installed: boolean,
+	/**  Installed compute modes for local engines. */
+	installedComputeModes?: string[],
+	/**  Download repository URL. */
+	repoUrl: string | null,
+	/**  Expected integrity hash. */
+	expectedHash: string | null,
+	/**  Download strategy. */
+	dlType: string | null,
+	/**  Placeholder marker. */
+	comingSoon: boolean,
+	/**  Whether runtime is managed outside Axelate. */
+	managedExternally: boolean,
+	/**  Semantic version. */
+	version: string,
+	/**  Configuration schema. */
+	configSchema?: { [key in string]: ConfigField } | null,
+	/**  Optional module-owned settings UI entry. */
+	settingsUi?: string | null,
+	/**  API provider metadata for provider cards. */
+	apiProviderData?: ApiProvider | null,
+	/**  Backend-owned UI/runtime policy for this catalog item. */
+	providerPolicy?: CatalogProviderPolicy | null,
+	/**  Current runtime status for integrations. */
+	status?: string | null,
+};
+
+/**  Frontend rendering/runtime policy derived from backend catalog/provider metadata. */
+export type CatalogProviderPolicy = {
+	/**  Whether the card is a cloud/API provider. */
+	isCloudProvider: boolean,
+	/**  Whether the card is a user-defined OpenAI-compatible provider slot. */
+	isCustomProvider: boolean,
+	/**  Whether the card should render as a no-settings module. */
+	isCleanApp: boolean,
+	/**  Secure-storage service name used for this provider key. */
+	secretService: string | null,
+	/**  Logical key provider used by the settings UI. */
+	keyProviderId: string | null,
+	/**  URL opened when the user clicks the API key label. */
+	keyProviderUrl: string | null,
+	/**  Whether the key field uses a custom-provider label and storage slot. */
+	usesCustomProviderKey: boolean,
+	/**  Whether the API endpoint selector should be visible. */
+	showApiEndpointSelector: boolean,
+	/**  Whether custom manual model IDs can be managed in the UI. */
+	showCustomModelComposer: boolean,
+	/**  Whether model comparison stats should be shown. */
+	showModelStats: boolean,
+	/**  Whether the internet access toggle should be shown. */
+	supportsInternetAccess: boolean,
+	/**  Whether reasoning controls should be shown for built-in models. */
+	supportsThinking: boolean,
+	/**  Whether this provider/card is image-only. */
+	imageOnly: boolean,
+};
+
+/**  Frontend-ready catalog snapshot assembled by the backend. */
+export type CatalogSnapshot = {
+	/**  AI provider and engine cards. */
+	ai: CatalogAppItem[],
+	/**  Service/integration cards. */
+	services: CatalogAppItem[],
+	/**  Starred/favorite item ids. */
+	stars: string[],
+};
 
 /**  AI chat message with role and content */
 export type ChatMessage = {

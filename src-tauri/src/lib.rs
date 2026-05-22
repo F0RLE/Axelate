@@ -99,6 +99,7 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         .commands(collect_commands![
             health::get_health,
             config::get_config,
+            config::get_catalog_snapshot,
             settings::get_settings,
             settings::save_settings,
             settings::save_setting,
