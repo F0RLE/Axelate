@@ -16,7 +16,7 @@
     overflow-y: auto;
     overflow-x: hidden;
     padding: var(--content-padding-top) 1.5rem 1.5rem 1.5rem;
-    align-items: center;
+    align-items: stretch;
     position: relative;
     background: transparent;
 }
@@ -28,8 +28,7 @@
     margin: 0 auto;
     padding: 1rem 0 1.5rem;
     box-sizing: border-box;
-    display: flex;
-    align-items: center;
+    display: block;
 }
 
 #page-settings.active .settings-wrapper {
