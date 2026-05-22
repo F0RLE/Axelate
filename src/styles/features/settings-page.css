@@ -116,6 +116,7 @@
 
 .module-card--agent-control {
     display: grid;
+    position: relative;
     grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
     align-items: center;
     gap: 0.9rem 1rem;
@@ -252,28 +253,14 @@
     opacity: 0.55;
 }
 
-.agent-control-help {
-    display: inline-grid;
-    place-items: center;
-    width: 2rem;
-    height: 2rem;
-    border-radius: 999px;
-    border: 1px solid rgba(167, 126, 210, 0.28);
-    background: rgba(255, 255, 255, 0.035);
-    color: rgba(242, 236, 250, 0.86);
-    font-size: 0.98rem;
-    font-weight: 900;
+.module-card--agent-control .agent-control-help {
+    opacity: 0.82;
     text-decoration: none;
-    transition:
-        background 0.18s ease,
-        border-color 0.18s ease,
-        color 0.18s ease;
 }
 
-.agent-control-help:hover {
-    background: rgba(132, 76, 202, 0.24);
-    border-color: rgba(196, 149, 246, 0.48);
-    color: #ffffff;
+.module-card--agent-control:hover .agent-control-help,
+.module-card--agent-control .agent-control-help:focus-visible {
+    opacity: 1;
 }
 
 .agent-control-btn--primary {

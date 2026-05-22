@@ -454,13 +454,17 @@ export class AgentControlSettingsRenderer {
     private _helpLink(): HTMLAnchorElement {
         const label = this._t('docs_help');
         const link = document.createElement('a');
-        link.className = 'agent-control-help';
+        link.className = 'module-action-badge right integration-help-badge agent-control-help';
         link.href = AGENT_CONTROL_DOCS_URL;
         link.target = '_blank';
         link.rel = 'noreferrer';
-        link.textContent = '?';
         link.title = label;
         link.setAttribute('aria-label', label);
+        const icon = document.createElement('span');
+        icon.className = 'badge-icon';
+        icon.setAttribute('aria-hidden', 'true');
+        icon.textContent = '?';
+        link.append(icon);
         return link;
     }
 
