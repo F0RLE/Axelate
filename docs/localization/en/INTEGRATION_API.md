@@ -1,9 +1,14 @@
 # Integration API
 
-This guide describes the current versioned contract external integrations use to
-control Axelate. The contract is language-neutral: every integration talks to the
-launcher through a local HTTP API. Language clients can wrap this contract later,
-but the HTTP API is the source of truth.
+This guide describes the current versioned contract launcher-managed
+integrations use to talk to Axelate. The contract is language-neutral: every
+integration talks to the launcher through a local HTTP API. Language clients can
+wrap this contract later, but the HTTP API is the source of truth.
+
+This API is also the base for future agent control. The current contract is
+module-scoped and conservative. A separate Agent Control layer can add broader
+observe, operate, configure, and draft-create scopes later, but it should reuse
+the same local, authenticated, backend-owned design.
 
 For scaffolding, validation, and examples, start with
 [Integration Development](INTEGRATION_DEVELOPMENT.md).
@@ -33,6 +38,10 @@ variables:
 Standalone tools that are not launched by Axelate are not the primary public
 contract yet. They should use a launcher-managed integration flow instead of
 persisting or guessing local API credentials.
+
+External agents should follow the same rule for now. They should not scrape the
+desktop UI or read Axelate data files directly. The supported path is a
+launcher-issued token and documented `/v1` endpoints.
 
 Script integrations declare their runtime in `axelate-module.toml`.
 
@@ -66,6 +75,16 @@ Authorization: Bearer <AXELATE_HTTP_API_TOKEN>
 Module-scoped tokens can access shared AI endpoints and only that module's own
 `/v1/modules/{moduleId}/...` routes. They are not durable credentials and should
 not be stored outside the running process.
+
+Future agent tokens should not reuse module tokens. They need their own scopes:
+
+- `observe`: read health, status, module lists, and sanitized logs
+- `operate`: start, stop, restart, and repair existing items
+- `configure`: update settings after user approval where needed
+- `draft-create`: create integration drafts without installing them silently
+
+Secrets should stay out of all agent responses unless a later explicit consent
+flow says otherwise.
 
 ## Client Rules
 
@@ -178,6 +197,24 @@ settings = requests.get(
 `GET /v1/health`
 
 Does not require authentication. Returns whether the local API server is alive.
+
+### Future Agent Control
+
+The current `/v1/modules` and `/v1/ai` endpoints are enough for launcher-managed
+integrations. They are not yet a full agent control plane.
+
+The planned Agent Control layer should add:
+
+- launcher overview and health summary
+- provider and model inventory
+- download and runtime status
+- sanitized log reads
+- dry-run responses for install, delete, repair, and settings changes
+- audit entries for agent actions
+- integration draft creation from templates
+
+Mutating operations should stay behind explicit scopes and user approval where
+the action can install code, delete data, expose logs, or change credentials.
 
 ### Integrations
 

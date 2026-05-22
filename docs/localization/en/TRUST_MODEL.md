@@ -12,6 +12,7 @@ That only works if the launcher is explicit about:
 - what lives in the backend
 - what the frontend is allowed to do
 - what local modules are allowed to do
+- what agents are allowed to do through launcher APIs
 - what future MCP and package permissions should look like
 
 ## What Is Protected Today
@@ -45,6 +46,8 @@ These controls exist in the current codebase and should stay protected by tests:
   entries, file count limits, single-file size limits, and total-size limits
 - explicit validation before opening console log target folders
 - external URL protocol allowlisting before frontend shell-open calls
+- local integration API routes that keep module-owned operations scoped to the
+  owning module
 
 These controls reduce accidental trust escalation. They do not make imported
 integrations sandboxed or verified packages.
@@ -88,6 +91,35 @@ Current practical rule:
 
 Future package and module UX should make this much more visible.
 
+### Agents And Automation
+
+Agents should use documented launcher APIs, not the UI DOM and not private files.
+
+The first useful agent scope is read-only:
+
+- launcher health
+- installed module list
+- module status
+- download status
+- recent sanitized logs
+- available providers and models
+
+Mutating actions need a stronger scope and should be logged:
+
+- start, stop, or restart an integration
+- update integration settings
+- request a repair action
+- create an integration draft
+
+Some actions should require user approval even after an agent is connected:
+
+- install, delete, or update packages
+- change provider secrets
+- expose raw logs that may contain sensitive data
+- grant broader filesystem or network permissions
+
+This keeps agents useful without turning them into a hidden admin surface.
+
 ## What Users Should Be Able To Trust
 
 Current repository direction already supports these expectations:
@@ -114,6 +146,7 @@ What still needs clearer product-level documentation and UX:
 - secret storage model
 - package permission model
 - module capability boundaries
+- agent scopes and approval rules
 - MCP server and tool permission prompts
 - package verification and signing flow
 - difference between local, managed, and hybrid execution
@@ -126,6 +159,7 @@ The launcher should move toward explicit permission surfaces for:
 - network access
 - local process execution
 - model/provider usage
+- launcher control actions
 - MCP server connection
 - MCP tool invocation
 - package install and update trust
@@ -137,6 +171,10 @@ The important rule is simple:
 ## MCP Direction
 
 MCP support should be opt-in and permissioned.
+
+Axelate should expose its own MCP server only as an adapter over the documented
+Agent Control API. The MCP server should not get private shortcuts around
+authorization, audit logs, or approval prompts.
 
 Good future behavior:
 

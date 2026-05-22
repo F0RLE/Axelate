@@ -1,6 +1,6 @@
 # Axelate Roadmap
 
-> Product execution roadmap as of 2026-05-06.
+> Product execution roadmap as of 2026-05-21.
 > Planning document only. It is not a setup guide and it does not mean every
 > listed feature already exists in the repository today.
 
@@ -25,7 +25,7 @@ Overall product ambition: `8/10`.
 Phase difficulty:
 
 - workstation core: `6/10`
-- local integrations and SDKs: `6/10`
+- local integrations, agent control, and SDKs: `6/10` to `7/10`
 - trusted package layer: `7/10`
 - managed or hybrid execution layer: `9/10`
 
@@ -75,6 +75,9 @@ priorities:
   prompt box
 - one-click integration install from folders, archives, and trusted URLs, with
   clear permissions and uninstall behavior
+- agent-accessible control surfaces: tools that can inspect launcher state,
+  read logs, configure integrations, and start repair actions without scraping
+  the UI
 
 These are product requirements, not nice-to-have polish. If they are weak,
 users will fall back to the existing toolchain.
@@ -137,6 +140,8 @@ Work:
 - remove stale claims when backend behavior changes
 - document the exact local API, environment variables, runtime directories, and
   settings ownership rules
+- document what the launcher can expose to agents today and what remains a
+  future permissioned control layer
 - keep examples runnable
 
 Exit criteria:
@@ -202,7 +207,37 @@ Exit criteria:
 - common OpenAI SDK clients can use Axelate for local and BYOK cloud routes
   without a custom adapter
 
-### 5. Add SDKs For Real Integration Development
+### 5. Add Agent Control API
+
+Difficulty: `5/10` to `7/10`
+
+Work:
+
+- read-only launcher state endpoints for agents:
+  - installed modules
+  - active providers and models
+  - runtime health
+  - download status
+  - recent sanitized logs
+- controlled operation endpoints:
+  - start, stop, restart, and repair modules
+  - update module settings
+  - run AI text and image requests
+  - create integration drafts from templates
+- dry-run responses for install, delete, repair, and settings changes
+- audit log entries for every agent-initiated action
+- clear split between module-scoped tokens, launcher-wide tokens, and future
+  agent tokens
+
+Exit criteria:
+
+- an external agent can help a user inspect and operate the launcher without
+  screen scraping or reading private files directly
+- dangerous actions require a user approval step before they mutate launcher
+  state
+- provider secrets are never exposed through the agent-facing API
+
+### 6. Add SDKs For Real Integration Development
 
 Difficulty: `5/10` to `7/10`
 
@@ -210,7 +245,8 @@ Work:
 
 - TypeScript SDK
 - Python SDK
-- helpers for chat, image, settings, stage reporting, and module control
+- helpers for chat, image, settings, stage reporting, module control, and agent
+  observe workflows
 - typed errors
 - examples that match the integration template
 - version compatibility checks using `AXELATE_INTEGRATION_API_VERSION`
@@ -220,7 +256,7 @@ Exit criteria:
 - integration authors can build useful tools without hand-writing local HTTP
   plumbing
 
-### 6. Make Trust And Permissions Visible
+### 7. Make Trust And Permissions Visible
 
 Difficulty: `6/10` to `8/10`
 
@@ -231,32 +267,36 @@ Work:
 - install-time permission review
 - verified/signed package state
 - visible module token boundaries
+- visible agent token boundaries
 - explicit MCP server and tool approvals
 - clear warning for manually imported unverified integrations
 
 Exit criteria:
 
-- users can see what an integration is allowed to do before running it
+- users can see what an integration, agent, or MCP server is allowed to do before
+  it runs
 
-### 7. Add MCP Foundation
+### 8. Add MCP Foundation
 
 Difficulty: `7/10` to `8/10`
 
 Work:
 
-- MCP server registry
+- Axelate-owned MCP server backed by the Agent Control API
+- MCP server registry for user-added servers
 - connection state
 - tool discovery
 - user approval for server and tool access
+- safe defaults for read-only tools
 - failure handling and logs
 - no hidden automatic unsafe execution
 
 Exit criteria:
 
-- MCP works as a controlled workstation feature, not as an invisible execution
-  side channel
+- agents can use Axelate through MCP, but MCP remains a controlled adapter over
+  documented launcher capabilities
 
-### 8. Prepare Package Signing And Update Trust
+### 9. Prepare Package Signing And Update Trust
 
 Difficulty: `7/10` to `9/10`
 
@@ -274,7 +314,7 @@ Exit criteria:
 - the desktop can distinguish trusted official packages from manual local
   imports
 
-### 9. Add Trusted Package Discovery And Ownership
+### 10. Add Trusted Package Discovery And Ownership
 
 Difficulty: `8/10` to `9/10`
 
@@ -291,7 +331,7 @@ Exit criteria:
 - reviewed packages can be discovered, installed, updated, and revoked
   predictably.
 
-### 10. Build Managed And Hybrid Runtime Support
+### 11. Build Managed And Hybrid Runtime Support
 
 Difficulty: `9/10` to `10/10`
 
@@ -377,6 +417,15 @@ Turn the current shell into a reliable daily-use Windows AI workstation.
 - keep hardware-aware resolution readable and debuggable
 - keep ComfyUI out of the core promise until it is truly product-ready
 
+### Workstream E: Local API And Agent Readiness
+
+- keep the current integration HTTP API stable
+- add read-only launcher state endpoints before adding mutating agent actions
+- expose logs and health reports through sanitized backend-owned responses
+- keep OpenAI-compatible routes separate from launcher-control routes
+- design agent permissions before exposing install, delete, or secret-adjacent
+  operations
+
 ### Exit Criteria
 
 - a new user can install the app and complete a first useful workflow
@@ -384,20 +433,27 @@ Turn the current shell into a reliable daily-use Windows AI workstation.
 - logs, monitoring, and repair tools explain failures
 - provider settings are understandable
 - local integrations can run through the launcher without manual path hacks
+- agents and integrations can inspect basic launcher state through documented
+  APIs instead of scraping UI or internal files
 
 ### Why This Phase Matters
 
 If this phase fails, later package and platform layers should not launch.
 
-## Phase 2: Integration And Package Foundation
+## Phase 2: Integration, Agent Control, And Package Foundation
 
 ### Goal
 
-Create the technical base for user-installed integrations and future reviewed
-packages.
+Create the technical base for user-installed integrations, agent-assisted
+launcher control, and future reviewed packages.
 
 ### Work
 
+- stabilize the local Integration API as the source of truth
+- add Agent Control API scopes for observe, operate, configure, and draft-create
+- add an integration draft generator that creates manifests, entry files,
+  settings schema, and a test run plan
+- add audit logging for agent-initiated actions
 - define package manifest format
 - define package permission model
 - define settings schema model for packages
@@ -419,10 +475,12 @@ The package system must support three modes from the start:
 - package lifecycle is deterministic
 - packages can be installed and removed safely
 - package permissions are visible to the user
+- agent actions are scoped, logged, and reviewable
 - the desktop understands package metadata without ad-hoc code paths
 
 ### Why This Phase Matters
 
+Without a real local control model, agents become a risky automation shortcut.
 Without a real package model, package discovery is just marketing.
 
 ## Phase 3: Trusted Discovery And Ownership

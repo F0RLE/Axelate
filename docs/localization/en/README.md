@@ -15,7 +15,8 @@ English documentation is the canonical reference for Axelate.
 ## Integrations
 
 - [Integration Development](INTEGRATION_DEVELOPMENT.md) - build local integrations
-- [Integration API](INTEGRATION_API.md) - local HTTP API contract
+- [Integration API](INTEGRATION_API.md) - local HTTP API contract and future
+  agent-control base
 - [Custom Integrations](CUSTOM_INTEGRATIONS.md) - manifest and import rules
 
 ## Planning

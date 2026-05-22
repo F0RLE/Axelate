@@ -1,6 +1,6 @@
 # Axelate Current State
 
-> Repository-grounded snapshot as of 2026-05-16.
+> Repository-grounded snapshot as of 2026-05-21.
 > This document describes what exists now, not what the future product aspires to become.
 
 For setup and contributor workflow, use [Getting Started](GETTING_STARTED.md) and [Development Workflow](DEVELOPMENT_WORKFLOW.md).
@@ -17,6 +17,8 @@ Today the repository is closest to:
 - a launcher for local AI runtimes and script modules
 - a BYOK cloud model client centered on OpenRouter
 - a control surface for downloads, monitoring, logs, and settings
+- the start of a local API surface that integrations can use to call AI, manage
+  module settings, report progress, and control their own lifecycle
 
 Today the repository is not yet:
 
@@ -24,6 +26,7 @@ Today the repository is not yet:
 - a full package distribution platform
 - a managed runtime platform
 - a mature MCP-first workstation
+- a permissioned agent-control platform
 - a finished public product with stable distribution and operations
 
 ## Current Stack
@@ -120,6 +123,23 @@ Confirmed current direction from the codebase and recent fixes:
 - streaming text is rendered progressively in the chat UI
 - session summaries are hidden system context, not meant to leak into visible replies
 - rate-limit and payment errors are separated more cleanly than before
+
+### Local Integration API
+
+The repository has a loopback-only local HTTP API for launcher-managed
+integrations. It currently supports:
+
+- health checks
+- listing installed integrations
+- reading integration status and runtime context
+- reading and updating module-owned settings
+- reporting module stage/progress
+- starting, stopping, and restarting modules
+- text and image AI requests through backend-owned routing
+
+This is not yet a full agent control plane. It is the right base for one because
+it already uses local bearer tokens, scoped module routes, backend-owned state,
+and documented `/v1` endpoints.
 
 ### Image Provider Path
 
@@ -276,6 +296,10 @@ The repository still contains surfaces or ideas that are ahead of the stable pro
 
 What does not exist yet as a finished system:
 
+- agent scopes and approval prompts
+- sanitized log APIs meant for external agents
+- integration draft generation through the launcher
+- an Axelate MCP server backed by documented launcher capabilities
 - package signing service
 - verified package distribution
 - managed runtime orchestration
@@ -337,9 +361,11 @@ The next useful work should stay in this order:
    should be boring and repeatable.
 2. Integration safety: imported folders, archives, URLs, runtime paths, settings,
    tokens, and logs should have explicit ownership boundaries.
-3. Trust visibility: users should see the difference between local manual imports,
+3. Agent-ready local control: agents should inspect status, logs, settings, and
+   lifecycle through documented APIs instead of UI scraping or private files.
+4. Trust visibility: users should see the difference between local manual imports,
    future verified packages, and future managed or hybrid execution.
-4. Provider clarity: cloud routing should remain useful without making OpenRouter
+5. Provider clarity: cloud routing should remain useful without making OpenRouter
    the permanent product identity.
 
 Recent hardening direction:
