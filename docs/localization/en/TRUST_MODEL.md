@@ -95,14 +95,20 @@ Future package and module UX should make this much more visible.
 
 Agents should use documented launcher APIs, not the UI DOM and not private files.
 
-The first useful agent scope is read-only:
+Agent Control is local-only and token-based. Users create Trusted Local or Full
+Access profiles in Settings. The full token is shown once, stored by the local
+tool, and can be rotated, revoked, or deleted by the user.
 
-- launcher health
-- installed module list
-- module status
-- download status
-- recent sanitized logs
-- available providers and models
+The normal agent scopes are:
+
+- `observe`: launcher health, installed module list, module status, provider and
+  model inventory, pending approvals, and recent sanitized console logs
+- `operate`: open launcher pages, select module cards, start, stop, restart,
+  repair, and run AI requests
+- `configure`: read and update non-secret module settings
+- `draft-create`: create integration draft folders without installing or running
+  them
+- `full-access`: explicit user-granted local override
 
 Mutating actions need a stronger scope and should be logged:
 
@@ -119,6 +125,8 @@ Some actions should require user approval even after an agent is connected:
 - grant broader filesystem or network permissions
 
 This keeps agents useful without turning them into a hidden admin surface.
+
+The detailed API contract lives in [Agent Control](AGENT_CONTROL.md).
 
 ## What Users Should Be Able To Trust
 

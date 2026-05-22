@@ -17,10 +17,12 @@
 - [Development Workflow](../en/DEVELOPMENT_WORKFLOW.md) - 日常开发流程
 - [Architecture](../en/ARCHITECTURE.md) - frontend/backend/integration 分层
 - [Trust Model](../en/TRUST_MODEL.md) - 当前和未来的信任边界
-- [Integration API](../en/INTEGRATION_API.md) - 集成本地 HTTP API，也是未来
+- [Agent Control](../en/AGENT_CONTROL.md) - 使用可信本地 agent token、scopes、
+  approvals 和 audit 控制启动器
+- [Integration API](../en/INTEGRATION_API.md) - 集成本地 HTTP API，也是
   agent-control 层的基础
 - [Custom Integrations](../en/CUSTOM_INTEGRATIONS.md) - 自定义集成格式
 - [Releases](../en/RELEASES.md) - 发布流程
 
-英文目录中的 `VISION.md` 和 `ROADMAP.md` 是规划文档，不代表当前已经发布的功能。
-目前还没有完整的 permissioned agent-control 平台；现有 Integration API 只是为它打基础。
+英文目录中的 `VISION.md` 和 `ROADMAP.md` 是规划文档，不只描述已经发布的功能。
+第一版本地 Agent Control 已在 `AGENT_CONTROL.md` 中说明；MCP、SDK 和完整的包权限模型仍是后续阶段。

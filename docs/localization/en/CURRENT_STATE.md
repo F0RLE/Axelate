@@ -1,6 +1,6 @@
 # Axelate Current State
 
-> Repository-grounded snapshot as of 2026-05-21.
+> Repository-grounded snapshot as of 2026-05-22.
 > This document describes what exists now, not what the future product aspires to become.
 
 For setup and contributor workflow, use [Getting Started](GETTING_STARTED.md) and [Development Workflow](DEVELOPMENT_WORKFLOW.md).
@@ -19,6 +19,7 @@ Today the repository is closest to:
 - a control surface for downloads, monitoring, logs, and settings
 - the start of a local API surface that integrations can use to call AI, manage
   module settings, report progress, and control their own lifecycle
+- the first local Agent Control surface for trusted local tools
 
 Today the repository is not yet:
 
@@ -26,7 +27,7 @@ Today the repository is not yet:
 - a full package distribution platform
 - a managed runtime platform
 - a mature MCP-first workstation
-- a permissioned agent-control platform
+- a complete permissioned package and MCP control platform
 - a finished public product with stable distribution and operations
 
 ## Current Stack
@@ -127,7 +128,7 @@ Confirmed current direction from the codebase and recent fixes:
 ### Local Integration API
 
 The repository has a loopback-only local HTTP API for launcher-managed
-integrations. It currently supports:
+integrations and trusted local agents. It currently supports:
 
 - health checks
 - listing installed integrations
@@ -136,10 +137,18 @@ integrations. It currently supports:
 - reporting module stage/progress
 - starting, stopping, and restarting modules
 - text and image AI requests through backend-owned routing
+- agent profile tokens created from Settings
+- safer launcher state reads and sanitized console log reads for agents
+- explicit launcher page open and module-card selection actions
+- pending approval requests for dangerous agent work
+- backend-owned audit entries for agent actions
+- integration draft creation that writes draft files without installing or
+  running them
 
-This is not yet a full agent control plane. It is the right base for one because
-it already uses local bearer tokens, scoped module routes, backend-owned state,
-and documented `/v1` endpoints.
+The current Agent Control layer is local-only and intentionally conservative.
+It uses separate agent profiles and scopes instead of reusing module tokens.
+Package install/delete, secrets, raw logs, broad filesystem access, and remote
+agent access still need the fuller permission model described in the roadmap.
 
 ### Image Provider Path
 
@@ -297,7 +306,7 @@ The repository still contains surfaces or ideas that are ahead of the stable pro
 What does not exist yet as a finished system:
 
 - agent scopes and approval prompts
-- sanitized log APIs meant for external agents
+- sanitized console log APIs meant for external agents
 - integration draft generation through the launcher
 - an Axelate MCP server backed by documented launcher capabilities
 - package signing service

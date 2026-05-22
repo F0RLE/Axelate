@@ -39,6 +39,10 @@ local API, then run `integration:doctor` before importing the folder.
 These helpers are developer tools. The runtime contract is still the local HTTP
 API documented in [Integration API](INTEGRATION_API.md).
 
+Trusted local agents use the same local HTTP server, but not the same token
+model. For launcher-wide automation, use [Agent Control](AGENT_CONTROL.md)
+instead of a module runtime token.
+
 ## Integration Layout
 
 ```text

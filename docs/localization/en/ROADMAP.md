@@ -207,27 +207,32 @@ Exit criteria:
 - common OpenAI SDK clients can use Axelate for local and BYOK cloud routes
   without a custom adapter
 
-### 5. Add Agent Control API
+### 5. Stabilize Agent Control API
 
 Difficulty: `5/10` to `7/10`
 
+Status: first local version exists. It has UI-created trusted agent profiles,
+scoped bearer tokens, safer state reads, sanitized console log reads, explicit
+open/select actions,
+module lifecycle routes, AI routes, approval requests, and audit entries.
+
 Work:
 
-- read-only launcher state endpoints for agents:
+- keep the current read-only launcher state endpoints stable:
   - installed modules
   - active providers and models
   - runtime health
   - download status
-  - recent sanitized logs
-- controlled operation endpoints:
-  - start, stop, restart, and repair modules
+  - recent sanitized console logs
+- harden controlled operation endpoints:
+  - keep start, stop, restart, and repair reliable
   - update module settings
   - run AI text and image requests
   - create integration drafts from templates
 - dry-run responses for install, delete, repair, and settings changes
-- audit log entries for every agent-initiated action
-- clear split between module-scoped tokens, launcher-wide tokens, and future
-  agent tokens
+- audit log entries for every agent-initiated mutation
+- clear split between module-scoped tokens, development launcher tokens, and
+  user-created agent profile tokens
 
 Exit criteria:
 
@@ -421,7 +426,8 @@ Turn the current shell into a reliable daily-use Windows AI workstation.
 
 - keep the current integration HTTP API stable
 - add read-only launcher state endpoints before adding mutating agent actions
-- expose logs and health reports through sanitized backend-owned responses
+- expose logs and health reports through backend-owned responses that sanitize
+  common secrets and avoid raw private files
 - keep OpenAI-compatible routes separate from launcher-control routes
 - design agent permissions before exposing install, delete, or secret-adjacent
   operations

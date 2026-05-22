@@ -18,11 +18,14 @@
 - [Development Workflow](../en/DEVELOPMENT_WORKFLOW.md) - ежедневная разработка
 - [Architecture](../en/ARCHITECTURE.md) - карта frontend/backend/integration слоев
 - [Trust Model](../en/TRUST_MODEL.md) - текущие и будущие границы доверия
+- [Agent Control](../en/AGENT_CONTROL.md) - локальное управление лаунчером через
+  доверенные agent-токены, scopes, approvals и audit
 - [Integration API](../en/INTEGRATION_API.md) - локальный HTTP API интеграций и
-  база для будущего agent-control слоя
+  agent-control слоя
 - [Custom Integrations](../en/CUSTOM_INTEGRATIONS.md) - формат пользовательских интеграций
 - [Releases](../en/RELEASES.md) - релизный процесс
 
-Английские `VISION.md` и `ROADMAP.md` описывают планы, а не уже поставленные
-возможности. Сейчас полноценной permissioned agent-control платформы нет:
-текущий Integration API только закладывает для нее основу.
+Английские `VISION.md` и `ROADMAP.md` описывают планы, а не только уже
+поставленные возможности. Первая локальная версия Agent Control уже описана в
+`AGENT_CONTROL.md`; MCP, SDK и полноценная permission-модель для пакетов остаются
+следующими этапами.

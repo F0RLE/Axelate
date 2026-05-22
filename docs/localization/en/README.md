@@ -10,13 +10,15 @@ English documentation is the canonical reference for Axelate.
 - [Development Workflow](DEVELOPMENT_WORKFLOW.md) - daily contributor workflow
 - [Architecture](ARCHITECTURE.md) - frontend, backend, runtime, and contract map
 - [Trust Model](TRUST_MODEL.md) - current and future trust boundaries
+- [Agent Control](AGENT_CONTROL.md) - trusted local agent setup, scopes, API, and
+  approvals
 - [Releases](RELEASES.md) - release workflow and tag rules
 
 ## Integrations
 
 - [Integration Development](INTEGRATION_DEVELOPMENT.md) - build local integrations
-- [Integration API](INTEGRATION_API.md) - local HTTP API contract and future
-  agent-control base
+- [Integration API](INTEGRATION_API.md) - local HTTP API contract for integrations
+  and agent control
 - [Custom Integrations](CUSTOM_INTEGRATIONS.md) - manifest and import rules
 
 ## Planning
