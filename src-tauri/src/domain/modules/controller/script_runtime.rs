@@ -92,6 +92,42 @@ pub async fn spawn_process(
     }
 }
 
+/// Removes launcher-managed dependency/runtime environments for one module.
+pub async fn repair_environment(
+    module_id: &str,
+    manifest: &ModuleManifest,
+) -> Result<(), AppError> {
+    match manifest.runtime.kind {
+        ModuleRuntimeKind::Python => {
+            let runtime_root = python_runtime_root();
+            let python_version = resolve_python_version(manifest);
+            remove_managed_env(&venv_dir(&runtime_root, module_id, &python_version)).await
+        }
+        ModuleRuntimeKind::Node => {
+            let runtime_root = node_runtime_root();
+            let version = resolve_runtime_version(manifest, "system");
+            remove_managed_env(&js_env_dir(&runtime_root, module_id, &version)).await
+        }
+        ModuleRuntimeKind::Bun => {
+            let runtime_root = bun_runtime_root();
+            let version = resolve_runtime_version(manifest, "system");
+            remove_managed_env(&js_env_dir(&runtime_root, module_id, &version)).await
+        }
+        ModuleRuntimeKind::Binary => Ok(()),
+    }
+}
+
+async fn remove_managed_env(path: &Path) -> Result<(), AppError> {
+    match tokio::fs::remove_dir_all(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::Io(format!(
+            "Failed to remove managed runtime environment {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
 async fn spawn_python_process(
     module_id: &str,
     module_path: &Path,

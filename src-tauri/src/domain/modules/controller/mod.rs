@@ -93,6 +93,8 @@ pub enum ModuleAction {
     Stop,
     /// Stop and then start the module
     Restart,
+    /// Rebuild managed runtime state and start the module
+    Repair,
     /// Run installation hooks
     Install,
     /// Cleanly remove module files
@@ -108,6 +110,7 @@ impl FromStr for ModuleAction {
             "start" => Ok(Self::Start),
             "stop" => Ok(Self::Stop),
             "restart" => Ok(Self::Restart),
+            "repair" => Ok(Self::Repair),
             "install" => Ok(Self::Install),
             "uninstall" => Ok(Self::Uninstall),
             "update" => Ok(Self::Update),
@@ -403,27 +406,23 @@ pub async fn control(
             tracing::info!("Restarting module: {module_id}");
             executor.stop(&manifest).await?;
 
-            // Wait for it to actually die (up to 5s) with survival check
-            let mut terminated = false;
-            for attempt in 0..20 {
-                if !controller.is_running(module_id, &module_path).await {
-                    terminated = true;
-                    tracing::info!(
-                        "Module {module_id} terminated after {attempt} attempts during restart"
-                    );
-                    break;
-                }
-                tokio::time::sleep(std::time::Duration::from_millis(250)).await;
-            }
-
-            if !terminated {
-                return Err(AppError::Internal {
-                    request_id: None,
-                    message: format!("Module {module_id} failed to terminate during restart"),
-                });
-            }
+            wait_for_module_stop(&controller, module_id, &module_path, "restart").await?;
 
             executor.start(&manifest).await
+        }
+        ModuleAction::Repair => {
+            tracing::info!("Repairing module: {module_id}");
+            executor.stop(&manifest).await?;
+            wait_for_module_stop(&controller, module_id, &module_path, "repair").await?;
+
+            if script_runtime::supports_manifest(&manifest) {
+                script_runtime::repair_environment(module_id, &manifest).await?;
+            }
+
+            executor.start(&manifest).await.map(|mut response| {
+                response.message = format!("Module {module_id} repaired. {}", response.message);
+                response
+            })
         }
         _ => Ok(ControlResponse {
             success: false,
@@ -431,6 +430,28 @@ pub async fn control(
             status: None,
         }),
     }
+}
+
+async fn wait_for_module_stop(
+    controller: &Controller,
+    module_id: &str,
+    module_path: &Path,
+    action: &str,
+) -> Result<(), AppError> {
+    for attempt in 0..20 {
+        if !controller.is_running(module_id, module_path).await {
+            tracing::info!(
+                "Module {module_id} terminated after {attempt} attempts during {action}"
+            );
+            return Ok(());
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+    }
+
+    Err(AppError::Internal {
+        request_id: None,
+        message: format!("Module {module_id} failed to terminate during {action}"),
+    })
 }
 
 #[cfg(test)]
@@ -454,6 +475,10 @@ mod tests {
         assert_eq!(
             ModuleAction::from_str("Restart").unwrap(),
             ModuleAction::Restart
+        );
+        assert_eq!(
+            ModuleAction::from_str("repair").unwrap(),
+            ModuleAction::Repair
         );
         assert_eq!(
             ModuleAction::from_str("install").unwrap(),

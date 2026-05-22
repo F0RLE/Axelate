@@ -1,10 +1,11 @@
 //! Tauri commands for trusted local Agent Control.
 
 use crate::domain::agent_control::{
-    AgentApprovalRequest, AgentControlService, AgentControlState, AgentProfileTokenResponse,
-    AgentScope,
+    AgentControlService, AgentControlState, AgentProfileTokenResponse, AgentScope,
 };
 use crate::errors::AppError;
+use tauri::AppHandle;
+use tauri_plugin_clipboard_manager::ClipboardExt;
 
 fn api_base_url() -> String {
     crate::domain::integration_api::api_base_url().to_string()
@@ -50,6 +51,23 @@ pub async fn rotate_agent_profile(
     service.rotate_profile(&id).await
 }
 
+/// Copies a one-time agent token to the OS clipboard without exposing it to the frontend.
+#[tauri::command]
+#[specta::specta]
+pub async fn copy_agent_profile_token(
+    app: AppHandle,
+    service: tauri::State<'_, AgentControlService>,
+    id: String,
+) -> Result<(), AppError> {
+    let token = service.take_pending_token(&id).await?;
+    app.clipboard()
+        .write_text(token)
+        .map_err(|error| AppError::External {
+            message: format!("Failed to copy Agent Control token: {error}"),
+            request_id: None,
+        })
+}
+
 /// Revokes a trusted local agent profile.
 #[tauri::command]
 #[specta::specta]
@@ -79,26 +97,4 @@ pub async fn decide_agent_approval(
     approved: bool,
 ) -> Result<AgentControlState, AppError> {
     service.decide_approval(&id, approved, api_base_url()).await
-}
-
-/// Creates a pending approval request from the UI for tests and manual flows.
-#[tauri::command]
-#[specta::specta]
-pub async fn create_agent_approval_request(
-    service: tauri::State<'_, AgentControlService>,
-    agent_id: String,
-    agent_name: String,
-    action: String,
-    target: String,
-    diff: String,
-    risk: String,
-) -> Result<AgentApprovalRequest, AppError> {
-    let agent = crate::domain::agent_control::AuthorizedAgent {
-        id: agent_id,
-        name: agent_name,
-        scopes: crate::domain::agent_control::trusted_local_scopes(),
-    };
-    service
-        .create_approval_request(&agent, action, target, diff, risk)
-        .await
 }

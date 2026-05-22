@@ -19,14 +19,14 @@ export const commands = {
 	createAgentProfile: (name: string | null, scopes: AgentScope[] | null) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("create_agent_profile", { name, scopes })),
 	/**  Rotates a trusted local agent token and returns the replacement token once. */
 	rotateAgentProfile: (id: string) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("rotate_agent_profile", { id })),
+	/**  Copies a one-time agent token to the OS clipboard without exposing it to the frontend. */
+	copyAgentProfileToken: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_agent_profile_token", { id })),
 	/**  Revokes a trusted local agent profile. */
 	revokeAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("revoke_agent_profile", { id })),
 	/**  Deletes a trusted local agent profile. */
 	deleteAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("delete_agent_profile", { id })),
 	/**  Applies a user decision to a pending agent approval request. */
 	decideAgentApproval: (id: string, approved: boolean) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("decide_agent_approval", { id, approved })),
-	/**  Creates a pending approval request from the UI for tests and manual flows. */
-	createAgentApprovalRequest: (agentId: string, agentName: string, action: string, target: string, diff: string, risk: string) => typedError<AgentApprovalRequest, AppError>(__TAURI_INVOKE("create_agent_approval_request", { agentId, agentName, action, target, diff, risk })),
 	/**  Loads application configuration with module installation status */
 	getConfig: () => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("get_config")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,apiProviders:v.data.apiProviders.map(i=>({...i,models:i.models==null?i.models:i.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})),catalog:({...v.data.catalog,ai:v.data.catalog.ai.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema})),services:v.data.catalog.services.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema}))})}) } : v) as typeof v)),
 	/**  Returns a frontend-ready catalog snapshot with backend-owned installation and provider metadata. */
@@ -106,7 +106,7 @@ export const commands = {
 	setMonitoringPaused: (paused: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_monitoring_paused", { paused })),
 	/**  Retrieves list of all available modules (AI and services) */
 	getModules: () => typedError<Module[], AppError>(__TAURI_INVOKE("get_modules")).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>({...i,config:Object.fromEntries(Object.entries(i.config).map(([k,v])=>[k,v])),configSchema:i.configSchema==null?i.configSchema:Object.fromEntries(Object.entries(i.configSchema).map(([k,v])=>[k,({...v,default:v.default==null?v.default:v.default,min:v.min==null?v.min:v.min,max:v.max==null?v.max:v.max,step:v.step==null?v.step:v.step})]))})) } : v) as typeof v)),
-	/**  Controls a module (start, stop, restart) */
+	/**  Controls a module (start, stop, restart, repair) */
 	controlModule: (request: ControlRequest) => typedError<ControlResponse, AppError>(__TAURI_INVOKE("control_module", { request })),
 	/**  Retrieves runtime status of a specific module */
 	getModuleStatus: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_status", { moduleId })),
@@ -333,12 +333,10 @@ export type AgentProfile = {
 	revoked: boolean,
 };
 
-/**  Agent profile creation response. The token is shown only once. */
+/**  Agent profile creation/rotation response. Raw bearer tokens stay backend-owned. */
 export type AgentProfileTokenResponse = {
 	/**  Public profile metadata. */
 	profile: AgentProfile,
-	/**  One-time bearer token. Store it in the calling agent, not in frontend state. */
-	token: string,
 };
 
 /**  Agent capability scope. */
@@ -350,7 +348,9 @@ export type AgentScope =
 /**  Change non-secret launcher, module, model, and provider settings. */
 "configure" |
 /**  Create integration drafts without installing or running them silently. */
-"draft-create";
+"draft-create" |
+/**  User-granted full local launcher access. */
+"full-access";
 
 /**  Complete AI model definition */
 export type AiModel = {
@@ -771,7 +771,7 @@ export type ConsoleStatusItem = {
 export type ControlRequest = {
 	/**  Module identifier (optional for global actions) */
 	module_id: string | null,
-	/**  Control action ("start", "stop", "restart") */
+	/**  Control action ("start", "stop", "restart", "repair") */
 	action: string,
 };
 

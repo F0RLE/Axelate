@@ -8,12 +8,15 @@ use crate::domain::ai::types::{
 use crate::domain::modules::controller::{self as module_controller, ModuleAction};
 use crate::domain::modules::paths as module_paths;
 use crate::errors::AppError;
+use crate::infrastructure::logging::LogEntry;
 use crate::models::{
     AiModel, ApiProvider, ModelTier, Module, ModuleItem, ProviderType, SelectedModule,
 };
 use serde_json::json;
+use sha2::Digest;
 use std::collections::HashMap;
 use std::net::SocketAddr;
+use std::path::{Path, PathBuf};
 use tauri::Emitter;
 
 use super::auth::{authorize_request_with_agent_profiles, is_loopback_peer};
@@ -21,9 +24,10 @@ use super::http::{json_error, json_response, parse_json_body, request_path, stat
 use super::types::{
     AgentLauncherStateResponse, AgentLogsResponse, AgentModelSummary, AgentModuleSummary,
     AgentOpenPageEvent, AgentProviderSummary, AuthorizedClient, HttpRequest, HttpResponse,
-    ImageApiResponse, IntegrationAgentApprovalRequest, IntegrationImageRequest,
-    IntegrationModuleStageRequest, IntegrationOpenPageRequest, IntegrationSelectModuleRequest,
-    IntegrationTextRequest, ModuleContextApiResponse, ModuleStageChangedEvent, TextApiResponse,
+    ImageApiResponse, IntegrationAgentApprovalRequest, IntegrationDraftCreateRequest,
+    IntegrationDraftCreateResponse, IntegrationImageRequest, IntegrationModuleStageRequest,
+    IntegrationOpenPageRequest, IntegrationSelectModuleRequest, IntegrationTextRequest,
+    ModuleContextApiResponse, ModuleStageChangedEvent, TextApiResponse,
 };
 use super::{LauncherHttpApiContext, SDK_API_VERSION, api_base_url};
 
@@ -33,6 +37,7 @@ const CUSTOM_TEXT_PROVIDER_ID: &str = "custom-text";
 const CUSTOM_IMAGE_PROVIDER_ID: &str = "custom-image";
 const CUSTOM_TEXT_BACKEND_PROVIDER_ID: &str = "gpt";
 const CUSTOM_IMAGE_BACKEND_PROVIDER_ID: &str = "gpt-image";
+const INTEGRATION_DRAFTS_DIR_NAME: &str = "IntegrationDrafts";
 
 #[derive(Debug, Clone, PartialEq)]
 pub(super) struct AgentLogsQuery {
@@ -132,6 +137,19 @@ async fn route_authorized_request(
                 json!({ "ok": true, "category": response.category, "module": response.module }),
             ))
         }
+        ("POST", ["v1", "integration-drafts"]) => {
+            ensure_agent_scope(client, AgentScope::DraftCreate)?;
+            let response = handle_create_integration_draft_request(request).await?;
+            record_agent_audit(
+                &context,
+                client,
+                "integration-draft.create".to_string(),
+                response.id.clone(),
+                "success".to_string(),
+            )
+            .await;
+            Ok(json_response(201, json!(response)))
+        }
         ("GET", ["v1", "modules"]) => {
             ensure_agent_scope(client, AgentScope::Observe)?;
             let modules =
@@ -215,7 +233,12 @@ async fn route_authorized_request(
                 .to_string(),
             )
             .await;
-            if response.success && matches!(action, ModuleAction::Start | ModuleAction::Restart) {
+            if response.success
+                && matches!(
+                    action,
+                    ModuleAction::Start | ModuleAction::Restart | ModuleAction::Repair
+                )
+            {
                 sync_launcher_selected_module(&context, client, module_id).await?;
             }
             Ok(json_response(
@@ -235,6 +258,95 @@ async fn route_authorized_request(
     }
 }
 
+async fn handle_create_integration_draft_request(
+    request: &HttpRequest,
+) -> Result<IntegrationDraftCreateResponse, AppError> {
+    let payload: IntegrationDraftCreateRequest = parse_json_body(request)?;
+    let name = payload.name.trim();
+    if name.is_empty() {
+        return Err(AppError::Validation(
+            "Integration draft name is required".to_string(),
+        ));
+    }
+
+    let id = match payload
+        .id
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+    {
+        Some(id) => id.to_string(),
+        None => draft_id_from_name(name),
+    };
+    crate::domain::modules::downloader::validate_module_id(&id)?;
+
+    let runtime_kind = payload
+        .runtime_kind
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("python")
+        .to_ascii_lowercase();
+    validate_draft_runtime_kind(&runtime_kind)?;
+
+    let entry = payload
+        .entry
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .map_or_else(|| default_draft_entry(&runtime_kind), ToOwned::to_owned);
+    validate_relative_draft_path(&entry)?;
+
+    let drafts_root = integration_drafts_dir();
+    let draft_dir = drafts_root.join(&id);
+    if draft_dir.exists() {
+        return Err(AppError::Validation(format!(
+            "Integration draft {id} already exists"
+        )));
+    }
+
+    tokio::fs::create_dir_all(&draft_dir)
+        .await
+        .map_err(|error| AppError::Io(format!("Failed to create draft directory: {error}")))?;
+    let entry_path = draft_dir.join(&entry);
+    if let Some(parent) = entry_path.parent() {
+        tokio::fs::create_dir_all(parent).await.map_err(|error| {
+            AppError::Io(format!("Failed to create draft entry directory: {error}"))
+        })?;
+    }
+
+    let manifest_path = draft_dir.join("axelate-module.toml");
+    tokio::fs::write(
+        &manifest_path,
+        draft_manifest_text(
+            &id,
+            name,
+            payload.description.as_deref().unwrap_or_default(),
+            &runtime_kind,
+            &entry,
+        ),
+    )
+    .await
+    .map_err(|error| AppError::Io(format!("Failed to write draft manifest: {error}")))?;
+    tokio::fs::write(&entry_path, draft_entry_text(&runtime_kind))
+        .await
+        .map_err(|error| AppError::Io(format!("Failed to write draft entry: {error}")))?;
+    tokio::fs::write(
+        draft_dir.join("README.md"),
+        format!("# {name}\n\nDraft integration created by Agent Control.\n"),
+    )
+    .await
+    .map_err(|error| AppError::Io(format!("Failed to write draft README: {error}")))?;
+
+    Ok(IntegrationDraftCreateResponse {
+        ok: true,
+        id,
+        draft_dir: draft_dir.display().to_string(),
+        manifest_path: manifest_path.display().to_string(),
+        entry_path: entry_path.display().to_string(),
+    })
+}
+
 fn handle_agent_logs_request(request: &HttpRequest) -> Result<HttpResponse, AppError> {
     let query = parse_agent_logs_query(&request.path)?;
     let logs = match query.view_id.as_deref() {
@@ -244,7 +356,11 @@ fn handle_agent_logs_request(request: &HttpRequest) -> Result<HttpResponse, AppE
         None => crate::api::system::logs::get_logs(query.since)?,
     };
     let skip = logs.len().saturating_sub(query.limit);
-    let logs = logs.into_iter().skip(skip).collect::<Vec<_>>();
+    let logs = logs
+        .into_iter()
+        .skip(skip)
+        .map(sanitize_agent_log_entry)
+        .collect::<Vec<_>>();
 
     Ok(json_response(
         200,
@@ -257,6 +373,311 @@ fn handle_agent_logs_request(request: &HttpRequest) -> Result<HttpResponse, AppE
             logs,
         }),
     ))
+}
+
+fn integration_drafts_dir() -> PathBuf {
+    crate::utils::paths::RUNTIME_DIR.join(INTEGRATION_DRAFTS_DIR_NAME)
+}
+
+pub(super) fn draft_id_from_name(name: &str) -> String {
+    let mut id = String::with_capacity(name.len());
+    let mut last_was_dash = false;
+    for character in name.chars().flat_map(char::to_lowercase) {
+        if character.is_ascii_alphanumeric() {
+            id.push(character);
+            last_was_dash = false;
+        } else if !last_was_dash {
+            id.push('-');
+            last_was_dash = true;
+        }
+    }
+    let id = id.trim_matches('-');
+    if id.is_empty() {
+        format!(
+            "draft-{}",
+            &hex::encode(sha2::Sha256::digest(name.as_bytes()))[..12]
+        )
+    } else {
+        id.to_string()
+    }
+}
+
+pub(super) fn validate_draft_runtime_kind(kind: &str) -> Result<(), AppError> {
+    match kind {
+        "python" | "node" | "bun" => Ok(()),
+        _ => Err(AppError::Validation(format!(
+            "Unsupported draft runtime kind: {kind}"
+        ))),
+    }
+}
+
+pub(super) fn validate_relative_draft_path(path: &str) -> Result<(), AppError> {
+    if path.trim().is_empty() {
+        return Err(AppError::Validation(
+            "Draft entry path cannot be empty".to_string(),
+        ));
+    }
+    let path = Path::new(path);
+    if path.is_absolute()
+        || path
+            .components()
+            .any(|component| matches!(component, std::path::Component::ParentDir))
+    {
+        return Err(AppError::Validation(
+            "Draft entry path must stay inside the draft directory".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+pub(super) fn default_draft_entry(runtime_kind: &str) -> String {
+    match runtime_kind {
+        "node" => "src/main.js",
+        "bun" => "src/main.ts",
+        _ => "src/main.py",
+    }
+    .to_string()
+}
+
+pub(super) fn draft_manifest_text(
+    id: &str,
+    name: &str,
+    description: &str,
+    runtime_kind: &str,
+    entry: &str,
+) -> String {
+    format!(
+        r#"api_version = "1"
+id = "{}"
+name = "{}"
+version = "0.1.0"
+description = "{}"
+type = "service"
+
+[runtime]
+kind = "{}"
+entry = "{}"
+"#,
+        escape_toml_string(id),
+        escape_toml_string(name),
+        escape_toml_string(description),
+        escape_toml_string(runtime_kind),
+        escape_toml_string(entry),
+    )
+}
+
+fn draft_entry_text(runtime_kind: &str) -> &'static str {
+    match runtime_kind {
+        "node" | "bun" => "console.log('Axelate draft integration started');\n",
+        _ => "print('Axelate draft integration started')\n",
+    }
+}
+
+pub(super) fn escape_toml_string(value: &str) -> String {
+    value
+        .replace('\\', "\\\\")
+        .replace('"', "\\\"")
+        .replace('\n', "\\n")
+        .replace('\r', "\\r")
+}
+
+pub(super) fn sanitize_agent_log_entry(mut entry: LogEntry) -> LogEntry {
+    entry.source = redact_sensitive_log_text(&entry.source);
+    entry.level = redact_sensitive_log_text(&entry.level);
+    entry.message = redact_sensitive_log_text(&entry.message);
+    entry.display_time = entry.display_time.as_deref().map(redact_sensitive_log_text);
+    entry.normalized_level = entry
+        .normalized_level
+        .as_deref()
+        .map(redact_sensitive_log_text);
+    entry.scope = entry.scope.as_deref().map(redact_sensitive_log_text);
+    entry.summary_message = entry
+        .summary_message
+        .as_deref()
+        .map(redact_sensitive_log_text);
+    entry.source_label = entry.source_label.as_deref().map(redact_sensitive_log_text);
+    entry.source_class = entry.source_class.as_deref().map(redact_sensitive_log_text);
+    entry.page = entry.page.as_deref().map(redact_sensitive_log_text);
+    entry.action = entry.action.as_deref().map(redact_sensitive_log_text);
+    entry.expected = entry.expected.as_deref().map(redact_sensitive_log_text);
+    entry
+}
+
+pub(super) fn redact_sensitive_log_text(input: &str) -> String {
+    let with_assignments = redact_sensitive_assignments(input);
+    redact_bearer_tokens(&with_assignments)
+}
+
+fn redact_sensitive_assignments(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let bytes = input.as_bytes();
+    let mut index = 0;
+
+    while index < bytes.len() {
+        let Some(byte) = bytes.get(index).copied() else {
+            break;
+        };
+        if !is_key_char(byte) {
+            if let Some(character) = input[index..].chars().next() {
+                output.push(character);
+                index += character.len_utf8();
+            } else {
+                break;
+            }
+            continue;
+        }
+
+        let key_start = index;
+        while bytes.get(index).copied().is_some_and(is_key_char) {
+            index += 1;
+        }
+        let key_end = index;
+        let mut cursor = skip_ascii_spaces(bytes, index);
+        let Some(delimiter) = bytes
+            .get(cursor)
+            .copied()
+            .filter(|byte| matches!(byte, b':' | b'='))
+        else {
+            output.push_str(&input[key_start..key_end]);
+            continue;
+        };
+
+        cursor += 1;
+        cursor = skip_ascii_spaces(bytes, cursor);
+
+        if !is_sensitive_key(&input[key_start..key_end]) {
+            output.push_str(&input[key_start..cursor]);
+            index = cursor;
+            continue;
+        }
+
+        output.push_str(&input[key_start..key_end]);
+        output.push_str(&input[key_end..cursor]);
+
+        let quote = bytes
+            .get(cursor)
+            .copied()
+            .filter(|byte| matches!(byte, b'"' | b'\''));
+        if quote.is_some() {
+            if let Some(byte) = bytes.get(cursor).copied() {
+                output.push(char::from(byte));
+            }
+            cursor += 1;
+        }
+
+        output.push_str("[REDACTED]");
+        cursor = skip_sensitive_value(bytes, cursor, quote, delimiter);
+        if let Some(quote_byte) = quote
+            && bytes.get(cursor).is_some_and(|byte| *byte == quote_byte)
+        {
+            output.push(char::from(quote_byte));
+            cursor += 1;
+        }
+        index = cursor;
+    }
+
+    output
+}
+
+fn redact_bearer_tokens(input: &str) -> String {
+    let mut output = String::with_capacity(input.len());
+    let lower = input.to_ascii_lowercase();
+    let mut index = 0;
+
+    while let Some(relative) = lower[index..].find("bearer ") {
+        let marker_start = index + relative;
+        let token_start = marker_start + "bearer ".len();
+        output.push_str(&input[index..token_start]);
+
+        let token_end = input
+            .as_bytes()
+            .get(token_start..)
+            .unwrap_or_default()
+            .iter()
+            .position(|byte| is_bearer_token_delimiter(*byte))
+            .map_or(input.len(), |position| token_start + position);
+
+        if token_end > token_start {
+            output.push_str("[REDACTED]");
+        }
+        index = token_end;
+    }
+
+    output.push_str(&input[index..]);
+    output
+}
+
+const fn is_key_char(byte: u8) -> bool {
+    byte.is_ascii_alphanumeric() || matches!(byte, b'_' | b'-')
+}
+
+fn skip_ascii_spaces(bytes: &[u8], mut index: usize) -> usize {
+    while bytes.get(index).is_some_and(u8::is_ascii_whitespace) {
+        index += 1;
+    }
+    index
+}
+
+fn skip_sensitive_value(bytes: &[u8], mut index: usize, quote: Option<u8>, delimiter: u8) -> usize {
+    if quote.is_none()
+        && starts_with_ascii_case_insensitive(bytes.get(index..).unwrap_or_default(), b"bearer ")
+    {
+        index += "bearer".len();
+        index = skip_ascii_spaces(bytes, index);
+        while bytes
+            .get(index)
+            .copied()
+            .is_some_and(|byte| !is_bearer_token_delimiter(byte))
+        {
+            index += 1;
+        }
+        return index;
+    }
+
+    while index < bytes.len() {
+        let Some(byte) = bytes.get(index).copied() else {
+            break;
+        };
+        if quote.is_some_and(|quote| byte == quote) {
+            break;
+        }
+        if quote.is_none()
+            && (byte.is_ascii_whitespace()
+                || matches!(byte, b',' | b'}' | b']')
+                || (delimiter == b'=' && byte == b'&'))
+        {
+            break;
+        }
+        index += 1;
+    }
+    index
+}
+
+fn starts_with_ascii_case_insensitive(value: &[u8], expected: &[u8]) -> bool {
+    value.len() >= expected.len()
+        && value
+            .iter()
+            .zip(expected.iter())
+            .all(|(left, right)| left.eq_ignore_ascii_case(right))
+}
+
+fn is_sensitive_key(key: &str) -> bool {
+    let normalized = key
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .flat_map(char::to_lowercase)
+        .collect::<String>();
+    matches!(
+        normalized.as_str(),
+        "apikey" | "authorization" | "auth" | "password" | "secret" | "token" | "key"
+    ) || normalized.ends_with("apikey")
+        || normalized.ends_with("token")
+        || normalized.ends_with("secret")
+        || normalized.ends_with("password")
+}
+
+const fn is_bearer_token_delimiter(byte: u8) -> bool {
+    byte.is_ascii_whitespace() || matches!(byte, b'"' | b'\'' | b',' | b'}' | b']' | b')')
 }
 
 async fn handle_agent_approvals_request(
@@ -381,6 +802,8 @@ async fn handle_select_module_request(
         Ok(module) => module,
         Err(_) => resolve_runtime_selected_module(module_id).await?,
     };
+    validate_selected_module_category(&context.config_service, category, module_id, &module)
+        .await?;
     let mut ui_state = context.ui_state_service.get_ui_state().await?;
     ui_state
         .selected_modules
@@ -416,7 +839,8 @@ pub(super) fn parse_agent_logs_query(path: &str) -> Result<AgentLogsQuery, AppEr
         let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
         match key.trim() {
             "viewId" | "view_id" => {
-                result.view_id = Some(value.trim().to_string()).filter(|value| !value.is_empty());
+                let decoded = percent_decode_query_value(value.trim())?;
+                result.view_id = Some(decoded).filter(|value| !value.is_empty());
             }
             "since" => {
                 result.since = parse_non_negative_f64("since", value)?;
@@ -429,6 +853,49 @@ pub(super) fn parse_agent_logs_query(path: &str) -> Result<AgentLogsQuery, AppEr
     }
 
     Ok(result)
+}
+
+fn percent_decode_query_value(value: &str) -> Result<String, AppError> {
+    let mut output = Vec::with_capacity(value.len());
+    let bytes = value.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let Some(byte) = bytes.get(index).copied() else {
+            break;
+        };
+        match byte {
+            b'+' => {
+                output.push(b' ');
+                index += 1;
+            }
+            b'%' => {
+                let Some(hex) = value.get(index + 1..index + 3) else {
+                    return Err(AppError::Validation(
+                        "Query parameter contains incomplete percent encoding".to_string(),
+                    ));
+                };
+                let byte = u8::from_str_radix(hex, 16).map_err(|_| {
+                    AppError::Validation(
+                        "Query parameter contains invalid percent encoding".to_string(),
+                    )
+                })?;
+                output.push(byte);
+                index += 3;
+            }
+            _ => {
+                if let Some(character) = value[index..].chars().next() {
+                    let mut buffer = [0; 4];
+                    output.extend_from_slice(character.encode_utf8(&mut buffer).as_bytes());
+                    index += character.len_utf8();
+                } else {
+                    break;
+                }
+            }
+        }
+    }
+    String::from_utf8(output).map_err(|_| {
+        AppError::Validation("Query parameter is not valid UTF-8 after decoding".to_string())
+    })
 }
 
 fn parse_non_negative_f64(name: &str, value: &str) -> Result<f64, AppError> {
@@ -680,7 +1147,11 @@ pub(super) fn ensure_launcher_client(client: &AuthorizedClient) -> Result<(), Ap
 fn ensure_agent_scope(client: &AuthorizedClient, scope: AgentScope) -> Result<(), AppError> {
     match client {
         AuthorizedClient::Launcher | AuthorizedClient::Module(_) => Ok(()),
-        AuthorizedClient::Agent(agent) if agent.scopes.contains(&scope) => Ok(()),
+        AuthorizedClient::Agent(agent)
+            if agent.scopes.contains(&scope) || agent.scopes.contains(&AgentScope::FullAccess) =>
+        {
+            Ok(())
+        }
         AuthorizedClient::Agent(_) => Err(AppError::PermissionDenied(format!(
             "Agent token is missing required scope: {scope:?}"
         ))),
@@ -745,6 +1216,7 @@ pub(super) fn parse_module_action(action: &str) -> Result<ModuleAction, AppError
         "start" => Ok(ModuleAction::Start),
         "stop" => Ok(ModuleAction::Stop),
         "restart" => Ok(ModuleAction::Restart),
+        "repair" => Ok(ModuleAction::Repair),
         _ => Err(AppError::Validation(format!(
             "Unsupported module action: {action}"
         ))),
@@ -756,6 +1228,7 @@ const fn module_action_name(action: ModuleAction) -> &'static str {
         ModuleAction::Start => "start",
         ModuleAction::Stop => "stop",
         ModuleAction::Restart => "restart",
+        ModuleAction::Repair => "repair",
         ModuleAction::Install => "install",
         ModuleAction::Uninstall => "uninstall",
         ModuleAction::Update => "update",
@@ -1010,6 +1483,91 @@ fn validate_agent_selection_category(category: &str) -> Result<(), AppError> {
         _ => Err(AppError::Validation(format!(
             "Unsupported selected module category: {category}"
         ))),
+    }
+}
+
+async fn validate_selected_module_category(
+    config_service: &crate::domain::system::config_service::ConfigService,
+    category: &str,
+    module_id: &str,
+    module: &SelectedModule,
+) -> Result<(), AppError> {
+    let expected =
+        selection_category_for_selected_module(config_service, module_id, module).await?;
+    if expected == category {
+        return Ok(());
+    }
+
+    Err(AppError::Validation(format!(
+        "Module {module_id} belongs to {expected}, not {category}"
+    )))
+}
+
+async fn selection_category_for_selected_module(
+    config_service: &crate::domain::system::config_service::ConfigService,
+    module_id: &str,
+    module: &SelectedModule,
+) -> Result<&'static str, AppError> {
+    let config = config_service.load_full_config()?;
+    if let Some(item) = config
+        .catalog
+        .services
+        .iter()
+        .find(|item| item.id == module_id)
+    {
+        return Ok(selection_category_for_catalog_item(item));
+    }
+    if let Some(item) = config.catalog.ai.iter().find(|item| item.id == module_id) {
+        return Ok(selection_category_for_catalog_item(item));
+    }
+    if let Some(provider) = config
+        .api_providers
+        .iter()
+        .find(|provider| provider.id == module_id)
+    {
+        return Ok(selection_category_for_provider(provider));
+    }
+
+    if module_id == CUSTOM_TEXT_PROVIDER_ID {
+        return Ok("ai_text");
+    }
+    if module_id == CUSTOM_IMAGE_PROVIDER_ID {
+        return Ok("ai_image");
+    }
+
+    module_controller::get_all_modules()
+        .await
+        .into_iter()
+        .find(|candidate| candidate.id == module.id)
+        .map(|runtime_module| selection_category_for_runtime_module(&runtime_module))
+        .ok_or_else(|| AppError::Validation(format!("Unknown selectable module: {module_id}")))
+}
+
+fn selection_category_for_catalog_item(item: &ModuleItem) -> &'static str {
+    if item.type_name.trim().eq_ignore_ascii_case("service") {
+        return "services";
+    }
+    selection_category_for_capabilities(&item.capabilities)
+}
+
+fn selection_category_for_provider(provider: &ApiProvider) -> &'static str {
+    provider
+        .capabilities
+        .as_deref()
+        .map_or("ai_text", selection_category_for_capabilities)
+}
+
+pub(super) fn selection_category_for_capabilities(capabilities: &[String]) -> &'static str {
+    let has_image = capabilities
+        .iter()
+        .any(|capability| capability.trim().eq_ignore_ascii_case("image"));
+    let has_text = capabilities
+        .iter()
+        .any(|capability| capability.trim().eq_ignore_ascii_case("text"));
+    if has_image && !has_text {
+        "ai_image"
+    } else {
+        "ai_text"
     }
 }
 

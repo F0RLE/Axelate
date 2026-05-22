@@ -134,6 +134,16 @@ pub(super) struct IntegrationSelectModuleRequest {
     pub module_id: String,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationDraftCreateRequest {
+    pub id: Option<String>,
+    pub name: String,
+    pub runtime_kind: Option<String>,
+    pub entry: Option<String>,
+    pub description: Option<String>,
+}
+
 // ── Integration response DTOs ────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
@@ -152,6 +162,16 @@ pub(super) struct ImageApiResponse {
     pub provider: String,
     pub model: String,
     pub response: ImageGenerationResponse,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationDraftCreateResponse {
+    pub ok: bool,
+    pub id: String,
+    pub draft_dir: String,
+    pub manifest_path: String,
+    pub entry_path: String,
 }
 
 #[derive(Debug, Serialize)]

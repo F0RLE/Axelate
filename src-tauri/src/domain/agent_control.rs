@@ -7,6 +7,7 @@ use chrono::Utc;
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use specta::Type;
+use std::collections::HashMap;
 use std::sync::Arc;
 
 const TOKEN_PREFIX_LEN: usize = 18;
@@ -25,6 +26,8 @@ pub enum AgentScope {
     Configure,
     /// Create integration drafts without installing or running them silently.
     DraftCreate,
+    /// User-granted full local launcher access.
+    FullAccess,
 }
 
 /// Public trusted local agent profile metadata.
@@ -47,14 +50,12 @@ pub struct AgentProfile {
     pub revoked: bool,
 }
 
-/// Agent profile creation response. The token is shown only once.
+/// Agent profile creation/rotation response. Raw bearer tokens stay backend-owned.
 #[derive(Debug, Clone, Serialize, Deserialize, Type)]
 #[serde(rename_all = "camelCase")]
 pub struct AgentProfileTokenResponse {
     /// Public profile metadata.
     pub profile: AgentProfile,
-    /// One-time bearer token. Store it in the calling agent, not in frontend state.
-    pub token: String,
 }
 
 /// Agent action audit entry.
@@ -169,6 +170,7 @@ struct AgentControlStore {
 pub struct AgentControlService {
     json_store: JsonStore,
     lock: Arc<tokio::sync::Mutex<()>>,
+    pending_tokens: Arc<tokio::sync::Mutex<HashMap<String, String>>>,
 }
 
 impl AgentControlService {
@@ -177,6 +179,7 @@ impl AgentControlService {
         Self {
             json_store,
             lock: Arc::new(tokio::sync::Mutex::new(())),
+            pending_tokens: Arc::new(tokio::sync::Mutex::new(HashMap::new())),
         }
     }
 
@@ -224,10 +227,11 @@ impl AgentControlService {
         store.profiles.push(profile);
         store.enabled = true;
         self.save_store_locked(&store).await?;
+        self.store_pending_token(public_profile.id.clone(), token)
+            .await;
 
         Ok(AgentProfileTokenResponse {
             profile: public_profile,
-            token,
         })
     }
 
@@ -239,16 +243,21 @@ impl AgentControlService {
         let Some(profile) = store.profiles.iter_mut().find(|profile| profile.id == id) else {
             return Err(AppError::NotFound(format!("Agent profile {id} not found")));
         };
+        if profile.revoked {
+            return Err(AppError::Validation(format!(
+                "Agent profile {id} is revoked; create a new profile instead"
+            )));
+        }
         profile.token_hash = hash_token(&token);
         profile.token_prefix = token_prefix(&token);
-        profile.revoked = false;
         profile.last_seen_at = None;
         let public_profile = public_profile(profile);
+        let profile_id = public_profile.id.clone();
         self.save_store_locked(&store).await?;
+        self.store_pending_token(profile_id, token).await;
 
         Ok(AgentProfileTokenResponse {
             profile: public_profile,
-            token,
         })
     }
 
@@ -264,6 +273,7 @@ impl AgentControlService {
             return Err(AppError::NotFound(format!("Agent profile {id} not found")));
         };
         profile.revoked = true;
+        self.pending_tokens.lock().await.remove(id);
         self.save_store_locked(&store).await?;
         Ok(public_state(store, api_base_url))
     }
@@ -281,9 +291,23 @@ impl AgentControlService {
         if store.profiles.len() == before {
             return Err(AppError::NotFound(format!("Agent profile {id} not found")));
         }
-        store.approvals.retain(|approval| approval.agent_id != id);
+        store.approvals.retain(|approval| {
+            approval.agent_id != id || approval.status != AgentApprovalStatus::Pending
+        });
+        self.pending_tokens.lock().await.remove(id);
         self.save_store_locked(&store).await?;
         Ok(public_state(store, api_base_url))
+    }
+
+    /// Takes the one-time plaintext token for backend-mediated copy flows.
+    pub async fn take_pending_token(&self, id: &str) -> Result<String, AppError> {
+        let Some(token) = self.pending_tokens.lock().await.remove(id) else {
+            return Err(AppError::Validation(
+                "No one-time token is available for this profile; rotate it to create a new token"
+                    .to_string(),
+            ));
+        };
+        Ok(token)
     }
 
     /// Authenticates a bearer token against enabled, non-revoked profiles.
@@ -377,6 +401,11 @@ impl AgentControlService {
         let Some(request) = store.approvals.iter_mut().find(|request| request.id == id) else {
             return Err(AppError::NotFound(format!("Agent approval {id} not found")));
         };
+        if request.status != AgentApprovalStatus::Pending {
+            return Err(AppError::Validation(format!(
+                "Agent approval {id} has already been decided"
+            )));
+        }
         request.status = if approved {
             AgentApprovalStatus::Approved
         } else {
@@ -393,6 +422,15 @@ impl AgentControlService {
 
     async fn save_store_locked(&self, store: &AgentControlStore) -> Result<(), AppError> {
         self.json_store.save_async(&FILE_AGENT_CONTROL, store).await
+    }
+
+    async fn store_pending_token(&self, id: String, token: String) {
+        self.pending_tokens.lock().await.insert(id, token);
+    }
+
+    #[cfg(test)]
+    async fn claim_pending_token_for_test(&self, id: &str) -> Result<String, AppError> {
+        self.take_pending_token(id).await
     }
 }
 
@@ -413,6 +451,9 @@ fn normalize_scopes(scopes: Option<Vec<AgentScope>>) -> Vec<AgentScope> {
     if scopes.is_empty() {
         return trusted_local_scopes();
     }
+    if scopes.contains(&AgentScope::FullAccess) {
+        return vec![AgentScope::FullAccess];
+    }
     scopes
 }
 
@@ -422,6 +463,7 @@ const fn scope_rank(scope: AgentScope) -> u8 {
         AgentScope::Operate => 1,
         AgentScope::Configure => 2,
         AgentScope::DraftCreate => 3,
+        AgentScope::FullAccess => 4,
     }
 }
 
@@ -506,14 +548,15 @@ mod tests {
             .await
             .expect("profile");
 
-        assert!(response.token.starts_with("axl_agent_"));
         assert_eq!(response.profile.name, "Codex");
         assert!(response.profile.scopes.contains(&AgentScope::Observe));
-
-        let authorized = service
-            .authorize_token(&response.token)
+        let token = service
+            .claim_pending_token_for_test(&response.profile.id)
             .await
-            .expect("authorized");
+            .expect("pending token");
+        assert!(token.starts_with("axl_agent_"));
+
+        let authorized = service.authorize_token(&token).await.expect("authorized");
         assert_eq!(authorized.name, "Codex");
     }
 
@@ -529,7 +572,27 @@ mod tests {
             .await
             .expect("revoke");
 
-        assert!(service.authorize_token(&response.token).await.is_none());
+        assert!(
+            service
+                .take_pending_token(&response.profile.id)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn revoked_profile_cannot_be_rotated_back_to_active() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service.create_profile(None, None).await.expect("profile");
+
+        service
+            .revoke_profile(&response.profile.id, "http://127.0.0.1:3000".to_string())
+            .await
+            .expect("revoke");
+
+        assert!(service.rotate_profile(&response.profile.id).await.is_err());
     }
 
     #[tokio::test]
@@ -545,7 +608,12 @@ mod tests {
             .expect("delete");
 
         assert!(state.profiles.is_empty());
-        assert!(service.authorize_token(&response.token).await.is_none());
+        assert!(
+            service
+                .take_pending_token(&response.profile.id)
+                .await
+                .is_err()
+        );
     }
 
     #[tokio::test]
@@ -554,10 +622,11 @@ mod tests {
         reset_store().await;
         let service = service();
         let response = service.create_profile(None, None).await.expect("profile");
-        let agent = service
-            .authorize_token(&response.token)
+        let token = service
+            .claim_pending_token_for_test(&response.profile.id)
             .await
-            .expect("agent");
+            .expect("pending token");
+        let agent = service.authorize_token(&token).await.expect("agent");
         let approval = service
             .create_approval_request(
                 &agent,
@@ -577,6 +646,119 @@ mod tests {
         assert_eq!(
             state.approvals.first().map(|item| &item.status),
             Some(&super::AgentApprovalStatus::Denied)
+        );
+    }
+
+    #[tokio::test]
+    async fn full_access_scope_replaces_narrow_scopes() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service
+            .create_profile(
+                Some("Full Access".to_string()),
+                Some(vec![AgentScope::Observe, AgentScope::FullAccess]),
+            )
+            .await
+            .expect("profile");
+
+        assert_eq!(response.profile.scopes, vec![AgentScope::FullAccess]);
+        let token = service
+            .claim_pending_token_for_test(&response.profile.id)
+            .await
+            .expect("pending token");
+        let authorized = service.authorize_token(&token).await.expect("authorized");
+        assert_eq!(authorized.scopes, vec![AgentScope::FullAccess]);
+    }
+
+    #[tokio::test]
+    async fn deleting_profile_keeps_decided_approval_history() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service.create_profile(None, None).await.expect("profile");
+        let token = service
+            .claim_pending_token_for_test(&response.profile.id)
+            .await
+            .expect("pending token");
+        let agent = service.authorize_token(&token).await.expect("agent");
+        let pending = service
+            .create_approval_request(
+                &agent,
+                "package.install".to_string(),
+                "pending-demo".to_string(),
+                "Install pending demo".to_string(),
+                "dangerous".to_string(),
+            )
+            .await
+            .expect("pending approval");
+        let decided = service
+            .create_approval_request(
+                &agent,
+                "package.delete".to_string(),
+                "decided-demo".to_string(),
+                "Delete decided demo".to_string(),
+                "dangerous".to_string(),
+            )
+            .await
+            .expect("decided approval");
+
+        service
+            .decide_approval(&decided.id, true, "http://127.0.0.1:3000".to_string())
+            .await
+            .expect("decision");
+        let state = service
+            .delete_profile(&response.profile.id, "http://127.0.0.1:3000".to_string())
+            .await
+            .expect("delete");
+
+        assert!(
+            state
+                .approvals
+                .iter()
+                .all(|approval| approval.id != pending.id)
+        );
+        assert!(
+            state
+                .approvals
+                .iter()
+                .any(|approval| approval.id == decided.id
+                    && approval.status == super::AgentApprovalStatus::Approved)
+        );
+    }
+
+    #[tokio::test]
+    async fn decided_approval_cannot_be_changed() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service.create_profile(None, None).await.expect("profile");
+        let token = service
+            .claim_pending_token_for_test(&response.profile.id)
+            .await
+            .expect("pending token");
+        let agent = service.authorize_token(&token).await.expect("agent");
+        let approval = service
+            .create_approval_request(
+                &agent,
+                "package.install".to_string(),
+                "demo".to_string(),
+                "Install demo".to_string(),
+                "dangerous".to_string(),
+            )
+            .await
+            .expect("approval");
+
+        service
+            .decide_approval(&approval.id, false, "http://127.0.0.1:3000".to_string())
+            .await
+            .expect("first decision");
+
+        assert!(
+            service
+                .decide_approval(&approval.id, true, "http://127.0.0.1:3000".to_string())
+                .await
+                .is_err()
         );
     }
 }

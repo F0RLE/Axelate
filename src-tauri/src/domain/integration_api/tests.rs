@@ -7,15 +7,19 @@ use super::http::{
 };
 use super::preflight_http_request;
 use super::routing::{
-    agent_provider_summary, backend_provider_id, ensure_launcher_client, ensure_module_route_owner,
+    agent_provider_summary, backend_provider_id, default_draft_entry, draft_id_from_name,
+    draft_manifest_text, ensure_launcher_client, ensure_module_route_owner, escape_toml_string,
     merge_json_settings, model_api_id, modules_visible_to_client, parse_agent_logs_query,
-    parse_module_action, resolve_session_id, selected_module_from_api_provider,
-    selected_module_from_catalog_item, selected_module_from_runtime_module,
-    selection_category_for_runtime_module, tier_rank,
+    parse_module_action, redact_sensitive_log_text, resolve_session_id, sanitize_agent_log_entry,
+    selected_module_from_api_provider, selected_module_from_catalog_item,
+    selected_module_from_runtime_module, selection_category_for_capabilities,
+    selection_category_for_runtime_module, tier_rank, validate_draft_runtime_kind,
+    validate_relative_draft_path,
 };
 use super::types::{AuthorizedClient, IntegrationTextRequest, ModuleContextApiResponse};
 use crate::domain::modules::controller::ModuleAction;
 use crate::errors::AppError;
+use crate::infrastructure::logging::LogEntry;
 use crate::models::{
     AiModel, ApiModelConfig, ModelStats, ModelTier, Module, ModuleItem, ProviderType,
     SelectedModule,
@@ -165,10 +169,65 @@ fn agent_logs_query_defaults_and_clamps_limit() {
 }
 
 #[test]
+fn agent_logs_query_decodes_view_id() {
+    let parsed =
+        parse_agent_logs_query("/v1/agent/logs?viewId=engine%3Allamacpp&since=1").expect("query");
+
+    assert_eq!(parsed.view_id.as_deref(), Some("engine:llamacpp"));
+    assert!((parsed.since - 1.0).abs() < f64::EPSILON);
+}
+
+#[test]
 fn agent_logs_query_rejects_invalid_since_and_limit() {
     assert!(parse_agent_logs_query("/v1/agent/logs?since=-1").is_err());
     assert!(parse_agent_logs_query("/v1/agent/logs?since=inf").is_err());
     assert!(parse_agent_logs_query("/v1/agent/logs?limit=0").is_err());
+}
+
+#[test]
+fn agent_logs_redact_sensitive_values() {
+    let redacted = redact_sensitive_log_text(
+        "Authorization: Bearer axl_agent_secret token=abc api_key=\"sk-test\" url=/x?api_key=query&ok=1",
+    );
+
+    assert!(!redacted.contains("axl_agent_secret"));
+    assert!(!redacted.contains("token=abc"));
+    assert!(!redacted.contains("sk-test"));
+    assert!(!redacted.contains("api_key=query"));
+    assert!(redacted.contains("Authorization: [REDACTED]"));
+    assert!(redacted.contains("token=[REDACTED]"));
+    assert!(redacted.contains("api_key=\"[REDACTED]\""));
+    assert!(redacted.contains("api_key=[REDACTED]&ok=1"));
+}
+
+#[test]
+fn agent_log_entry_sanitizes_string_fields() {
+    let entry = LogEntry {
+        timestamp: 1.0,
+        source: "module:demo".to_string(),
+        level: "info".to_string(),
+        message: "apiKey=secret-value".to_string(),
+        module_id: Some("demo".to_string()),
+        display_time: None,
+        normalized_level: None,
+        scope: None,
+        summary_message: Some("Bearer bearer-secret".to_string()),
+        source_label: None,
+        source_class: None,
+        page: None,
+        action: None,
+        expected: Some("password: hunter2".to_string()),
+    };
+
+    let sanitized = sanitize_agent_log_entry(entry);
+
+    assert_eq!(sanitized.message, "apiKey=[REDACTED]");
+    assert_eq!(
+        sanitized.summary_message.as_deref(),
+        Some("Bearer [REDACTED]")
+    );
+    assert_eq!(sanitized.expected.as_deref(), Some("password: [REDACTED]"));
+    assert_eq!(sanitized.module_id.as_deref(), Some("demo"));
 }
 
 #[test]
@@ -438,10 +497,48 @@ fn module_action_parser_accepts_integration_routes_only() {
         parse_module_action("restart").expect("restart"),
         ModuleAction::Restart
     );
+    assert_eq!(
+        parse_module_action("repair").expect("repair"),
+        ModuleAction::Repair
+    );
     assert!(matches!(
         parse_module_action("install"),
         Err(AppError::Validation(_))
     ));
+}
+
+#[test]
+fn integration_draft_helpers_validate_safe_contract() {
+    assert_eq!(draft_id_from_name("My Draft Tool"), "my-draft-tool");
+    assert!(validate_draft_runtime_kind("python").is_ok());
+    assert!(validate_draft_runtime_kind("node").is_ok());
+    assert!(validate_draft_runtime_kind("bun").is_ok());
+    assert!(validate_draft_runtime_kind("binary").is_err());
+    assert_eq!(default_draft_entry("node"), "src/main.js");
+    assert_eq!(default_draft_entry("bun"), "src/main.ts");
+    assert_eq!(default_draft_entry("python"), "src/main.py");
+
+    assert!(validate_relative_draft_path("src/main.py").is_ok());
+    assert!(validate_relative_draft_path("../outside.py").is_err());
+    assert!(validate_relative_draft_path("C:/outside.py").is_err());
+}
+
+#[test]
+fn integration_draft_manifest_escapes_toml_strings() {
+    assert_eq!(escape_toml_string("a\"b\nc"), "a\\\"b\\nc");
+    let manifest = draft_manifest_text(
+        "demo",
+        "Demo \"Tool\"",
+        "Line one\nLine two",
+        "python",
+        "src/main.py",
+    );
+
+    assert!(manifest.contains("id = \"demo\""));
+    assert!(manifest.contains("name = \"Demo \\\"Tool\\\"\""));
+    assert!(manifest.contains("description = \"Line one\\nLine two\""));
+    assert!(manifest.contains("kind = \"python\""));
+    assert!(manifest.contains("entry = \"src/main.py\""));
 }
 
 #[test]
@@ -628,6 +725,18 @@ fn runtime_module_selection_maps_ai_modules_to_text_slot() {
     };
 
     assert_eq!(selection_category_for_runtime_module(&module), "ai_text");
+}
+
+#[test]
+fn selection_category_uses_image_slot_for_image_only_capabilities() {
+    assert_eq!(
+        selection_category_for_capabilities(&["image".to_string()]),
+        "ai_image"
+    );
+    assert_eq!(
+        selection_category_for_capabilities(&["text".to_string(), "image".to_string()]),
+        "ai_text"
+    );
 }
 
 #[test]

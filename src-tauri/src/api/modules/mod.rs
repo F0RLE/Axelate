@@ -24,7 +24,7 @@ pub async fn get_module_status(module_id: String) -> Result<String, AppError> {
 
 #[tauri::command]
 #[specta::specta]
-/// Controls a module (start, stop, restart)
+/// Controls a module (start, stop, restart, repair)
 pub async fn control_module(
     app: AppHandle,
     request: ControlRequest,
