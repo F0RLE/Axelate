@@ -122,6 +122,7 @@ export class AppUiDashboardSupport {
             'has-launch',
             'module-running',
             'module-stopped',
+            'engine-error',
         );
         card.classList.add('empty');
         delete card.dataset['currentModule'];

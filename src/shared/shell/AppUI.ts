@@ -359,6 +359,28 @@ export class AppUI {
         this._dashboardSupport.applySelectedCardState(card, app, category);
         this._selectionState.set(category, app);
         this._updateMultiSlotBadge();
+        void this._refreshSelectedCardRuntimeStatus(category, app);
+    }
+
+    private async _refreshSelectedCardRuntimeStatus(category: string, app: IApp): Promise<void> {
+        if (app.installed === false) {
+            return;
+        }
+
+        try {
+            const status = await this._platformService.getStatus(app);
+            if (this._selectionState.get(category)?.id !== app.id) {
+                return;
+            }
+            this._dashboardSupport.updateRuntimeStatus(category, app, status);
+        } catch (error) {
+            this._deps.tracer.warn(
+                `[AppUI] Failed to refresh runtime status for ${app.id}: ${String(error)}`,
+            );
+            if (this._selectionState.get(category)?.id === app.id) {
+                this._dashboardSupport.updateRuntimeStatus(category, app, 'error');
+            }
+        }
     }
 
     /**

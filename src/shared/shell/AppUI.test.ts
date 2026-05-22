@@ -743,6 +743,60 @@ describe('AppUI lifecycle', () => {
         expect(card.dataset['runtimeStatus']).toBe('running');
     });
 
+    it('should refresh selected dashboard card runtime status even without a catalog status', async () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="empty">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+
+        const app = {
+            id: 'gemini',
+            name: 'Gemini',
+            type: 'api',
+            installed: true,
+        } as IApp;
+
+        platformServiceMock.getStatus.mockResolvedValueOnce('running');
+        appUI.updateModuleCard('ai_text', app);
+        await Promise.resolve();
+
+        const card = document.getElementById('ai-module-card') as HTMLElement;
+        expect(platformServiceMock.getStatus).toHaveBeenCalledWith(app);
+        expect(card.dataset['runtimeStatus']).toBe('running');
+        expect(card.classList.contains('module-running')).toBe(true);
+    });
+
+    it('should show selected dashboard card errors with the red marker class', async () => {
+        appUI = createAppUI();
+        document.body.innerHTML = `
+            <div id="ai-module-card" class="empty">
+                <div class="module-slot-card-icon"></div>
+                <div class="module-slot-card-title"></div>
+                <div class="module-slot-card-description"></div>
+            </div>
+        `;
+
+        const app = {
+            id: 'gemini',
+            name: 'Gemini',
+            type: 'api',
+            installed: true,
+        } as IApp;
+
+        platformServiceMock.getStatus.mockResolvedValueOnce('failed');
+        appUI.updateModuleCard('ai_text', app);
+        await Promise.resolve();
+
+        const card = document.getElementById('ai-module-card') as HTMLElement;
+        expect(card.dataset['runtimeStatus']).toBe('error');
+        expect(card.classList.contains('engine-error')).toBe(true);
+        expect(card.classList.contains('module-running')).toBe(false);
+    });
+
     it('should show a placeholder toast instead of selecting or downloading coming-soon modules', async () => {
         appUI = createAppUI();
         const toastSpy = vi.spyOn(appUI, 'showToast');
