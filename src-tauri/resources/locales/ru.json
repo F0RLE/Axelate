@@ -253,6 +253,7 @@
     "ui.launcher.settings.agent_control_disabled": "Выключено",
     "ui.launcher.settings.agent_control_enable": "Включить",
     "ui.launcher.settings.agent_control_disable": "Выключить",
+    "ui.launcher.settings.agent_control_docs_help": "Что это за API и как его использовать",
     "ui.launcher.settings.agent_control_connection": "Подключение",
     "ui.launcher.settings.agent_control_base_url": "Базовый URL",
     "ui.launcher.settings.agent_control_copy_base": "Копировать URL",

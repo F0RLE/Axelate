@@ -249,6 +249,7 @@
     "ui.launcher.settings.agent_control_disabled": "已停用",
     "ui.launcher.settings.agent_control_enable": "启用",
     "ui.launcher.settings.agent_control_disable": "停用",
+    "ui.launcher.settings.agent_control_docs_help": "了解这个 API 以及如何使用",
     "ui.launcher.settings.agent_control_connection": "连接",
     "ui.launcher.settings.agent_control_base_url": "基础 URL",
     "ui.launcher.settings.agent_control_copy_base": "复制 URL",

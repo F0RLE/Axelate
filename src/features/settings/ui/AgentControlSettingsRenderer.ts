@@ -16,6 +16,8 @@ type OneTimeToken = {
 
 const TRUSTED_LOCAL_SCOPES: AgentScope[] = ['observe', 'operate', 'configure', 'draft-create'];
 const FULL_ACCESS_SCOPES: AgentScope[] = ['full-access'];
+const AGENT_CONTROL_DOCS_URL =
+    'https://github.com/F0RLE/Axelate/blob/nightly/docs/localization/en/AGENT_CONTROL.md';
 
 export class AgentControlSettingsRenderer {
     private _context: IAppSettingsUIContext | null = null;
@@ -104,6 +106,7 @@ export class AgentControlSettingsRenderer {
 
     private _renderHeader(state: AgentControlState): HTMLElement {
         const header = this._element('div', 'agent-control-header');
+        const help = this._helpLink();
         const toggle = this._button(
             state.enabled ? this._t('disable') : this._t('enable'),
             `agent-control-btn agent-control-engine-btn ${state.enabled ? 'stop-btn' : 'active-module-btn'}`,
@@ -118,7 +121,7 @@ export class AgentControlSettingsRenderer {
                 });
             },
         );
-        header.append(toggle);
+        header.append(help, toggle);
         return header;
     }
 
@@ -446,6 +449,19 @@ export class AgentControlSettingsRenderer {
             onClick(button);
         });
         return button;
+    }
+
+    private _helpLink(): HTMLAnchorElement {
+        const label = this._t('docs_help');
+        const link = document.createElement('a');
+        link.className = 'agent-control-help';
+        link.href = AGENT_CONTROL_DOCS_URL;
+        link.target = '_blank';
+        link.rel = 'noreferrer';
+        link.textContent = '?';
+        link.title = label;
+        link.setAttribute('aria-label', label);
+        return link;
     }
 
     private _element(
