@@ -266,6 +266,7 @@
 .console-btn:disabled,
 .console-btn.is-disabled {
     cursor: default;
+    pointer-events: none;
     opacity: 0.42;
     background: rgba(255, 255, 255, 0.035);
     border-color: rgba(255, 255, 255, 0.055);

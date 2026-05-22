@@ -132,7 +132,7 @@ describe('ConsoleLogService', () => {
 
         await expect(service.getAvailableViews()).resolves.toEqual([
             { id: 'general', label: 'Platform' },
-            { id: 'agent', label: 'Agent' },
+            { id: 'agent', label: 'ui.launcher.web.logs_agent' },
             { id: 'module:custom-text', label: 'Custom' },
             { id: 'module:axelate-telegram-parser', label: 'Parser' },
         ]);

@@ -116,6 +116,8 @@
     "ui.debug.logs_copy": "Копировать логи",
     "ui.debug.logs_folder_agent_disabled": "У журнала агента нет папки",
     "ui.debug.logs_folder_unavailable": "Действия агента хранятся в audit-журнале лаунчера",
+    "ui.debug.logs_agent_result_recorded": "записано",
+    "ui.debug.logs_agent_target_launcher": "лаунчер",
     "ui.debug.logs_level_debug": "Debug",
     "ui.debug.logs_level_error": "Error",
     "ui.debug.logs_level_info": "Info",

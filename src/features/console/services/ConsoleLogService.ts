@@ -48,6 +48,7 @@ type ConsoleOverviewPayload = {
 };
 
 type ConsoleLogServiceLogger = Pick<LoggerService, 'warn' | 'error'>;
+type ConsoleLogTranslate = (key: string, fallback?: string) => string;
 
 export class ConsoleLogService {
     private static readonly _MAX_LOG_COUNT_PER_VIEW = 1200;
@@ -63,6 +64,7 @@ export class ConsoleLogService {
     constructor(
         private readonly bridge: IBridge,
         private readonly _tracer: ConsoleLogServiceLogger,
+        private readonly _translate: ConsoleLogTranslate = (key) => key,
     ) {}
 
     public init(): Promise<void> {
@@ -154,7 +156,9 @@ export class ConsoleLogService {
             );
         }
 
-        return this._withAgentView([{ id: 'general', label: 'Platform' }]);
+        return this._withAgentView([
+            { id: 'general', label: this._translate('ui.launcher.web.logs_general') },
+        ]);
     }
 
     public async getStatusItems(): Promise<IConsoleStatusItem[]> {
@@ -269,9 +273,11 @@ export class ConsoleLogService {
         const target = entry.target.trim();
         const result = entry.result.trim();
         const level = this._agentAuditLevel(result);
-        const actorName = entry.actorName.trim() || 'Agent';
-        const targetText = target === '' ? 'launcher' : target;
-        const resultText = result === '' ? 'recorded' : result;
+        const actorName = entry.actorName.trim() || this._translate('ui.launcher.web.logs_agent');
+        const targetText =
+            target === '' ? this._translate('ui.debug.logs_agent_target_launcher') : target;
+        const resultText =
+            result === '' ? this._translate('ui.debug.logs_agent_result_recorded') : result;
 
         return {
             timestamp,
@@ -353,7 +359,10 @@ export class ConsoleLogService {
             return [...views];
         }
 
-        const agentView = { id: ConsoleLogService._AGENT_VIEW_ID, label: 'Agent' };
+        const agentView = {
+            id: ConsoleLogService._AGENT_VIEW_ID,
+            label: this._translate('ui.launcher.web.logs_agent'),
+        };
         const generalIndex = views.findIndex((view) => view.id === 'general');
         if (generalIndex < 0) {
             return [agentView, ...views];

@@ -342,14 +342,8 @@ export class ConsoleUI {
             const isAgentView = this._viewState.activeViewId === 'agent';
             this._showToast(
                 isAgentView
-                    ? this._translate(
-                          'ui.debug.logs_folder_unavailable',
-                          'Agent actions are stored in the launcher audit log',
-                      )
-                    : this._translate(
-                          'ui.debug.logs_open_folder_failed',
-                          'Failed to open logs folder',
-                      ),
+                    ? this._translate('ui.debug.logs_folder_unavailable', '')
+                    : this._translate('ui.debug.logs_open_folder_failed', ''),
                 isAgentView ? 'info' : 'error',
                 1800,
             );
@@ -564,8 +558,8 @@ export class ConsoleUI {
         openFolderButton.disabled = isAgentView;
         openFolderButton.classList.toggle('is-disabled', isAgentView);
         const title = isAgentView
-            ? this._translate('ui.debug.logs_folder_agent_disabled', 'No folder for agent log')
-            : this._translate('ui.debug.logs_open_folder', 'Open Logs Folder');
+            ? this._translate('ui.debug.logs_folder_agent_disabled', '')
+            : this._translate('ui.debug.logs_open_folder', '');
         openFolderButton.title = title;
         openFolderButton.setAttribute('aria-label', title);
     }

@@ -193,7 +193,7 @@ export class ConsoleLogPresentationHelper {
         const fromView = activeViewId.startsWith('module:')
             ? activeViewId.slice('module:'.length)
             : activeViewId.startsWith('engine:')
-              ? activeViewId
+              ? activeViewId.slice('engine:'.length)
               : null;
         if (fromView !== null) {
             return fromView;

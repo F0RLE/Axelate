@@ -116,6 +116,8 @@
     "ui.debug.logs_copy": "Copy Logs",
     "ui.debug.logs_folder_agent_disabled": "No folder for agent log",
     "ui.debug.logs_folder_unavailable": "Agent actions are stored in the launcher audit log",
+    "ui.debug.logs_agent_result_recorded": "recorded",
+    "ui.debug.logs_agent_target_launcher": "launcher",
     "ui.debug.logs_level_debug": "Debug",
     "ui.debug.logs_level_error": "Error",
     "ui.debug.logs_level_info": "Info",

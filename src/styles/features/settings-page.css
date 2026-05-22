@@ -36,7 +36,7 @@
 }
 
 #page-settings.active .settings-wrapper {
-    animation: settingsContentRise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: settings-content-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .settings-section {
@@ -66,7 +66,7 @@
 }
 
 #page-settings.active .settings-section {
-    animation: settingsSectionFade 0.38s cubic-bezier(0.22, 1, 0.36, 1);
+    animation: settings-section-fade 0.38s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .settings-grid .module-card,
@@ -526,7 +526,7 @@
     -webkit-backdrop-filter: none;
 }
 
-@keyframes settingsContentRise {
+@keyframes settings-content-rise {
     from {
         opacity: 0.72;
     }
@@ -536,7 +536,7 @@
     }
 }
 
-@keyframes settingsSectionFade {
+@keyframes settings-section-fade {
     from {
         opacity: 0.78;
         transform: translateY(6px);

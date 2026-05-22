@@ -116,6 +116,8 @@
     "ui.debug.logs_copy": "复制日志",
     "ui.debug.logs_folder_agent_disabled": "代理日志没有文件夹",
     "ui.debug.logs_folder_unavailable": "代理操作保存在启动器审计日志中",
+    "ui.debug.logs_agent_result_recorded": "已记录",
+    "ui.debug.logs_agent_target_launcher": "启动器",
     "ui.debug.logs_level_debug": "Debug",
     "ui.debug.logs_level_error": "Error",
     "ui.debug.logs_level_info": "Info",
