@@ -454,7 +454,7 @@ export class AgentControlSettingsRenderer {
     private _helpLink(): HTMLAnchorElement {
         const label = this._t('docs_help');
         const link = document.createElement('a');
-        link.className = 'module-action-badge right integration-help-badge agent-control-help';
+        link.className = 'module-action-badge left integration-help-badge agent-control-help';
         link.href = AGENT_CONTROL_DOCS_URL;
         link.target = '_blank';
         link.rel = 'noreferrer';

@@ -254,6 +254,8 @@
 }
 
 .module-card--agent-control .agent-control-help {
+    position: static;
+    flex: 0 0 auto;
     opacity: 0.82;
     text-decoration: none;
 }
