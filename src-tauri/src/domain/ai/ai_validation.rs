@@ -1,5 +1,7 @@
 //! API key validation helpers for cloud AI providers.
 
+use std::net::{IpAddr, Ipv4Addr, Ipv6Addr};
+
 /// Builds the outbound validation request without leaking secrets into the URL.
 fn build_validation_request(
     client: &reqwest::Client,
@@ -17,6 +19,7 @@ fn build_validation_request(
             .filter(|value| !value.is_empty())
             .unwrap_or("https://openrouter.ai/api/v1")
             .trim_end_matches('/');
+        validate_openai_compatible_base_url(base_url)?;
         let models_url = format!("{base_url}/models");
 
         // OpenAI-compatible providers expose model listing behind the same
@@ -32,6 +35,60 @@ fn build_validation_request(
             request_id: None,
             message: e.to_string(),
         })
+}
+
+fn validate_openai_compatible_base_url(base_url: &str) -> Result<(), crate::errors::AppError> {
+    let parsed = reqwest::Url::parse(base_url).map_err(|_| {
+        crate::errors::AppError::Validation("Unsupported validation base URL".to_string())
+    })?;
+
+    if parsed.scheme() != "https" || parsed.host_str().is_none() {
+        return Err(crate::errors::AppError::Validation(
+            "Unsupported validation base URL".to_string(),
+        ));
+    }
+
+    let Some(host) = parsed.host_str() else {
+        return Err(crate::errors::AppError::Validation(
+            "Unsupported validation base URL".to_string(),
+        ));
+    };
+
+    let normalized_host = host.trim_end_matches('.').to_ascii_lowercase();
+    if normalized_host == "localhost" {
+        return Err(crate::errors::AppError::Validation(
+            "Unsupported validation base URL".to_string(),
+        ));
+    }
+
+    if let Ok(ip) = normalized_host.parse::<IpAddr>()
+        && is_restricted_ip(ip)
+    {
+        return Err(crate::errors::AppError::Validation(
+            "Unsupported validation base URL".to_string(),
+        ));
+    }
+
+    Ok(())
+}
+
+const fn is_restricted_ip(ip: IpAddr) -> bool {
+    match ip {
+        IpAddr::V4(ip) => is_restricted_ipv4(ip),
+        IpAddr::V6(ip) => is_restricted_ipv6(ip),
+    }
+}
+
+const fn is_restricted_ipv4(ip: Ipv4Addr) -> bool {
+    ip.is_private()
+        || ip.is_loopback()
+        || ip.is_link_local()
+        || ip.is_broadcast()
+        || ip.is_unspecified()
+}
+
+const fn is_restricted_ipv6(ip: Ipv6Addr) -> bool {
+    ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local() || ip.is_unicast_link_local()
 }
 
 /// Validates an API key against OpenRouter (or generic OpenAI endpoint).
@@ -192,5 +249,27 @@ mod tests {
                 .expect("authorization header should exist"),
             "Bearer gsk-test"
         );
+    }
+
+    #[test]
+    fn build_validation_request_rejects_unsafe_base_urls() {
+        let client = reqwest::Client::new();
+        for base_url in [
+            "http://api.groq.com/openai/v1",
+            "https://localhost/v1",
+            "https://127.0.0.1/v1",
+            "https://10.0.0.2/v1",
+            "file:///tmp/models",
+            "not-a-url",
+        ] {
+            let error =
+                build_validation_request(&client, "custom-text", "sk-test-key", Some(base_url))
+                    .expect_err("unsafe validation URL should be rejected");
+            assert!(
+                error
+                    .to_string()
+                    .contains("Unsupported validation base URL")
+            );
+        }
     }
 }

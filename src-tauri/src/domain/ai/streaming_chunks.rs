@@ -213,8 +213,8 @@ fn handle_stream_json_line(
                 .and_then(provider_response::extract_stream_text)
         })
         .or_else(|| {
-            json.get("message")
-                .and_then(|message| message.get("content"))
+            json.get("delta")
+                .and_then(|delta| delta.get("content"))
                 .and_then(provider_response::extract_stream_text)
         })
         .or_else(|| {
@@ -366,5 +366,17 @@ mod tests {
             events.get(1),
             Some(StreamEvent::ChatChunk { content, .. }) if content == " world"
         ));
+    }
+
+    #[test]
+    fn process_stream_chunk_supports_top_level_delta_content() {
+        let sink = TestSink::default();
+        let mut state = StreamingAccumulator::new();
+        let chunk = b"data: {\"delta\":{\"content\":\"delta text\"}}\n\n";
+
+        let result = process_stream_chunk(chunk, "msg-1", &sink, &mut state);
+
+        assert!(matches!(result, StreamChunkResult::Continue));
+        assert_eq!(state.full_content, "delta text");
     }
 }

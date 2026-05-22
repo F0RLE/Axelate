@@ -371,19 +371,91 @@ fn timeout_error(request_id: String, timeout: std::time::Duration) -> crate::err
     }
 }
 
-/// Counts tokens in text using tiktoken
+/// Counts tokens in text using tiktoken when the model maps to a known OpenAI tokenizer.
 pub fn count_tokens(text: &str, model: Option<&str>) -> Result<usize, String> {
-    use tiktoken_rs::{bpe_for_model, cl100k_base};
+    use tiktoken_rs::cl100k_base;
 
-    if let Some(model_name) = model
-        && let Ok(bpe) = bpe_for_model(model_name)
-    {
-        return Ok(bpe.encode_with_special_tokens(text).len());
+    if let Some(model_name) = model {
+        if let Some(count) = count_with_known_tiktoken_model(text, model_name) {
+            return Ok(count);
+        }
+
+        if should_use_portable_token_estimate(model_name) {
+            return Ok(estimate_portable_token_count(text));
+        }
     }
 
     let bpe = cl100k_base().map_err(|e| format!("Failed to load cl100k_base tokenizer: {e}"))?;
 
     Ok(bpe.encode_with_special_tokens(text).len())
+}
+
+fn count_with_known_tiktoken_model(text: &str, model_name: &str) -> Option<usize> {
+    use tiktoken_rs::bpe_for_model;
+
+    if let Ok(bpe) = bpe_for_model(model_name) {
+        return Some(bpe.encode_with_special_tokens(text).len());
+    }
+
+    let (_, model_id) = model_name.rsplit_once('/')?;
+    if model_id == model_name {
+        return None;
+    }
+
+    bpe_for_model(model_id)
+        .ok()
+        .map(|bpe| bpe.encode_with_special_tokens(text).len())
+}
+
+fn should_use_portable_token_estimate(model_name: &str) -> bool {
+    let normalized = model_name.to_ascii_lowercase();
+    [
+        "llama",
+        "mistral",
+        "mixtral",
+        "qwen",
+        "deepseek",
+        "gemma",
+        "phi",
+        "yi-",
+        "codellama",
+        "starcoder",
+        "local",
+        "gguf",
+        "ollama",
+        "llamacpp",
+        "llama.cpp",
+        "anthropic/",
+        "claude",
+        "google/",
+        "gemini",
+        "x-ai/",
+        "grok",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
+}
+
+fn estimate_portable_token_count(text: &str) -> usize {
+    let trimmed = text.trim();
+    if trimmed.is_empty() {
+        return 0;
+    }
+
+    let char_count = trimmed.chars().count();
+    let non_ascii_count = trimmed
+        .chars()
+        .filter(|character| !character.is_ascii())
+        .count();
+    let word_count = trimmed.split_whitespace().count();
+    let word_estimate = word_count + word_count.div_ceil(3);
+    let char_estimate = if non_ascii_count.saturating_mul(2) >= char_count {
+        char_count
+    } else {
+        char_count.div_ceil(3)
+    };
+
+    word_estimate.max(char_estimate).max(1)
 }
 
 /// Dispatches an image generation request to the appropriate provider (local engine).
@@ -456,13 +528,42 @@ mod tests {
 
     #[test]
     fn test_count_tokens_with_model_fallback() {
-        // Unknown model should fall back to cl100k_base without error
+        // Unknown model should fall back without error
         let count = count_tokens(
             "Testing an unknown model tokenizer",
             Some("unknown-model-xyz"),
         )
-        .expect("Should fall back to cl100k_base");
+        .expect("Should fall back to a portable estimate");
         assert!(count > 0);
+    }
+
+    #[test]
+    fn count_tokens_resolves_openrouter_openai_model_ids() {
+        let direct = count_tokens("Hello world", Some("gpt-4.1")).expect("direct model count");
+        let namespaced =
+            count_tokens("Hello world", Some("openai/gpt-4.1")).expect("namespaced model count");
+
+        assert_eq!(direct, namespaced);
+    }
+
+    #[test]
+    fn count_tokens_uses_portable_estimate_for_local_models() {
+        let count = count_tokens(
+            "The quick brown fox jumps over the lazy dog",
+            Some("meta-llama/llama-3.1-8b-instruct"),
+        )
+        .expect("local model count");
+
+        assert_eq!(count, 15);
+    }
+
+    #[test]
+    fn portable_token_estimate_handles_cjk_without_whitespace() {
+        let text = "这是一个没有空格的中文句子";
+        let count =
+            count_tokens(text, Some("llamacpp/local-model")).expect("portable CJK estimate");
+
+        assert_eq!(count, text.chars().count());
     }
 
     #[test]

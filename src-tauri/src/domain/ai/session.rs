@@ -9,6 +9,7 @@ use std::sync::{
     Arc, Mutex,
     atomic::{AtomicBool, Ordering},
 };
+use std::time::Duration;
 use tokio::sync::Notify;
 
 use super::session_context::{
@@ -17,6 +18,10 @@ use super::session_context::{
 use super::types::{ChatMessage, ChatReply, ChatSession};
 
 use super::session_persistence::SessionPersistence;
+
+const SAVE_DEBOUNCE_DELAY: Duration = Duration::from_secs(5);
+const SAVE_RETRY_INITIAL_DELAY: Duration = Duration::from_secs(5);
+const SAVE_RETRY_MAX_DELAY: Duration = Duration::from_mins(5);
 
 /// Manages persistence and retrieval of chat sessions.
 ///
@@ -87,6 +92,7 @@ impl ChatSessionManager {
 
         tauri::async_runtime::spawn(async move {
             tracing::debug!("Background chat session saver started.");
+            let mut save_failure_count = 0u32;
             loop {
                 save_notify.notified().await;
                 if !persistence_available.load(Ordering::Relaxed) {
@@ -94,7 +100,7 @@ impl ChatSessionManager {
                     continue;
                 }
 
-                tokio::time::sleep(std::time::Duration::from_secs(5)).await;
+                tokio::time::sleep(SAVE_DEBOUNCE_DELAY).await;
                 if dirty.swap(false, Ordering::AcqRel) {
                     let save_lock = Arc::clone(&save_lock);
                     let sessions = Arc::clone(&sessions);
@@ -105,17 +111,30 @@ impl ChatSessionManager {
                     .await
                     {
                         Ok(Ok(())) => {
+                            save_failure_count = 0;
                             tracing::debug!("Chat history saved to disk.");
                         }
                         Ok(Err(error)) => {
+                            save_failure_count = save_failure_count.saturating_add(1);
                             dirty.store(true, Ordering::Release);
+                            let retry_delay = save_retry_delay(save_failure_count);
+                            tracing::error!(
+                                "Failed to save chat history: {error}; retrying in {}s",
+                                retry_delay.as_secs()
+                            );
+                            tokio::time::sleep(retry_delay).await;
                             save_notify.notify_one();
-                            tracing::error!("Failed to save chat history: {}", error);
                         }
                         Err(error) => {
+                            save_failure_count = save_failure_count.saturating_add(1);
                             dirty.store(true, Ordering::Release);
+                            let retry_delay = save_retry_delay(save_failure_count);
+                            tracing::error!(
+                                "Saver task join error: {error}; retrying in {}s",
+                                retry_delay.as_secs()
+                            );
+                            tokio::time::sleep(retry_delay).await;
                             save_notify.notify_one();
-                            tracing::error!("Saver task join error: {}", error);
                         }
                     }
                 }
@@ -315,6 +334,13 @@ impl ChatSessionManager {
     }
 }
 
+fn save_retry_delay(failure_count: u32) -> Duration {
+    let exponent = failure_count.saturating_sub(1).min(6);
+    SAVE_RETRY_INITIAL_DELAY
+        .saturating_mul(2u32.saturating_pow(exponent))
+        .min(SAVE_RETRY_MAX_DELAY)
+}
+
 impl ChatSessionManager {
     fn flush_sessions_locked(
         save_lock: &Mutex<()>,
@@ -362,6 +388,16 @@ mod tests {
     fn test_chat_session_default_timestamp_is_nonzero() {
         let ts = ChatSessionManager::current_timestamp();
         assert!(ts > 0.0, "Timestamp should be a positive UNIX epoch value");
+    }
+
+    #[test]
+    fn save_retry_delay_uses_capped_exponential_backoff() {
+        assert_eq!(save_retry_delay(0), Duration::from_secs(5));
+        assert_eq!(save_retry_delay(1), Duration::from_secs(5));
+        assert_eq!(save_retry_delay(2), Duration::from_secs(10));
+        assert_eq!(save_retry_delay(3), Duration::from_secs(20));
+        assert_eq!(save_retry_delay(7), Duration::from_mins(5));
+        assert_eq!(save_retry_delay(u32::MAX), Duration::from_mins(5));
     }
 
     #[test]
