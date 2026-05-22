@@ -448,6 +448,11 @@ async fn wait_for_module_stop(
         tokio::time::sleep(std::time::Duration::from_millis(250)).await;
     }
 
+    if !controller.is_running(module_id, module_path).await {
+        tracing::info!("Module {module_id} terminated after final wait during {action}");
+        return Ok(());
+    }
+
     Err(AppError::Internal {
         request_id: None,
         message: format!("Module {module_id} failed to terminate during {action}"),

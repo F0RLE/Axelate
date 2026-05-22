@@ -310,6 +310,22 @@ impl AgentControlService {
         Ok(token)
     }
 
+    /// Reads a one-time plaintext token without consuming it.
+    pub async fn pending_token(&self, id: &str) -> Result<String, AppError> {
+        let Some(token) = self.pending_tokens.lock().await.get(id).cloned() else {
+            return Err(AppError::Validation(
+                "No one-time token is available for this profile; rotate it to create a new token"
+                    .to_string(),
+            ));
+        };
+        Ok(token)
+    }
+
+    /// Discards a one-time plaintext token after a backend-mediated reveal succeeds.
+    pub async fn discard_pending_token(&self, id: &str) {
+        self.pending_tokens.lock().await.remove(id);
+    }
+
     /// Authenticates a bearer token against enabled, non-revoked profiles.
     pub async fn authorize_token(&self, token: &str) -> Option<AuthorizedAgent> {
         let _guard = self.lock.lock().await;
@@ -558,6 +574,25 @@ mod tests {
 
         let authorized = service.authorize_token(&token).await.expect("authorized");
         assert_eq!(authorized.name, "Codex");
+    }
+
+    #[tokio::test]
+    async fn pending_token_peek_does_not_consume_token() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service.create_profile(None, None).await.expect("profile");
+
+        let first = service
+            .pending_token(&response.profile.id)
+            .await
+            .expect("pending token");
+        let second = service
+            .take_pending_token(&response.profile.id)
+            .await
+            .expect("pending token after peek");
+
+        assert_eq!(first, second);
     }
 
     #[tokio::test]
