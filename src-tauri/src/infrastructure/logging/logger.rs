@@ -476,9 +476,7 @@ fn resolve_module_id(source: &str, message: &str) -> Option<String> {
 }
 
 fn extract_module_id_from_source(source: &str) -> Option<String> {
-    source
-        .strip_prefix("module:")
-        .map(std::string::ToString::to_string)
+    source.strip_prefix("module:").and_then(sanitize_module_id)
 }
 
 fn resolve_module_id_from_text(message: &str) -> Option<String> {
@@ -540,13 +538,16 @@ fn sanitize_module_id(raw: &str) -> Option<String> {
         return None;
     }
 
-    Some(module_id.to_string())
+    Some(module_id.to_ascii_lowercase())
 }
 
 fn infer_runtime_log_source(namespace: RuntimeLogNamespace, runtime_id: &str) -> String {
     match namespace {
         RuntimeLogNamespace::Engine => normalize_engine_id(runtime_id),
-        RuntimeLogNamespace::Module => format!("module:{runtime_id}"),
+        RuntimeLogNamespace::Module => sanitize_module_id(runtime_id).map_or_else(
+            || format!("module:{}", runtime_id.to_ascii_lowercase()),
+            |module_id| format!("module:{module_id}"),
+        ),
     }
 }
 
@@ -600,7 +601,10 @@ fn is_entry_in_console_view(entry: &LogEntry, view_id: &str) -> bool {
     }
 
     if let Some(module_id) = view_id.strip_prefix("module:") {
-        return entry.module_id.as_deref() == Some(module_id)
+        let Some(module_id) = sanitize_module_id(module_id) else {
+            return false;
+        };
+        return entry.module_id.as_deref() == Some(module_id.as_str())
             || entry.source == format!("module:{module_id}");
     }
 
@@ -850,7 +854,7 @@ mod tests {
     fn module_runtime_log_line_uses_module_source_namespace() -> Result<(), String> {
         let entry = parse_runtime_log_line(
             RuntimeLogNamespace::Module,
-            "sample-integration",
+            "Sample-Integration",
             "2026-04-24 07:00:00 [INFO] Integration started",
             0,
             0.0,

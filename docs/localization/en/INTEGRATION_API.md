@@ -43,6 +43,11 @@ External agents should follow the same rule for now. They should not scrape the
 desktop UI or read Axelate data files directly. The supported path is a
 launcher-issued token and documented `/v1` endpoints.
 
+For local development and explicit agent testing, Axelate also accepts
+`AXELATE_AGENT_API_TOKEN` as a launcher-wide bearer token when the launcher
+process is started with that environment variable. Use a high-entropy temporary
+value and do not persist it in the repository.
+
 Script integrations declare their runtime in `axelate-module.toml`.
 
 ```toml

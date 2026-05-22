@@ -93,6 +93,16 @@ fn authorization_accepts_bearer_token() {
 }
 
 #[test]
+fn authorization_accepts_explicit_agent_token() {
+    let token = "agent-token-123456789012345678901234567890";
+
+    assert!(auth::agent_api_token_matches(token, Some(token)));
+    assert!(!auth::agent_api_token_matches("wrong-token", Some(token)));
+    assert!(!auth::agent_api_token_matches("short", Some("short")));
+    assert!(!auth::agent_api_token_matches(token, None));
+}
+
+#[test]
 fn authorization_rejects_old_header_token() {
     let mut headers = HashMap::new();
     headers.insert(
