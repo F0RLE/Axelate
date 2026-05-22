@@ -227,17 +227,21 @@ export class AgentControlSettingsRenderer {
                         this._render();
                     });
                 }),
-                this._button(this._t('revoke', 'Revoke'), 'agent-control-btn', () => {
-                    void this._run(async () => {
-                        this._state = await this._service.revokeAgentProfile(profile.id);
-                        if (this._oneTimeToken?.profileId === profile.id) {
-                            this._oneTimeToken = null;
-                        }
-                        this._toast(this._t('profile_revoked', 'Profile revoked'), 'success');
-                        this._render();
-                    });
-                }),
             );
+            if (!profile.revoked) {
+                actions.append(
+                    this._button(this._t('revoke', 'Revoke'), 'agent-control-btn', () => {
+                        void this._run(async () => {
+                            this._state = await this._service.revokeAgentProfile(profile.id);
+                            if (this._oneTimeToken?.profileId === profile.id) {
+                                this._oneTimeToken = null;
+                            }
+                            this._toast(this._t('profile_revoked', 'Profile revoked'), 'success');
+                            this._render();
+                        });
+                    }),
+                );
+            }
             row.append(main, actions);
             list.append(row);
         });

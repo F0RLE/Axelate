@@ -131,4 +131,42 @@ describe('AgentControlSettingsRenderer', () => {
             expect(service.decideAgentApproval).toHaveBeenCalledWith('approval-1', false);
         });
     });
+
+    it('keeps revoked profiles visible without offering another revoke action', async () => {
+        service.getAgentControlState = vi.fn().mockResolvedValue(
+            state({
+                profiles: [
+                    {
+                        id: 'agent-1',
+                        name: 'Trusted Local',
+                        scopes: ['observe', 'operate'],
+                        tokenPrefix: 'axl_agent_revoked',
+                        createdAt: '2026-05-22T00:00:00Z',
+                        lastSeenAt: null,
+                        revoked: true,
+                    },
+                ],
+            }),
+        );
+        const renderer = new AgentControlSettingsRenderer(
+            service as SettingsService,
+            { error: vi.fn(), warn: vi.fn() } as unknown as LoggerService,
+            { copyText },
+        );
+
+        renderer.init(context);
+        await vi.waitFor(() => {
+            expect(document.body.textContent).toContain('Revoked');
+        });
+
+        const row = document.querySelector('.agent-control-row');
+        if (row === null) {
+            throw new Error('Expected revoked profile row to render');
+        }
+        expect(row.textContent).toContain('Rotate');
+        const buttons = Array.from(row.querySelectorAll('button')).map((button) =>
+            button.textContent.trim(),
+        );
+        expect(buttons).toEqual(['Rotate']);
+    });
 });
