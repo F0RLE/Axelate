@@ -22,7 +22,8 @@ export class AIBridgeProviderPolicy {
     public constructor(private readonly _getCatalog?: ProviderCatalogGetter) {}
 
     public isCloudProvider(providerId: string): boolean {
-        return this._catalogProvider(providerId)?.providerPolicy?.isCloudProvider ?? false;
+        const policy = this._catalogProvider(providerId)?.providerPolicy;
+        return policy?.isCloudProvider ?? true;
     }
 
     public isImageProvider(providerId: string): boolean {

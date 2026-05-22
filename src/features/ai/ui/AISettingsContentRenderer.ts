@@ -138,10 +138,14 @@ export class AISettingsContentRenderer {
                   'ui.settings.keys_encrypted_openrouter',
                   'Built-in cloud cards use OpenRouter.',
               );
+        const apiKeyLinkTitle = translate(
+            'ui.settings.manage_openrouter_keys_title',
+            'Manage your OpenRouter API keys',
+        );
         const apiKeyTitle = context.usesCustomProviderKey
             ? `<span>${apiKeyLabel}</span>`
             : `
-                                    <a href="#" id="${appId}-api-link" class="api-key-link" title="Manage your OpenRouter API Keys">
+                                    <a href="#" id="${appId}-api-link" class="api-key-link" title="${apiKeyLinkTitle}">
                                         <span>${apiKeyLabel}</span>
                                     </a>
                                 `;

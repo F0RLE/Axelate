@@ -206,6 +206,41 @@ describe('AIChatTransport', () => {
             await expect(sendPromise).resolves.toEqual({ ok: true, text: 'local done' });
         });
 
+        it('should keep self-hosted local endpoints alive past the cloud timeout', async () => {
+            let resolveInvoke: (
+                response: Awaited<ReturnType<typeof mockCore.tauriProvider.invoke>>,
+            ) => void = () => {
+                throw new Error('invoke promise was not started');
+            };
+            mockCore.tauriProvider.invoke.mockImplementation((command: string) =>
+                command === 'send_chat_message'
+                    ? new Promise((resolve) => {
+                          resolveInvoke = resolve;
+                      })
+                    : Promise.resolve(true),
+            );
+
+            const sendPromise = transport.send(
+                makeRequest({
+                    provider: 'custom-text',
+                    cloud_api_base_url: 'http://127.0.0.1:8080/v1',
+                }),
+            );
+            vi.advanceTimersByTime(90_001);
+            await Promise.resolve();
+
+            expect(mockCore.tauriProvider.invoke).not.toHaveBeenCalledWith(
+                'cancel_chat_generation',
+                expect.anything(),
+            );
+
+            resolveInvoke({ ok: true, reply: { text: 'local endpoint done' } });
+            await expect(sendPromise).resolves.toEqual({
+                ok: true,
+                text: 'local endpoint done',
+            });
+        });
+
         it('should extract message from plain error objects', async () => {
             mockCore.tauriProvider.invoke.mockRejectedValue({ message: 'ipc object failed' });
 

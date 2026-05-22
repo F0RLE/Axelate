@@ -550,14 +550,15 @@ fn infer_runtime_log_source(namespace: RuntimeLogNamespace, runtime_id: &str) ->
     }
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn parse_log_timestamp(line: &str) -> Option<f64> {
     let timestamp_text = line.get(..19)?;
     chrono::NaiveDateTime::parse_from_str(timestamp_text, "%Y-%m-%d %H:%M:%S")
         .ok()
-        .and_then(|timestamp| {
+        .map(|timestamp| {
             let timestamp = chrono::Utc.from_utc_datetime(&timestamp);
-            let seconds = u32::try_from(timestamp.timestamp()).ok()?;
-            Some(f64::from(seconds) + f64::from(timestamp.timestamp_subsec_millis()) / 1000.0)
+            let seconds = timestamp.timestamp();
+            seconds as f64 + f64::from(timestamp.timestamp_subsec_millis()) / 1000.0
         })
 }
 

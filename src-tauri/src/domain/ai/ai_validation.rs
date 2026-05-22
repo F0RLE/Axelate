@@ -61,7 +61,10 @@ fn validate_openai_compatible_base_url(base_url: &str) -> Result<(), crate::erro
         ));
     }
 
-    if let Ok(ip) = normalized_host.parse::<IpAddr>()
+    let normalized_ip_host = normalized_host
+        .trim_start_matches('[')
+        .trim_end_matches(']');
+    if let Ok(ip) = normalized_ip_host.parse::<IpAddr>()
         && is_restricted_ip(ip)
     {
         return Err(crate::errors::AppError::Validation(
@@ -72,7 +75,7 @@ fn validate_openai_compatible_base_url(base_url: &str) -> Result<(), crate::erro
     Ok(())
 }
 
-const fn is_restricted_ip(ip: IpAddr) -> bool {
+fn is_restricted_ip(ip: IpAddr) -> bool {
     match ip {
         IpAddr::V4(ip) => is_restricted_ipv4(ip),
         IpAddr::V6(ip) => is_restricted_ipv6(ip),
@@ -87,8 +90,12 @@ const fn is_restricted_ipv4(ip: Ipv4Addr) -> bool {
         || ip.is_unspecified()
 }
 
-const fn is_restricted_ipv6(ip: Ipv6Addr) -> bool {
-    ip.is_loopback() || ip.is_unspecified() || ip.is_unique_local() || ip.is_unicast_link_local()
+fn is_restricted_ipv6(ip: Ipv6Addr) -> bool {
+    ip.is_loopback()
+        || ip.is_unspecified()
+        || ip.is_unique_local()
+        || ip.is_unicast_link_local()
+        || ip.to_ipv4_mapped().is_some_and(is_restricted_ipv4)
 }
 
 /// Validates an API key against OpenRouter (or generic OpenAI endpoint).
@@ -258,6 +265,8 @@ mod tests {
             "http://api.groq.com/openai/v1",
             "https://localhost/v1",
             "https://127.0.0.1/v1",
+            "https://[::ffff:127.0.0.1]/v1",
+            "https://[::ffff:10.0.0.1]/v1",
             "https://10.0.0.2/v1",
             "file:///tmp/models",
             "not-a-url",

@@ -284,6 +284,7 @@
     "ui.settings.api_key_label": "API 密钥",
     "ui.settings.api_key_label_openrouter": "OpenRouter API 密钥",
     "ui.settings.api_key_label_custom": "自定义提供商 API 密钥",
+    "ui.settings.manage_openrouter_keys_title": "管理 OpenRouter API 密钥",
     "ui.settings.api_endpoint": "API 端点",
     "ui.settings.api_endpoint_custom": "自定义",
     "ui.settings.api_endpoint_custom_desc": "其他 OpenAI 兼容 API",

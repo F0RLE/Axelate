@@ -236,6 +236,9 @@ describe('AISettingsRenderer', () => {
         expect(container.querySelectorAll('.ai-model-card')).toHaveLength(2);
         expect(container.textContent).toContain('Ctx: 128K');
         expect(container.querySelector('.ai-api-endpoint-card')).toBeNull();
+        expect(link.getAttribute('title')).toBe(
+            'ui.settings.manage_openrouter_keys_title:Manage your OpenRouter API keys',
+        );
 
         input.dispatchEvent(new FocusEvent('focus', { bubbles: true }));
         input.value = 'new-secret';

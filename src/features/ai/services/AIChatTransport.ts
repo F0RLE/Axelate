@@ -433,7 +433,54 @@ export class AIChatTransport implements IChatTransport {
 
     private _chatRequestTimeoutMs(request: IChatRequest): number {
         const baseUrl = request.cloud_api_base_url?.trim() ?? '';
-        return baseUrl.length > 0 ? CLOUD_CHAT_REQUEST_TIMEOUT_MS : LOCAL_CHAT_REQUEST_TIMEOUT_MS;
+        if (baseUrl.length === 0 || this._isLocalChatEndpoint(request)) {
+            return LOCAL_CHAT_REQUEST_TIMEOUT_MS;
+        }
+
+        return CLOUD_CHAT_REQUEST_TIMEOUT_MS;
+    }
+
+    private _isLocalChatEndpoint(request: IChatRequest): boolean {
+        const provider = request.provider.trim().toLowerCase();
+        if (['llamacpp', 'llama-cpp', 'ollama', 'sdcpp', 'comfyui'].includes(provider)) {
+            return true;
+        }
+
+        const baseUrl = request.cloud_api_base_url?.trim();
+        if (baseUrl === undefined || baseUrl === '') {
+            return true;
+        }
+
+        try {
+            const hostname = new URL(baseUrl).hostname.toLowerCase();
+            return this._isLocalHostname(hostname);
+        } catch {
+            return false;
+        }
+    }
+
+    private _isLocalHostname(hostname: string): boolean {
+        if (
+            hostname === 'localhost' ||
+            hostname === '::1' ||
+            hostname === '0.0.0.0' ||
+            hostname.endsWith('.local') ||
+            hostname.startsWith('127.')
+        ) {
+            return true;
+        }
+
+        if (hostname.startsWith('10.') || hostname.startsWith('192.168.')) {
+            return true;
+        }
+
+        const match = /^172\.(\d+)\./u.exec(hostname);
+        if (match?.[1] === undefined) {
+            return false;
+        }
+
+        const secondOctet = Number.parseInt(match[1], 10);
+        return secondOctet >= 16 && secondOctet <= 31;
     }
 
     public destroy(): void {

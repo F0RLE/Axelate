@@ -192,7 +192,6 @@ export class AIProviderManager {
     /**
      * Returns true if the provider ID represents a local engine
      * (not a cloud API provider requiring an API key).
-     * Any ID that doesn't match a known cloud provider prefix is treated as local.
      */
     private _isLocalProvider(providerId: string): boolean {
         const policy = this._getCatalogProvider(providerId)?.providerPolicy;
@@ -200,7 +199,10 @@ export class AIProviderManager {
             return !policy.isCloudProvider;
         }
 
-        return true;
+        this._tracer.error(
+            `[AIProviderManager] Missing provider policy for "${providerId}", denying startup`,
+        );
+        return false;
     }
 
     private _getPersistedModel(providerId: string): string | null {

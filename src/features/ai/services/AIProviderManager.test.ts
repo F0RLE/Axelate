@@ -38,6 +38,16 @@ const customTextProviderPolicy = {
     supportsThinking: false,
 };
 
+const localProviderPolicy = {
+    ...cloudProviderPolicy,
+    isCloudProvider: false,
+    secretService: null,
+    keyProviderId: null,
+    keyProviderUrl: null,
+    supportsInternetAccess: false,
+    supportsThinking: false,
+};
+
 // Mock catalogHelpers used internally
 vi.mock('@/features/ai/utils/catalogHelpers', () => ({
     getModelData: vi.fn(() => null),
@@ -65,6 +75,8 @@ function createMockCore(
                 ai: [
                     { id: 'gpt', capability: 'text', providerPolicy: cloudProviderPolicy },
                     { id: 'gemini', capability: 'text', providerPolicy: cloudProviderPolicy },
+                    { id: 'local', capability: 'text', providerPolicy: localProviderPolicy },
+                    { id: 'llamacpp', capability: 'text', providerPolicy: localProviderPolicy },
                     {
                         id: CUSTOM_TEXT_PROVIDER_ID,
                         capability: 'text',
@@ -436,14 +448,10 @@ describe('AIProviderManager', () => {
             expect(manager.model).toBe('catalog-best-model');
         });
 
-        it('should return null from _getPersistedModel when core is not set (L143 true branch)', async () => {
-            // No setContext() called: _getPersistedModel returns null
-            // startProvider('local') resolves with fallback model from _getDefaultModel
-            //  'local' provider: _resolveApiKey returns '' (no core), isLocal=true → proceeds
+        it('should fail closed when core is not set', async () => {
             const result = await manager.startProvider('local');
-            expect(result).toBe(true);
-            // Model comes from _getDefaultModel since _getPersistedModel returned null
-            expect(manager.model).toBe('default');
+            expect(result).toBe(false);
+            expect(manager.model).toBe('');
         });
 
         it('should ignore empty persisted local models and fall back to a non-empty default', async () => {
@@ -457,7 +465,7 @@ describe('AIProviderManager', () => {
             expect(manager.model).toBe('default');
         });
 
-        it('should treat providers without backend policy as local fallback', async () => {
+        it('should deny providers without backend policy', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
             vi.mocked(mockCore.catalog.getCatalog).mockReturnValue({ ai: [] });
             vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('');
@@ -465,12 +473,9 @@ describe('AIProviderManager', () => {
 
             const result = await manager.startProvider('gemini');
 
-            expect(result).toBe(true);
-            expect(manager.model).toBe('default');
-            expect(mockCore.aiSettings.setSelectedAIModel).toHaveBeenCalledWith(
-                'gemini',
-                'default',
-            );
+            expect(result).toBe(false);
+            expect(manager.model).toBe('');
+            expect(mockCore.aiSettings.setSelectedAIModel).not.toHaveBeenCalled();
         });
 
         it('should reflect model changes from settings without restarting the provider', async () => {
