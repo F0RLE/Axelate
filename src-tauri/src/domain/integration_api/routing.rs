@@ -16,17 +16,26 @@ use tauri::Emitter;
 use super::auth::{authorize_request, is_loopback_peer};
 use super::http::{json_error, json_response, parse_json_body, request_path, status_for_app_error};
 use super::types::{
-    AgentLauncherStateResponse, AgentModelSummary, AgentModuleSummary, AgentProviderSummary,
-    AuthorizedClient, HttpRequest, HttpResponse, ImageApiResponse, IntegrationImageRequest,
-    IntegrationModuleStageRequest, IntegrationTextRequest, ModuleContextApiResponse,
-    ModuleStageChangedEvent, TextApiResponse,
+    AgentLauncherStateResponse, AgentLogsResponse, AgentModelSummary, AgentModuleSummary,
+    AgentProviderSummary, AuthorizedClient, HttpRequest, HttpResponse, ImageApiResponse,
+    IntegrationImageRequest, IntegrationModuleStageRequest, IntegrationTextRequest,
+    ModuleContextApiResponse, ModuleStageChangedEvent, TextApiResponse,
 };
 use super::{LauncherHttpApiContext, SDK_API_VERSION, api_base_url};
 
+const AGENT_LOGS_DEFAULT_LIMIT: usize = 200;
+const AGENT_LOGS_MAX_LIMIT: usize = 1000;
 const CUSTOM_TEXT_PROVIDER_ID: &str = "custom-text";
 const CUSTOM_IMAGE_PROVIDER_ID: &str = "custom-image";
 const CUSTOM_TEXT_BACKEND_PROVIDER_ID: &str = "gpt";
 const CUSTOM_IMAGE_BACKEND_PROVIDER_ID: &str = "gpt-image";
+
+#[derive(Debug, Clone, PartialEq)]
+pub(super) struct AgentLogsQuery {
+    pub view_id: Option<String>,
+    pub since: f64,
+    pub limit: usize,
+}
 
 pub(super) async fn dispatch_http_request(
     request: HttpRequest,
@@ -68,6 +77,10 @@ async fn route_authorized_request(
         ("GET", ["v1", "agent", "state"]) => {
             ensure_launcher_client(client)?;
             handle_agent_state_request(&context).await
+        }
+        ("GET", ["v1", "agent", "logs"]) => {
+            ensure_launcher_client(client)?;
+            handle_agent_logs_request(request)
         }
         ("GET", ["v1", "modules"]) => {
             let modules =
@@ -120,6 +133,85 @@ async fn route_authorized_request(
         ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context, client).await,
         _ => Ok(json_error(404, "Unknown launcher API route")),
     }
+}
+
+fn handle_agent_logs_request(request: &HttpRequest) -> Result<HttpResponse, AppError> {
+    let query = parse_agent_logs_query(&request.path)?;
+    let logs = match query.view_id.as_deref() {
+        Some(view_id) => {
+            crate::api::system::logs::get_console_logs(view_id.to_string(), query.since)?
+        }
+        None => crate::api::system::logs::get_logs(query.since)?,
+    };
+    let skip = logs.len().saturating_sub(query.limit);
+    let logs = logs.into_iter().skip(skip).collect::<Vec<_>>();
+
+    Ok(json_response(
+        200,
+        json!(AgentLogsResponse {
+            ok: true,
+            api_version: SDK_API_VERSION,
+            view_id: query.view_id,
+            since: query.since,
+            limit: query.limit,
+            logs,
+        }),
+    ))
+}
+
+pub(super) fn parse_agent_logs_query(path: &str) -> Result<AgentLogsQuery, AppError> {
+    let mut result = AgentLogsQuery {
+        view_id: None,
+        since: 0.0,
+        limit: AGENT_LOGS_DEFAULT_LIMIT,
+    };
+    let query = path.split_once('?').map_or("", |(_, query)| query);
+
+    for pair in query.split('&').filter(|pair| !pair.trim().is_empty()) {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        match key.trim() {
+            "viewId" | "view_id" => {
+                result.view_id = Some(value.trim().to_string()).filter(|value| !value.is_empty());
+            }
+            "since" => {
+                result.since = parse_non_negative_f64("since", value)?;
+            }
+            "limit" => {
+                result.limit = parse_agent_logs_limit(value)?;
+            }
+            _ => {}
+        }
+    }
+
+    Ok(result)
+}
+
+fn parse_non_negative_f64(name: &str, value: &str) -> Result<f64, AppError> {
+    let parsed = value
+        .trim()
+        .parse::<f64>()
+        .map_err(|error| AppError::Validation(format!("Invalid {name}: {error}")))?;
+    if parsed.is_finite() && parsed >= 0.0 {
+        Ok(parsed)
+    } else {
+        Err(AppError::Validation(format!(
+            "Invalid {name}: expected a non-negative finite number"
+        )))
+    }
+}
+
+fn parse_agent_logs_limit(value: &str) -> Result<usize, AppError> {
+    let parsed = value
+        .trim()
+        .parse::<usize>()
+        .map_err(|error| AppError::Validation(format!("Invalid limit: {error}")))?;
+    if parsed == 0 {
+        return Err(AppError::Validation(
+            "Invalid limit: expected a positive number".to_string(),
+        ));
+    }
+
+    Ok(parsed.min(AGENT_LOGS_MAX_LIMIT))
 }
 
 async fn handle_agent_state_request(

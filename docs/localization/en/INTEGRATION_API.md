@@ -215,6 +215,14 @@ Returns a sanitized launcher snapshot:
 
 Module-scoped integration tokens cannot call this route.
 
+`GET /v1/agent/logs?viewId=engine:llama-cpp&since=0&limit=200`
+
+Returns recent frontend-facing console logs from memory. `viewId` is optional;
+omit it to read the combined console stream. `limit` defaults to 200 and is
+capped at 1000.
+
+Module-scoped integration tokens cannot call this route.
+
 This is still not a full agent control plane.
 
 The planned Agent Control layer should add:

@@ -7,9 +7,9 @@ use super::http::{
 };
 use super::routing::{
     agent_provider_summary, backend_provider_id, ensure_launcher_client, ensure_module_route_owner,
-    merge_json_settings, model_api_id, modules_visible_to_client, parse_module_action,
-    resolve_session_id, selected_module_from_api_provider, selected_module_from_catalog_item,
-    tier_rank,
+    merge_json_settings, model_api_id, modules_visible_to_client, parse_agent_logs_query,
+    parse_module_action, resolve_session_id, selected_module_from_api_provider,
+    selected_module_from_catalog_item, tier_rank,
 };
 use super::types::{AuthorizedClient, IntegrationTextRequest, ModuleContextApiResponse};
 use crate::domain::modules::controller::ModuleAction;
@@ -136,6 +136,27 @@ fn launcher_wide_agent_state_requires_launcher_client() {
         ensure_launcher_client(&AuthorizedClient::Module("sample-module".to_string())),
         Err(AppError::PermissionDenied(_))
     ));
+}
+
+#[test]
+fn agent_logs_query_defaults_and_clamps_limit() {
+    let defaults = parse_agent_logs_query("/v1/agent/logs").expect("defaults");
+    assert_eq!(defaults.view_id, None);
+    assert!(defaults.since.abs() < f64::EPSILON);
+    assert_eq!(defaults.limit, 200);
+
+    let parsed = parse_agent_logs_query("/v1/agent/logs?viewId=engine:sdcpp&since=12.5&limit=5000")
+        .expect("query");
+    assert_eq!(parsed.view_id.as_deref(), Some("engine:sdcpp"));
+    assert!((parsed.since - 12.5).abs() < f64::EPSILON);
+    assert_eq!(parsed.limit, 1000);
+}
+
+#[test]
+fn agent_logs_query_rejects_invalid_since_and_limit() {
+    assert!(parse_agent_logs_query("/v1/agent/logs?since=-1").is_err());
+    assert!(parse_agent_logs_query("/v1/agent/logs?since=inf").is_err());
+    assert!(parse_agent_logs_query("/v1/agent/logs?limit=0").is_err());
 }
 
 #[test]

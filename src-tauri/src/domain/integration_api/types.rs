@@ -4,6 +4,7 @@ use crate::domain::ai::types::{
     ChatMessage, ChatResponse, ImageGenerationResponse, WebSearchOptions,
 };
 use crate::domain::engine::types::EngineState;
+use crate::infrastructure::logging::LogEntry;
 use crate::models::{ModelCapabilities, SelectedModule};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -133,6 +134,17 @@ pub(super) struct AgentLauncherStateResponse {
     pub modules: Vec<AgentModuleSummary>,
     pub providers: Vec<AgentProviderSummary>,
     pub engine_state: EngineState,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentLogsResponse {
+    pub ok: bool,
+    pub api_version: &'static str,
+    pub view_id: Option<String>,
+    pub since: f64,
+    pub limit: usize,
+    pub logs: Vec<LogEntry>,
 }
 
 #[derive(Debug, Serialize)]
