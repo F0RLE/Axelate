@@ -310,22 +310,6 @@ impl AgentControlService {
         Ok(token)
     }
 
-    /// Reads a one-time plaintext token without consuming it.
-    pub async fn pending_token(&self, id: &str) -> Result<String, AppError> {
-        let Some(token) = self.pending_tokens.lock().await.get(id).cloned() else {
-            return Err(AppError::Validation(
-                "No one-time token is available for this profile; rotate it to create a new token"
-                    .to_string(),
-            ));
-        };
-        Ok(token)
-    }
-
-    /// Discards a one-time plaintext token after a backend-mediated reveal succeeds.
-    pub async fn discard_pending_token(&self, id: &str) {
-        self.pending_tokens.lock().await.remove(id);
-    }
-
     /// Authenticates a bearer token against enabled, non-revoked profiles.
     pub async fn authorize_token(&self, token: &str) -> Option<AuthorizedAgent> {
         let _guard = self.lock.lock().await;
@@ -577,22 +561,42 @@ mod tests {
     }
 
     #[tokio::test]
-    async fn pending_token_peek_does_not_consume_token() {
+    async fn take_pending_token_consumes_token() {
         let _guard = TEST_LOCK.lock().await;
         reset_store().await;
         let service = service();
         let response = service.create_profile(None, None).await.expect("profile");
 
         let first = service
-            .pending_token(&response.profile.id)
-            .await
-            .expect("pending token");
-        let second = service
             .take_pending_token(&response.profile.id)
             .await
-            .expect("pending token after peek");
+            .expect("pending token");
+        assert!(first.starts_with("axl_agent_"));
+        assert!(
+            service
+                .take_pending_token(&response.profile.id)
+                .await
+                .is_err()
+        );
+    }
 
-        assert_eq!(first, second);
+    #[tokio::test]
+    async fn rotated_token_replaces_previous_pending_token() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service.create_profile(None, None).await.expect("profile");
+        let rotated = service
+            .rotate_profile(&response.profile.id)
+            .await
+            .expect("rotated profile");
+
+        assert_eq!(rotated.profile.id, response.profile.id);
+        let token = service
+            .take_pending_token(&response.profile.id)
+            .await
+            .expect("pending token");
+        assert!(service.authorize_token(&token).await.is_some());
     }
 
     #[tokio::test]

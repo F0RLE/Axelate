@@ -59,14 +59,13 @@ pub async fn copy_agent_profile_token(
     service: tauri::State<'_, AgentControlService>,
     id: String,
 ) -> Result<(), AppError> {
-    let token = service.pending_token(&id).await?;
+    let token = service.take_pending_token(&id).await?;
     app.clipboard()
         .write_text(token)
         .map_err(|error| AppError::External {
             message: format!("Failed to copy Agent Control token: {error}"),
             request_id: None,
         })?;
-    service.discard_pending_token(&id).await;
     Ok(())
 }
 
