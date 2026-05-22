@@ -45,7 +45,7 @@ mod tests;
 
 // Re-export API modules to match the flat structure expected by collect_commands!
 use api::{
-    ai, engine,
+    agent_control, ai, engine,
     modules::{self, downloader},
     secure,
     settings::{self, theme, translations, ui_state, window_settings},
@@ -98,6 +98,13 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
         .semantic_types(semantic_types)
         .commands(collect_commands![
             health::get_health,
+            agent_control::get_agent_control_state,
+            agent_control::set_agent_control_enabled,
+            agent_control::create_agent_profile,
+            agent_control::rotate_agent_profile,
+            agent_control::revoke_agent_profile,
+            agent_control::decide_agent_approval,
+            agent_control::create_agent_approval_request,
             config::get_config,
             config::get_catalog_snapshot,
             settings::get_settings,
@@ -250,8 +257,11 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     let settings_service = SettingsService::new(json_store.clone());
     let ui_state_service = UiStateService::new(json_store.clone());
     let window_settings_service = WindowSettingsService::new(json_store.clone());
+    let agent_control_service =
+        crate::domain::agent_control::AgentControlService::new(json_store.clone());
     let settings_service_for_api = settings_service.clone();
     let ui_state_service_for_api = ui_state_service.clone();
+    let agent_control_service_for_api = agent_control_service.clone();
 
     let config_repo = crate::infrastructure::config::config_repository::FileConfigRepository::new(
         app.handle().clone(),
@@ -265,6 +275,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
     app.manage(settings_service);
     app.manage(ui_state_service);
     app.manage(window_settings_service);
+    app.manage(agent_control_service);
     app.manage(std::sync::Arc::clone(&config_service));
     app.manage(crate::domain::modules::downloader::DownloaderService::new());
     app.manage(crate::domain::modules::settings_ui_protocol::ModuleSettingsSessionStore::default());
@@ -312,6 +323,7 @@ fn setup_dependencies(app: &tauri::App) -> Result<(), Box<dyn std::error::Error>
             std::sync::Arc::clone(&image_generation_state),
             settings_service_for_api,
             ui_state_service_for_api,
+            agent_control_service_for_api,
         ),
     )?;
     tracing::debug!(

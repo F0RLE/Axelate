@@ -1,5 +1,6 @@
 //! Route dispatch and request handlers for the local integration API.
 
+use crate::domain::agent_control::{AgentApprovalRequest, AgentScope};
 use crate::domain::ai::ai_service;
 use crate::domain::ai::types::{
     ChatMessage, ChatRequest, ImageGenerationRequest, WebSearchOptions,
@@ -15,13 +16,14 @@ use std::collections::HashMap;
 use std::net::SocketAddr;
 use tauri::Emitter;
 
-use super::auth::{authorize_request, is_loopback_peer};
+use super::auth::{authorize_request_with_agent_profiles, is_loopback_peer};
 use super::http::{json_error, json_response, parse_json_body, request_path, status_for_app_error};
 use super::types::{
     AgentLauncherStateResponse, AgentLogsResponse, AgentModelSummary, AgentModuleSummary,
-    AgentProviderSummary, AuthorizedClient, HttpRequest, HttpResponse, ImageApiResponse,
-    IntegrationImageRequest, IntegrationModuleStageRequest, IntegrationTextRequest,
-    ModuleContextApiResponse, ModuleStageChangedEvent, TextApiResponse,
+    AgentOpenPageEvent, AgentProviderSummary, AuthorizedClient, HttpRequest, HttpResponse,
+    ImageApiResponse, IntegrationAgentApprovalRequest, IntegrationImageRequest,
+    IntegrationModuleStageRequest, IntegrationOpenPageRequest, IntegrationSelectModuleRequest,
+    IntegrationTextRequest, ModuleContextApiResponse, ModuleStageChangedEvent, TextApiResponse,
 };
 use super::{LauncherHttpApiContext, SDK_API_VERSION, api_base_url};
 
@@ -53,7 +55,10 @@ pub(super) async fn dispatch_http_request(
         return json_response(200, json!({ "ok": true, "service": "axelate-launcher" }));
     }
 
-    let Some(client) = authorize_request(&request.headers) else {
+    let Some(client) =
+        authorize_request_with_agent_profiles(&request.headers, &context.agent_control_service)
+            .await
+    else {
         return json_error(401, "Missing or invalid launcher API token");
     };
 
@@ -78,13 +83,57 @@ async fn route_authorized_request(
     match (request.method.as_str(), segments.as_slice()) {
         ("GET", ["v1", "agent", "state"]) => {
             ensure_launcher_client(client)?;
+            ensure_agent_scope(client, AgentScope::Observe)?;
             handle_agent_state_request(&context).await
         }
         ("GET", ["v1", "agent", "logs"]) => {
             ensure_launcher_client(client)?;
+            ensure_agent_scope(client, AgentScope::Observe)?;
             handle_agent_logs_request(request)
         }
+        ("GET", ["v1", "agent", "approvals"]) => {
+            ensure_launcher_client(client)?;
+            ensure_agent_scope(client, AgentScope::Observe)?;
+            handle_agent_approvals_request(&context).await
+        }
+        ("POST", ["v1", "agent", "approval-requests"]) => {
+            let agent = ensure_profile_agent(client)?;
+            handle_agent_approval_request(request, &context, agent).await
+        }
+        ("POST", ["v1", "launcher", "open-page"]) => {
+            ensure_agent_scope(client, AgentScope::Operate)?;
+            let response = handle_open_page_request(request, &context).await?;
+            record_agent_audit(
+                &context,
+                client,
+                "launcher.open-page".to_string(),
+                response.page_id.clone(),
+                "success".to_string(),
+            )
+            .await;
+            Ok(json_response(
+                200,
+                json!({ "ok": true, "pageId": response.page_id }),
+            ))
+        }
+        ("POST", ["v1", "launcher", "select-module"]) => {
+            ensure_agent_scope(client, AgentScope::Operate)?;
+            let response = handle_select_module_request(request, &context).await?;
+            record_agent_audit(
+                &context,
+                client,
+                "launcher.select-module".to_string(),
+                format!("{}:{}", response.category, response.module.id),
+                "success".to_string(),
+            )
+            .await;
+            Ok(json_response(
+                200,
+                json!({ "ok": true, "category": response.category, "module": response.module }),
+            ))
+        }
         ("GET", ["v1", "modules"]) => {
+            ensure_agent_scope(client, AgentScope::Observe)?;
             let modules =
                 modules_visible_to_client(module_controller::get_all_modules().await, client);
             Ok(json_response(
@@ -94,6 +143,7 @@ async fn route_authorized_request(
         }
         ("GET", ["v1", "modules", module_id, "status"]) => {
             ensure_module_route_owner(client, module_id)?;
+            ensure_agent_scope(client, AgentScope::Observe)?;
             crate::domain::modules::downloader::validate_module_id(module_id)?;
             let status = module_controller::get_module_status(module_id).await;
             Ok(json_response(
@@ -103,30 +153,68 @@ async fn route_authorized_request(
         }
         ("GET", ["v1", "modules", module_id, "context"]) => {
             ensure_module_route_owner(client, module_id)?;
+            ensure_agent_scope(client, AgentScope::Observe)?;
             handle_module_context_request(module_id)
         }
         ("GET", ["v1", "modules", module_id, "settings"]) => {
             ensure_module_route_owner(client, module_id)?;
+            ensure_agent_scope(client, AgentScope::Configure)?;
             handle_get_module_settings_request(&context, module_id).await
         }
         ("PUT", ["v1", "modules", module_id, "settings"]) => {
             ensure_module_route_owner(client, module_id)?;
-            handle_put_module_settings_request(request, &context, module_id).await
+            ensure_agent_scope(client, AgentScope::Configure)?;
+            let response = handle_put_module_settings_request(request, &context, module_id).await?;
+            record_agent_audit(
+                &context,
+                client,
+                "module.settings.put".to_string(),
+                module_id.to_string(),
+                "success".to_string(),
+            )
+            .await;
+            Ok(response)
         }
         ("PATCH", ["v1", "modules", module_id, "settings"]) => {
             ensure_module_route_owner(client, module_id)?;
-            handle_patch_module_settings_request(request, &context, module_id).await
+            ensure_agent_scope(client, AgentScope::Configure)?;
+            let response =
+                handle_patch_module_settings_request(request, &context, module_id).await?;
+            record_agent_audit(
+                &context,
+                client,
+                "module.settings.patch".to_string(),
+                module_id.to_string(),
+                "success".to_string(),
+            )
+            .await;
+            Ok(response)
         }
         ("POST", ["v1", "modules", module_id, "stage"]) => {
             ensure_module_route_owner(client, module_id)?;
+            ensure_agent_scope(client, AgentScope::Configure)?;
             handle_module_stage_request(request, &context, module_id)
         }
         ("POST", ["v1", "modules", module_id, action]) => {
             ensure_module_route_owner(client, module_id)?;
+            ensure_agent_scope(client, AgentScope::Operate)?;
             crate::domain::modules::downloader::validate_module_id(module_id)?;
             let action = parse_module_action(action)?;
             let response =
                 module_controller::control(context.app.clone(), module_id, action).await?;
+            record_agent_audit(
+                &context,
+                client,
+                format!("module.{}", module_action_name(action)),
+                module_id.to_string(),
+                if response.success {
+                    "success"
+                } else {
+                    "failed"
+                }
+                .to_string(),
+            )
+            .await;
             if response.success && matches!(action, ModuleAction::Start | ModuleAction::Restart) {
                 sync_launcher_selected_module(&context, client, module_id).await?;
             }
@@ -135,8 +223,14 @@ async fn route_authorized_request(
                 json!({ "ok": response.success, "response": response }),
             ))
         }
-        ("POST", ["v1", "ai", "text"]) => handle_text_request(request, context, client).await,
-        ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context, client).await,
+        ("POST", ["v1", "ai", "text"]) => {
+            ensure_agent_scope(client, AgentScope::Operate)?;
+            handle_text_request(request, context, client).await
+        }
+        ("POST", ["v1", "ai", "image"]) => {
+            ensure_agent_scope(client, AgentScope::Operate)?;
+            handle_image_request(request, context, client).await
+        }
         _ => Ok(json_error(404, "Unknown launcher API route")),
     }
 }
@@ -163,6 +257,142 @@ fn handle_agent_logs_request(request: &HttpRequest) -> Result<HttpResponse, AppE
             logs,
         }),
     ))
+}
+
+async fn handle_agent_approvals_request(
+    context: &LauncherHttpApiContext,
+) -> Result<HttpResponse, AppError> {
+    let state = context
+        .agent_control_service
+        .state(api_base_url().to_string())
+        .await?;
+    Ok(json_response(
+        200,
+        json!({ "ok": true, "approvals": state.approvals }),
+    ))
+}
+
+async fn handle_agent_approval_request(
+    request: &HttpRequest,
+    context: &LauncherHttpApiContext,
+    agent: &crate::domain::agent_control::AuthorizedAgent,
+) -> Result<HttpResponse, AppError> {
+    let payload: IntegrationAgentApprovalRequest = parse_json_body(request)?;
+    if payload.action.trim().is_empty()
+        || payload.target.trim().is_empty()
+        || payload.diff.trim().is_empty()
+    {
+        return Ok(json_error(
+            400,
+            "Agent approval requests require action, target, and diff",
+        ));
+    }
+
+    let approval = context
+        .agent_control_service
+        .create_approval_request(
+            agent,
+            payload.action.trim().to_string(),
+            payload.target.trim().to_string(),
+            payload.diff.trim().to_string(),
+            payload.risk.trim().to_string(),
+        )
+        .await?;
+    record_agent_audit(
+        context,
+        &AuthorizedClient::Agent(agent.clone()),
+        "approval.request".to_string(),
+        approval.target.clone(),
+        "pending-approval".to_string(),
+    )
+    .await;
+
+    Ok(json_response(
+        202,
+        json!(AgentApprovalCreatedResponse { ok: true, approval }),
+    ))
+}
+
+#[derive(Debug, serde::Serialize)]
+#[serde(rename_all = "camelCase")]
+struct AgentApprovalCreatedResponse {
+    ok: bool,
+    approval: AgentApprovalRequest,
+}
+
+#[derive(Debug)]
+struct AgentOpenPageResponse {
+    page_id: String,
+}
+
+#[derive(Debug)]
+struct AgentSelectModuleResponse {
+    category: String,
+    module: SelectedModule,
+}
+
+async fn handle_open_page_request(
+    request: &HttpRequest,
+    context: &LauncherHttpApiContext,
+) -> Result<AgentOpenPageResponse, AppError> {
+    let payload: IntegrationOpenPageRequest = parse_json_body(request)?;
+    let page_id = payload.page_id.trim();
+    validate_agent_page_id(page_id)?;
+
+    let mut ui_state = context.ui_state_service.get_ui_state().await?;
+    ui_state.last_page = Some(page_id.to_string());
+    context.ui_state_service.save_ui_state(&ui_state).await?;
+
+    if let Err(error) = context.app.emit(
+        "agent-control:open-page",
+        AgentOpenPageEvent {
+            page_id: page_id.to_string(),
+            source: "agent-control",
+        },
+    ) {
+        tracing::warn!("Failed to emit Agent Control page open request: {error}");
+    }
+
+    Ok(AgentOpenPageResponse {
+        page_id: page_id.to_string(),
+    })
+}
+
+async fn handle_select_module_request(
+    request: &HttpRequest,
+    context: &LauncherHttpApiContext,
+) -> Result<AgentSelectModuleResponse, AppError> {
+    let payload: IntegrationSelectModuleRequest = parse_json_body(request)?;
+    let category = payload.category.trim();
+    let module_id = payload.module_id.trim();
+    validate_agent_selection_category(category)?;
+    crate::domain::modules::downloader::validate_module_id(module_id)?;
+
+    let module = match resolve_selectable_module(&context.config_service, module_id) {
+        Ok(module) => module,
+        Err(_) => resolve_runtime_selected_module(module_id).await?,
+    };
+    let mut ui_state = context.ui_state_service.get_ui_state().await?;
+    ui_state
+        .selected_modules
+        .insert(category.to_string(), module.clone());
+    context.ui_state_service.save_ui_state(&ui_state).await?;
+
+    if let Err(error) = context.app.emit(
+        "ui-state:selected-module-changed",
+        json!({
+            "category": category,
+            "module": module,
+            "source": "agent-control",
+        }),
+    ) {
+        tracing::warn!("Failed to emit Agent Control selected module change: {error}");
+    }
+
+    Ok(AgentSelectModuleResponse {
+        category: category.to_string(),
+        module,
+    })
 }
 
 pub(super) fn parse_agent_logs_query(path: &str) -> Result<AgentLogsQuery, AppError> {
@@ -421,7 +651,7 @@ pub(super) fn ensure_module_route_owner(
     module_id: &str,
 ) -> Result<(), AppError> {
     match client {
-        AuthorizedClient::Launcher => Ok(()),
+        AuthorizedClient::Launcher | AuthorizedClient::Agent(_) => Ok(()),
         AuthorizedClient::Module(owner_id) if owner_id == module_id => Ok(()),
         AuthorizedClient::Module(_) => Err(AppError::PermissionDenied(
             "Integration token cannot access another integration".to_string(),
@@ -431,10 +661,33 @@ pub(super) fn ensure_module_route_owner(
 
 pub(super) fn ensure_launcher_client(client: &AuthorizedClient) -> Result<(), AppError> {
     match client {
-        AuthorizedClient::Launcher => Ok(()),
+        AuthorizedClient::Launcher | AuthorizedClient::Agent(_) => Ok(()),
         AuthorizedClient::Module(_) => Err(AppError::PermissionDenied(
             "Integration token cannot access launcher-wide agent state".to_string(),
         )),
+    }
+}
+
+fn ensure_agent_scope(client: &AuthorizedClient, scope: AgentScope) -> Result<(), AppError> {
+    match client {
+        AuthorizedClient::Launcher | AuthorizedClient::Module(_) => Ok(()),
+        AuthorizedClient::Agent(agent) if agent.scopes.contains(&scope) => Ok(()),
+        AuthorizedClient::Agent(_) => Err(AppError::PermissionDenied(format!(
+            "Agent token is missing required scope: {scope:?}"
+        ))),
+    }
+}
+
+fn ensure_profile_agent(
+    client: &AuthorizedClient,
+) -> Result<&crate::domain::agent_control::AuthorizedAgent, AppError> {
+    match client {
+        AuthorizedClient::Agent(agent) => Ok(agent),
+        AuthorizedClient::Launcher | AuthorizedClient::Module(_) => {
+            Err(AppError::PermissionDenied(
+                "Approval requests require an agent profile token".to_string(),
+            ))
+        }
     }
 }
 
@@ -486,6 +739,46 @@ pub(super) fn parse_module_action(action: &str) -> Result<ModuleAction, AppError
         _ => Err(AppError::Validation(format!(
             "Unsupported module action: {action}"
         ))),
+    }
+}
+
+const fn module_action_name(action: ModuleAction) -> &'static str {
+    match action {
+        ModuleAction::Start => "start",
+        ModuleAction::Stop => "stop",
+        ModuleAction::Restart => "restart",
+        ModuleAction::Install => "install",
+        ModuleAction::Uninstall => "uninstall",
+        ModuleAction::Update => "update",
+    }
+}
+
+async fn record_agent_audit(
+    context: &LauncherHttpApiContext,
+    client: &AuthorizedClient,
+    action: String,
+    target: String,
+    result: String,
+) {
+    if !matches!(
+        client,
+        AuthorizedClient::Launcher | AuthorizedClient::Agent(_)
+    ) {
+        return;
+    }
+
+    if let Err(error) = context
+        .agent_control_service
+        .record_audit(
+            client.actor_id(),
+            client.actor_name(),
+            action,
+            target,
+            result,
+        )
+        .await
+    {
+        tracing::warn!("Failed to record agent audit entry: {error}");
     }
 }
 
@@ -671,6 +964,46 @@ fn resolve_selected_provider_module(
         .ok_or_else(|| AppError::Validation(format!("Unknown AI provider: {provider_id}")))
 }
 
+fn resolve_selectable_module(
+    config_service: &crate::domain::system::config_service::ConfigService,
+    module_id: &str,
+) -> Result<SelectedModule, AppError> {
+    resolve_selected_provider_module(config_service, module_id)
+}
+
+async fn resolve_runtime_selected_module(module_id: &str) -> Result<SelectedModule, AppError> {
+    module_controller::get_all_modules()
+        .await
+        .into_iter()
+        .find(|module| module.id == module_id)
+        .map(|module| selected_module_from_runtime_module(&module))
+        .ok_or_else(|| AppError::Validation(format!("Unknown selectable module: {module_id}")))
+}
+
+fn validate_agent_page_id(page_id: &str) -> Result<(), AppError> {
+    if page_id.is_empty() {
+        return Err(AppError::Validation("Page id cannot be empty".to_string()));
+    }
+    if !page_id
+        .chars()
+        .all(|character| character.is_ascii_alphanumeric() || character == '-' || character == '_')
+    {
+        return Err(AppError::Validation(
+            "Page id contains invalid characters".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+fn validate_agent_selection_category(category: &str) -> Result<(), AppError> {
+    match category {
+        "ai_text" | "ai_image" | "services" => Ok(()),
+        _ => Err(AppError::Validation(format!(
+            "Unsupported selected module category: {category}"
+        ))),
+    }
+}
+
 pub(super) fn selected_module_from_catalog_item(module: &ModuleItem) -> SelectedModule {
     SelectedModule {
         id: module.id.clone(),
@@ -733,7 +1066,7 @@ async fn sync_launcher_selected_module(
     client: &AuthorizedClient,
     module_id: &str,
 ) -> Result<(), AppError> {
-    if !matches!(client, AuthorizedClient::Launcher) {
+    if matches!(client, AuthorizedClient::Module(_)) {
         return Ok(());
     }
 
@@ -797,7 +1130,7 @@ pub(super) fn resolve_session_id(
 
     match client {
         AuthorizedClient::Module(module_id) => Some(format!("integration:{module_id}")),
-        AuthorizedClient::Launcher => None,
+        AuthorizedClient::Launcher | AuthorizedClient::Agent(_) => None,
     }
 }
 

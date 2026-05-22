@@ -8,6 +8,7 @@ mod http;
 mod routing;
 mod types;
 
+use crate::domain::agent_control::AgentControlService;
 use crate::domain::ai::ChatSessionManager;
 use crate::domain::ai::ImageGenerationState;
 use crate::domain::engine::manager::EngineManager;
@@ -140,6 +141,7 @@ pub struct LauncherHttpApiContext {
     image_generation_state: Arc<ImageGenerationState>,
     settings_service: SettingsService,
     ui_state_service: UiStateService,
+    agent_control_service: AgentControlService,
 }
 
 impl std::fmt::Debug for LauncherHttpApiContext {
@@ -156,6 +158,7 @@ impl std::fmt::Debug for LauncherHttpApiContext {
             )
             .field("settings_service", &"<settings service>")
             .field("ui_state_service", &"<ui state service>")
+            .field("agent_control_service", &"<agent control service>")
             .finish()
     }
 }
@@ -171,6 +174,7 @@ impl LauncherHttpApiContext {
         image_generation_state: Arc<ImageGenerationState>,
         settings_service: SettingsService,
         ui_state_service: UiStateService,
+        agent_control_service: AgentControlService,
     ) -> Self {
         Self {
             app,
@@ -180,6 +184,7 @@ impl LauncherHttpApiContext {
             image_generation_state,
             settings_service,
             ui_state_service,
+            agent_control_service,
         }
     }
 }

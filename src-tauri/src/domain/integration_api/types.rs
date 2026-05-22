@@ -1,5 +1,6 @@
 //! DTOs and internal types for the local launcher HTTP API.
 
+use crate::domain::agent_control::AuthorizedAgent;
 use crate::domain::ai::types::{
     ChatMessage, ChatResponse, ImageGenerationResponse, WebSearchOptions,
 };
@@ -43,7 +44,26 @@ pub(super) type HttpWorkerReceiver = Arc<Mutex<mpsc::Receiver<ValidatedHttpReque
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum AuthorizedClient {
     Launcher,
+    Agent(AuthorizedAgent),
     Module(String),
+}
+
+impl AuthorizedClient {
+    pub(super) fn actor_id(&self) -> String {
+        match self {
+            Self::Launcher => "launcher-env".to_string(),
+            Self::Agent(agent) => agent.id.clone(),
+            Self::Module(module_id) => format!("module:{module_id}"),
+        }
+    }
+
+    pub(super) fn actor_name(&self) -> String {
+        match self {
+            Self::Launcher => "Launcher token".to_string(),
+            Self::Agent(agent) => agent.name.clone(),
+            Self::Module(module_id) => format!("Module {module_id}"),
+        }
+    }
 }
 
 // ── Integration request DTOs ─────────────────────────────────────────────────
@@ -90,6 +110,28 @@ pub(super) struct IntegrationModuleStageRequest {
     pub label: String,
     pub details: Option<String>,
     pub progress: Option<f64>,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationAgentApprovalRequest {
+    pub action: String,
+    pub target: String,
+    pub diff: String,
+    pub risk: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationOpenPageRequest {
+    pub page_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationSelectModuleRequest {
+    pub category: String,
+    pub module_id: String,
 }
 
 // ── Integration response DTOs ────────────────────────────────────────────────
@@ -184,5 +226,12 @@ pub(super) struct ModuleStageChangedEvent {
     pub label: String,
     pub details: Option<String>,
     pub progress: Option<f64>,
+    pub source: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentOpenPageEvent {
+    pub page_id: String,
     pub source: &'static str,
 }

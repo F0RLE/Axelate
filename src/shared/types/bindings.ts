@@ -11,6 +11,20 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 export const commands = {
 	/**  Checks backend health status */
 	getHealth: () => typedError<string, AppError>(__TAURI_INVOKE("get_health")),
+	/**  Returns redacted Agent Control state. */
+	getAgentControlState: () => typedError<AgentControlState, AppError>(__TAURI_INVOKE("get_agent_control_state")),
+	/**  Enables or disables trusted local Agent Control profiles. */
+	setAgentControlEnabled: (enabled: boolean) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("set_agent_control_enabled", { enabled })),
+	/**  Creates a trusted local agent profile and returns its one-time token. */
+	createAgentProfile: (name: string | null, scopes: AgentScope[] | null) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("create_agent_profile", { name, scopes })),
+	/**  Rotates a trusted local agent token and returns the replacement token once. */
+	rotateAgentProfile: (id: string) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("rotate_agent_profile", { id })),
+	/**  Revokes a trusted local agent profile. */
+	revokeAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("revoke_agent_profile", { id })),
+	/**  Applies a user decision to a pending agent approval request. */
+	decideAgentApproval: (id: string, approved: boolean) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("decide_agent_approval", { id, approved })),
+	/**  Creates a pending approval request from the UI for tests and manual flows. */
+	createAgentApprovalRequest: (agentId: string, agentName: string, action: string, target: string, diff: string, risk: string) => typedError<AgentApprovalRequest, AppError>(__TAURI_INVOKE("create_agent_approval_request", { agentId, agentName, action, target, diff, risk })),
 	/**  Loads application configuration with module installation status */
 	getConfig: () => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("get_config")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,apiProviders:v.data.apiProviders.map(i=>({...i,models:i.models==null?i.models:i.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})),catalog:({...v.data.catalog,ai:v.data.catalog.ai.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema})),services:v.data.catalog.services.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema}))})}) } : v) as typeof v)),
 	/**  Returns a frontend-ready catalog snapshot with backend-owned installation and provider metadata. */
@@ -234,6 +248,108 @@ export const commands = {
 };
 
 /* Types */
+/**  Risky action request that must not mutate launcher state until approved. */
+export type AgentApprovalRequest = {
+	/**  Stable approval request id. */
+	id: string,
+	/**  Agent profile id. */
+	agentId: string,
+	/**  Agent display name. */
+	agentName: string,
+	/**  Requested action name. */
+	action: string,
+	/**  Target resource id or description. */
+	target: string,
+	/**  Human-readable dry-run or diff summary. */
+	diff: string,
+	/**  Risk label such as high or dangerous. */
+	risk: string,
+	/**  Current decision state. */
+	status: AgentApprovalStatus,
+	/**  Creation timestamp in RFC3339 UTC. */
+	createdAt: string,
+	/**  Decision timestamp in RFC3339 UTC. */
+	decidedAt: string | null,
+};
+
+/**  Approval state for risky agent requests. */
+export type AgentApprovalStatus =
+/**  Waiting for a user decision. */
+"pending" |
+/**  User approved the request. */
+"approved" |
+/**  User denied the request. */
+"denied";
+
+/**  Agent action audit entry. */
+export type AgentAuditEntry = {
+	/**  Stable audit entry id. */
+	id: string,
+	/**  Agent profile id or launcher-env for development tokens. */
+	actorId: string,
+	/**  Agent display name or development token label. */
+	actorName: string,
+	/**  Action name such as module.start. */
+	action: string,
+	/**  Target resource id. */
+	target: string,
+	/**  Result label such as success, denied, or pending-approval. */
+	result: string,
+	/**  Timestamp in RFC3339 UTC. */
+	createdAt: string,
+};
+
+/**  Full public Agent Control state for Settings UI. */
+export type AgentControlState = {
+	/**  Whether trusted local agent profiles are accepted by the local API. */
+	enabled: boolean,
+	/**  Local API base URL. */
+	apiBaseUrl: string,
+	/**  Known agent profiles. */
+	profiles: AgentProfile[],
+	/**  Recent audit entries. */
+	audit: AgentAuditEntry[],
+	/**  Recent approval requests. */
+	approvals: AgentApprovalRequest[],
+};
+
+/**  Public trusted local agent profile metadata. */
+export type AgentProfile = {
+	/**  Stable profile id. */
+	id: string,
+	/**  User-facing agent name. */
+	name: string,
+	/**  Granted capability scopes. */
+	scopes: AgentScope[],
+	/**  Non-secret token prefix for recognition in the UI. */
+	tokenPrefix: string,
+	/**  Creation timestamp in RFC3339 UTC. */
+	createdAt: string,
+	/**  Last successful API authentication timestamp in RFC3339 UTC. */
+	lastSeenAt: string | null,
+	/**  Whether the profile has been revoked. */
+	revoked: boolean,
+};
+
+/**  Agent profile creation response. The token is shown only once. */
+export type AgentProfileTokenResponse = {
+	/**  Public profile metadata. */
+	profile: AgentProfile,
+	/**  One-time bearer token. Store it in the calling agent, not in frontend state. */
+	token: string,
+};
+
+/**  Agent capability scope. */
+export type AgentScope =
+/**  Read launcher state, statuses, inventories, and sanitized logs. */
+"observe" |
+/**  Start, stop, restart, select, and inspect operational runtime state. */
+"operate" |
+/**  Change non-secret launcher, module, model, and provider settings. */
+"configure" |
+/**  Create integration drafts without installing or running them silently. */
+"draft-create";
+
 /**  Complete AI model definition */
 export type AiModel = {
 	/**  Model ID (moved from dict key) */

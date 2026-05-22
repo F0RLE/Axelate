@@ -58,7 +58,29 @@ pub(super) fn authorize_request(headers: &HashMap<String, String>) -> Option<Aut
         .and_then(|value| authorized_bearer_client(value))
 }
 
+pub(super) async fn authorize_request_with_agent_profiles(
+    headers: &HashMap<String, String>,
+    agent_control: &crate::domain::agent_control::AgentControlService,
+) -> Option<AuthorizedClient> {
+    if let Some(client) = authorize_request(headers) {
+        return Some(client);
+    }
+
+    let token = headers
+        .get("authorization")
+        .and_then(|value| bearer_token(value))?;
+    agent_control
+        .authorize_token(token)
+        .await
+        .map(AuthorizedClient::Agent)
+}
+
 fn authorized_bearer_client(value: &str) -> Option<AuthorizedClient> {
+    let token = bearer_token(value)?;
+    authorized_token_client(token)
+}
+
+fn bearer_token(value: &str) -> Option<&str> {
     let mut parts = value.split_whitespace();
     let scheme = parts.next()?;
     let token = parts.next()?;
@@ -66,7 +88,7 @@ fn authorized_bearer_client(value: &str) -> Option<AuthorizedClient> {
         return None;
     }
 
-    authorized_token_client(token)
+    Some(token)
 }
 
 fn authorized_token_client(token: &str) -> Option<AuthorizedClient> {

@@ -184,6 +184,10 @@ pub static FILE_ENGINE_CONFIG: LazyLock<PathBuf> =
 /// Path to UI state file (`AxelateData/User/UI/ui_state.json`)
 pub static FILE_UI_STATE: LazyLock<PathBuf> = LazyLock::new(|| UI_DIR.join("ui_state.json"));
 
+/// Path to Agent Control profiles and audit state (`AxelateData/User/Configs/agent_control.json`)
+pub static FILE_AGENT_CONTROL: LazyLock<PathBuf> =
+    LazyLock::new(|| CONFIG_DIR.join("agent_control.json"));
+
 /// Directory for Chat history (`AxelateData/User/Chat`)
 pub static CHAT_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("Chat"));
 
