@@ -201,7 +201,21 @@ Does not require authentication. Returns whether the local API server is alive.
 ### Future Agent Control
 
 The current `/v1/modules` and `/v1/ai` endpoints are enough for launcher-managed
-integrations. They are not yet a full agent control plane.
+integrations. The first launcher-wide agent endpoint is read-only and uses the
+launcher token, not a module-scoped integration token.
+
+`GET /v1/agent/state`
+
+Returns a sanitized launcher snapshot:
+
+- selected module cards
+- installed module summaries without module paths or settings
+- provider/model inventory without secrets or provider endpoints
+- current engine state
+
+Module-scoped integration tokens cannot call this route.
+
+This is still not a full agent control plane.
 
 The planned Agent Control layer should add:
 

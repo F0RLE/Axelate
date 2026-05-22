@@ -6,9 +6,10 @@ use super::http::{
     parse_json_body, read_http_request, status_for_app_error, status_text,
 };
 use super::routing::{
-    backend_provider_id, ensure_module_route_owner, merge_json_settings, model_api_id,
-    modules_visible_to_client, parse_module_action, resolve_session_id,
-    selected_module_from_api_provider, selected_module_from_catalog_item, tier_rank,
+    agent_provider_summary, backend_provider_id, ensure_launcher_client, ensure_module_route_owner,
+    merge_json_settings, model_api_id, modules_visible_to_client, parse_module_action,
+    resolve_session_id, selected_module_from_api_provider, selected_module_from_catalog_item,
+    tier_rank,
 };
 use super::types::{AuthorizedClient, IntegrationTextRequest, ModuleContextApiResponse};
 use crate::domain::modules::controller::ModuleAction;
@@ -124,6 +125,15 @@ fn authorization_maps_module_tokens_to_module_owner() {
             &AuthorizedClient::Module("sample-module".to_string()),
             "other-module"
         ),
+        Err(AppError::PermissionDenied(_))
+    ));
+}
+
+#[test]
+fn launcher_wide_agent_state_requires_launcher_client() {
+    assert!(ensure_launcher_client(&AuthorizedClient::Launcher).is_ok());
+    assert!(matches!(
+        ensure_launcher_client(&AuthorizedClient::Module("sample-module".to_string())),
         Err(AppError::PermissionDenied(_))
     ));
 }
@@ -512,6 +522,39 @@ fn selected_module_from_api_provider_maps_provider_type() {
     assert_eq!(selected_cloud.type_, "api");
     assert_eq!(selected_cloud.desc, "Cloud provider");
     assert_eq!(selected_local.type_, "local");
+}
+
+#[test]
+fn agent_provider_summary_does_not_expose_secret_or_endpoint_fields() {
+    let provider = crate::models::ApiProvider {
+        id: "custom-text".to_string(),
+        name: "Custom Text".to_string(),
+        desc_key: None,
+        description: Some("Custom provider".to_string()),
+        icon: Some("AI".to_string()),
+        provider_type: Some(ProviderType::OpenaiCompatible),
+        base_url: Some("https://api.example.test/v1".to_string()),
+        api_key_env: Some("CUSTOM_TEXT_API_KEY".to_string()),
+        models: Some(vec![model_with_api_ids()]),
+        capabilities: Some(vec!["text".to_string()]),
+        model_aliases: None,
+    };
+
+    let summary = serde_json::to_value(agent_provider_summary(&provider)).expect("summary");
+
+    assert_eq!(
+        summary.get("id").and_then(serde_json::Value::as_str),
+        Some("custom-text")
+    );
+    assert!(summary.get("baseUrl").is_none());
+    assert!(summary.get("apiKeyEnv").is_none());
+    assert_eq!(
+        summary
+            .get("models")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len),
+        Some(1)
+    );
 }
 
 #[test]

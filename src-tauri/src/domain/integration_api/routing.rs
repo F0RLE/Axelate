@@ -16,6 +16,7 @@ use tauri::Emitter;
 use super::auth::{authorize_request, is_loopback_peer};
 use super::http::{json_error, json_response, parse_json_body, request_path, status_for_app_error};
 use super::types::{
+    AgentLauncherStateResponse, AgentModelSummary, AgentModuleSummary, AgentProviderSummary,
     AuthorizedClient, HttpRequest, HttpResponse, ImageApiResponse, IntegrationImageRequest,
     IntegrationModuleStageRequest, IntegrationTextRequest, ModuleContextApiResponse,
     ModuleStageChangedEvent, TextApiResponse,
@@ -64,6 +65,10 @@ async fn route_authorized_request(
         .collect::<Vec<_>>();
 
     match (request.method.as_str(), segments.as_slice()) {
+        ("GET", ["v1", "agent", "state"]) => {
+            ensure_launcher_client(client)?;
+            handle_agent_state_request(&context).await
+        }
         ("GET", ["v1", "modules"]) => {
             let modules =
                 modules_visible_to_client(module_controller::get_all_modules().await, client);
@@ -114,6 +119,71 @@ async fn route_authorized_request(
         ("POST", ["v1", "ai", "text"]) => handle_text_request(request, context, client).await,
         ("POST", ["v1", "ai", "image"]) => handle_image_request(request, context, client).await,
         _ => Ok(json_error(404, "Unknown launcher API route")),
+    }
+}
+
+async fn handle_agent_state_request(
+    context: &LauncherHttpApiContext,
+) -> Result<HttpResponse, AppError> {
+    let config = context.config_service.load_full_config()?;
+    let ui_state = context.ui_state_service.get_ui_state().await?;
+    let modules = module_controller::get_all_modules()
+        .await
+        .into_iter()
+        .map(agent_module_summary)
+        .collect::<Vec<_>>();
+    let providers = config
+        .api_providers
+        .iter()
+        .map(agent_provider_summary)
+        .collect::<Vec<_>>();
+    let engine_state = context.engine_manager.state().await;
+
+    Ok(json_response(
+        200,
+        json!(AgentLauncherStateResponse {
+            ok: true,
+            api_version: SDK_API_VERSION,
+            selected_modules: ui_state.selected_modules,
+            modules,
+            providers,
+            engine_state,
+        }),
+    ))
+}
+
+fn agent_module_summary(module: crate::models::Module) -> AgentModuleSummary {
+    AgentModuleSummary {
+        id: module.id,
+        name: module.name,
+        category: module.category,
+        installed: module.installed,
+        enabled: module.enabled,
+        status: module.status,
+    }
+}
+
+pub(super) fn agent_provider_summary(provider: &ApiProvider) -> AgentProviderSummary {
+    AgentProviderSummary {
+        id: provider.id.clone(),
+        name: provider.name.clone(),
+        provider_type: provider
+            .provider_type
+            .as_ref()
+            .and_then(|value| serde_json::to_value(value).ok())
+            .and_then(|value| value.as_str().map(ToOwned::to_owned)),
+        capabilities: provider.capabilities.clone().unwrap_or_default(),
+        models: provider
+            .models
+            .as_deref()
+            .unwrap_or_default()
+            .iter()
+            .map(|model| AgentModelSummary {
+                id: model.id.clone(),
+                name: model.name.clone(),
+                capabilities: model.capabilities.clone(),
+            })
+            .collect(),
     }
 }
 
@@ -257,6 +327,15 @@ pub(super) fn ensure_module_route_owner(
         AuthorizedClient::Module(owner_id) if owner_id == module_id => Ok(()),
         AuthorizedClient::Module(_) => Err(AppError::PermissionDenied(
             "Integration token cannot access another integration".to_string(),
+        )),
+    }
+}
+
+pub(super) fn ensure_launcher_client(client: &AuthorizedClient) -> Result<(), AppError> {
+    match client {
+        AuthorizedClient::Launcher => Ok(()),
+        AuthorizedClient::Module(_) => Err(AppError::PermissionDenied(
+            "Integration token cannot access launcher-wide agent state".to_string(),
         )),
     }
 }

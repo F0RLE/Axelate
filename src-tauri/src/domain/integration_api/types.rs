@@ -3,6 +3,8 @@
 use crate::domain::ai::types::{
     ChatMessage, ChatResponse, ImageGenerationResponse, WebSearchOptions,
 };
+use crate::domain::engine::types::EngineState;
+use crate::models::{ModelCapabilities, SelectedModule};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpStream};
@@ -120,6 +122,46 @@ pub(super) struct ModuleContextApiResponse {
     pub module_runtime_dir: String,
     pub module_log_dir: String,
     pub http_api_base: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentLauncherStateResponse {
+    pub ok: bool,
+    pub api_version: &'static str,
+    pub selected_modules: HashMap<String, SelectedModule>,
+    pub modules: Vec<AgentModuleSummary>,
+    pub providers: Vec<AgentProviderSummary>,
+    pub engine_state: EngineState,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentModuleSummary {
+    pub id: String,
+    pub name: String,
+    pub category: String,
+    pub installed: bool,
+    pub enabled: bool,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentProviderSummary {
+    pub id: String,
+    pub name: String,
+    pub provider_type: Option<String>,
+    pub capabilities: Vec<String>,
+    pub models: Vec<AgentModelSummary>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentModelSummary {
+    pub id: String,
+    pub name: String,
+    pub capabilities: Option<ModelCapabilities>,
 }
 
 #[derive(Clone, Debug, Serialize)]
