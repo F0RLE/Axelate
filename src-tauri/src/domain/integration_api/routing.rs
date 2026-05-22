@@ -7,7 +7,9 @@ use crate::domain::ai::types::{
 use crate::domain::modules::controller::{self as module_controller, ModuleAction};
 use crate::domain::modules::paths as module_paths;
 use crate::errors::AppError;
-use crate::models::{AiModel, ApiProvider, ModelTier, ModuleItem, ProviderType, SelectedModule};
+use crate::models::{
+    AiModel, ApiProvider, ModelTier, Module, ModuleItem, ProviderType, SelectedModule,
+};
 use serde_json::json;
 use std::collections::HashMap;
 use std::net::SocketAddr;
@@ -123,7 +125,11 @@ async fn route_authorized_request(
             ensure_module_route_owner(client, module_id)?;
             crate::domain::modules::downloader::validate_module_id(module_id)?;
             let action = parse_module_action(action)?;
-            let response = module_controller::control(context.app, module_id, action).await?;
+            let response =
+                module_controller::control(context.app.clone(), module_id, action).await?;
+            if response.success && matches!(action, ModuleAction::Start | ModuleAction::Restart) {
+                sync_launcher_selected_module(&context, client, module_id).await?;
+            }
             Ok(json_response(
                 200,
                 json!({ "ok": response.success, "response": response }),
@@ -677,6 +683,18 @@ pub(super) fn selected_module_from_catalog_item(module: &ModuleItem) -> Selected
     }
 }
 
+pub(super) fn selected_module_from_runtime_module(module: &Module) -> SelectedModule {
+    SelectedModule {
+        id: module.id.clone(),
+        name: module.name.clone(),
+        name_key: None,
+        icon: module.icon.clone(),
+        type_: "local".to_string(),
+        desc_key: None,
+        desc: module.description.clone(),
+    }
+}
+
 pub(super) fn selected_module_from_api_provider(provider: &ApiProvider) -> SelectedModule {
     let type_ = match provider.provider_type {
         Some(ProviderType::Local) => "local",
@@ -694,12 +712,60 @@ pub(super) fn selected_module_from_api_provider(provider: &ApiProvider) -> Selec
     }
 }
 
+pub(super) fn selection_category_for_runtime_module(module: &Module) -> &'static str {
+    if module.category.trim().eq_ignore_ascii_case("ai") {
+        "ai_text"
+    } else {
+        "services"
+    }
+}
+
 pub(super) fn backend_provider_id(provider_id: &str) -> &str {
     match provider_id {
         CUSTOM_TEXT_PROVIDER_ID => CUSTOM_TEXT_BACKEND_PROVIDER_ID,
         CUSTOM_IMAGE_PROVIDER_ID => CUSTOM_IMAGE_BACKEND_PROVIDER_ID,
         _ => provider_id,
     }
+}
+
+async fn sync_launcher_selected_module(
+    context: &LauncherHttpApiContext,
+    client: &AuthorizedClient,
+    module_id: &str,
+) -> Result<(), AppError> {
+    if !matches!(client, AuthorizedClient::Launcher) {
+        return Ok(());
+    }
+
+    let Some(module) = module_controller::get_all_modules()
+        .await
+        .into_iter()
+        .find(|module| module.id == module_id)
+    else {
+        tracing::warn!("Started module {module_id} but could not find it for UI selection sync");
+        return Ok(());
+    };
+
+    let category = selection_category_for_runtime_module(&module);
+    let selected_module = selected_module_from_runtime_module(&module);
+    let mut state = context.ui_state_service.get_ui_state().await?;
+    state
+        .selected_modules
+        .insert(category.to_string(), selected_module.clone());
+    context.ui_state_service.save_ui_state(&state).await?;
+
+    if let Err(error) = context.app.emit(
+        "ui-state:selected-module-changed",
+        json!({
+            "category": category,
+            "module": selected_module,
+            "source": "integration-api"
+        }),
+    ) {
+        tracing::warn!("Failed to emit selected module change for {module_id}: {error}");
+    }
+
+    Ok(())
 }
 
 fn is_custom_provider_id(provider_id: &str) -> bool {

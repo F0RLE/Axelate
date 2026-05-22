@@ -133,4 +133,36 @@ describe('CoreLifecycleController', () => {
         expect(unlisten).toHaveBeenCalledTimes(1);
         expect(deps.bootstrap.tracer.info).not.toHaveBeenCalledWith('[Core] Ready.');
     });
+
+    it('applies backend selected module events to state and dashboard card', async () => {
+        type SelectedModulePayload = { category: string; module: { id: string; name: string } };
+        const selectedModuleHandlers: Array<(payload: SelectedModulePayload) => void> = [];
+        const deps = createDeps(() => false);
+        vi.mocked(deps.backendSelection.tauriProvider.listen).mockImplementationOnce(
+            (_event, callback) => {
+                selectedModuleHandlers.push(callback as (payload: SelectedModulePayload) => void);
+                return Promise.resolve(vi.fn());
+            },
+        );
+        const controller = new CoreLifecycleController(deps);
+
+        await controller.runInit();
+        const selectedModuleHandler = selectedModuleHandlers.at(0);
+        expect(selectedModuleHandler).toBeDefined();
+        selectedModuleHandler?.({
+            category: 'services',
+            module: { id: 'telegram-parser', name: 'Telegram Parser' },
+        });
+
+        expect(deps.backendSelection.stateStore.updateNestedState).toHaveBeenCalledWith(
+            'selected_modules',
+            'services',
+            { id: 'telegram-parser', name: 'Telegram Parser' },
+            false,
+        );
+        expect(deps.backendSelection.appUI.updateModuleCard).toHaveBeenCalledWith('services', {
+            id: 'telegram-parser',
+            name: 'Telegram Parser',
+        });
+    });
 });

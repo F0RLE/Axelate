@@ -9,7 +9,8 @@ use super::routing::{
     agent_provider_summary, backend_provider_id, ensure_launcher_client, ensure_module_route_owner,
     merge_json_settings, model_api_id, modules_visible_to_client, parse_agent_logs_query,
     parse_module_action, resolve_session_id, selected_module_from_api_provider,
-    selected_module_from_catalog_item, tier_rank,
+    selected_module_from_catalog_item, selected_module_from_runtime_module,
+    selection_category_for_runtime_module, tier_rank,
 };
 use super::types::{AuthorizedClient, IntegrationTextRequest, ModuleContextApiResponse};
 use crate::domain::modules::controller::ModuleAction;
@@ -553,6 +554,62 @@ fn selected_module_from_api_provider_maps_provider_type() {
     assert_eq!(selected_cloud.type_, "api");
     assert_eq!(selected_cloud.desc, "Cloud provider");
     assert_eq!(selected_local.type_, "local");
+}
+
+#[test]
+fn runtime_module_selection_maps_service_modules_to_services_card() {
+    let module = Module {
+        id: "telegram-parser".to_string(),
+        name: "Telegram Parser".to_string(),
+        description: "Reads exports".to_string(),
+        version: "1.0.0".to_string(),
+        author: "Axelate".to_string(),
+        category: "service".to_string(),
+        icon: "box".to_string(),
+        preview: None,
+        path: String::new(),
+        installed: true,
+        local: true,
+        enabled: false,
+        status: Some("running".to_string()),
+        is_deletable: true,
+        config: HashMap::new(),
+        config_schema: None,
+        settings_ui: None,
+    };
+
+    let selected = selected_module_from_runtime_module(&module);
+
+    assert_eq!(selection_category_for_runtime_module(&module), "services");
+    assert_eq!(selected.id, "telegram-parser");
+    assert_eq!(selected.name, "Telegram Parser");
+    assert_eq!(selected.type_, "local");
+    assert_eq!(selected.desc, "Reads exports");
+}
+
+#[test]
+fn runtime_module_selection_maps_ai_modules_to_text_slot() {
+    let module = Module {
+        id: "local-agent".to_string(),
+        name: "Local Agent".to_string(),
+        description: "AI module".to_string(),
+        version: "1.0.0".to_string(),
+        author: "Axelate".to_string(),
+        category: "AI".to_string(),
+        icon: "cpu".to_string(),
+        preview: None,
+        path: String::new(),
+        installed: true,
+        local: true,
+        enabled: false,
+        status: Some("running".to_string()),
+        is_deletable: true,
+        config: HashMap::new(),
+        config_schema: None,
+        settings_ui: None,
+    };
+
+    assert_eq!(selection_category_for_runtime_module(&module), "ai_text");
 }
 
 #[test]
