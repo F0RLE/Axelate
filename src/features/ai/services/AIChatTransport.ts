@@ -9,7 +9,6 @@ import type {
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { StreamChunkPayload } from '@/shared/types/bindings';
 import type { AITransportContext } from './AIBridgeContext';
-import { isCloudProviderId } from '@/shared/utils/providerSupport';
 
 type AIChatTransportLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 const STALE_REQUEST_CANCEL_TIMEOUT_MS = 750;
@@ -61,10 +60,6 @@ export class AIChatTransport implements IChatTransport {
 
     public setContext(context: AITransportContext): void {
         this._context = context;
-    }
-
-    public setCore(context: AITransportContext): void {
-        this.setContext(context);
     }
 
     public async init(): Promise<void> {
@@ -437,9 +432,8 @@ export class AIChatTransport implements IChatTransport {
     }
 
     private _chatRequestTimeoutMs(request: IChatRequest): number {
-        return isCloudProviderId(request.provider)
-            ? CLOUD_CHAT_REQUEST_TIMEOUT_MS
-            : LOCAL_CHAT_REQUEST_TIMEOUT_MS;
+        const baseUrl = request.cloud_api_base_url?.trim() ?? '';
+        return baseUrl.length > 0 ? CLOUD_CHAT_REQUEST_TIMEOUT_MS : LOCAL_CHAT_REQUEST_TIMEOUT_MS;
     }
 
     public destroy(): void {

@@ -1,0 +1,1 @@
+export const AI_BRIDGE_INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000;

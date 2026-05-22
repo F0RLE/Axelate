@@ -5,15 +5,42 @@ import {
     CUSTOM_TEXT_PROVIDER_ID,
 } from '@/shared/utils/customProviderSupport';
 
+const cloudPolicy = {
+    isCloudProvider: true,
+    isCustomProvider: false,
+    isCleanApp: false,
+    secretService: 'cloud_api_key',
+    keyProviderId: 'cloud',
+    keyProviderUrl: 'https://openrouter.ai/settings/keys',
+    usesCustomProviderKey: false,
+    showApiEndpointSelector: false,
+    showCustomModelComposer: false,
+    showModelStats: true,
+    supportsInternetAccess: true,
+    supportsThinking: true,
+    imageOnly: false,
+};
+
+const localPolicy = {
+    ...cloudPolicy,
+    isCloudProvider: false,
+    secretService: null,
+    keyProviderId: null,
+    keyProviderUrl: null,
+    supportsInternetAccess: false,
+    supportsThinking: false,
+};
+
 describe('AIBridgeProviderPolicy', () => {
     const policy = new AIBridgeProviderPolicy(() => ({
         ai: [
-            { id: 'llamacpp', capability: 'text' },
-            { id: 'sdcpp', capability: 'image' },
-            { id: 'comfyui', capability: 'image' },
-            { id: 'seedream-image', capability: 'image' },
-            { id: CUSTOM_IMAGE_PROVIDER_ID, capability: 'image' },
-            { id: CUSTOM_TEXT_PROVIDER_ID, capability: 'text' },
+            { id: 'llamacpp', capability: 'text', providerPolicy: localPolicy },
+            { id: 'sdcpp', capability: 'image', providerPolicy: localPolicy },
+            { id: 'comfyui', capability: 'image', providerPolicy: localPolicy },
+            { id: 'gemini', capability: 'text', providerPolicy: cloudPolicy },
+            { id: 'seedream-image', capability: 'image', providerPolicy: cloudPolicy },
+            { id: CUSTOM_IMAGE_PROVIDER_ID, capability: 'image', providerPolicy: cloudPolicy },
+            { id: CUSTOM_TEXT_PROVIDER_ID, capability: 'text', providerPolicy: cloudPolicy },
         ],
     }));
 
@@ -38,8 +65,8 @@ describe('AIBridgeProviderPolicy', () => {
     it('should prefer catalog capabilities for provider output type', () => {
         const catalogPolicy = new AIBridgeProviderPolicy(() => ({
             ai: [
-                { id: 'local-image-engine', capability: 'image' },
-                { id: 'local-text-engine', capability: 'text' },
+                { id: 'local-image-engine', capability: 'image', providerPolicy: localPolicy },
+                { id: 'local-text-engine', capability: 'text', providerPolicy: localPolicy },
             ],
         }));
 

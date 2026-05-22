@@ -1,31 +1,26 @@
 import { vi } from 'vitest';
 import { CatalogService } from '@/shared/services/CatalogService';
-import type { IModule } from '@/shared/types/coreTypes';
-import type { AppConfig } from '@/shared/types/bindings';
+import type { CatalogSnapshot } from '@/shared/types/bindings';
 import type { IBridge } from '@/shared/types/IBridge';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { createMockBridge } from '@/test/mocks/mockBridge';
 
-export function createMockAppConfig(overrides?: unknown): AppConfig {
+export function createMockCatalogSnapshot(overrides?: Partial<CatalogSnapshot>): CatalogSnapshot {
     return {
-        catalog: { ai: [], services: [] },
-        apiProviders: [],
-        autoStartModules: [],
-        ...(overrides as Record<string, unknown>),
-    } as unknown as AppConfig;
+        ai: [],
+        services: [],
+        stars: [],
+        ...overrides,
+    };
 }
 
 export function setupBridgeMocks(
     bridge: { isTauri: ReturnType<typeof vi.fn>; invoke: ReturnType<typeof vi.fn> },
-    config: AppConfig | null,
-    modules: IModule[] = [],
-    engineDefinitions: unknown[] = [],
+    snapshot: CatalogSnapshot | null,
 ): void {
     bridge.isTauri.mockReturnValue(true);
     bridge.invoke.mockImplementation((cmd: string) => {
-        if (cmd === 'get_config') return Promise.resolve(config);
-        if (cmd === 'get_modules') return Promise.resolve(modules);
-        if (cmd === 'get_engine_definitions') return Promise.resolve(engineDefinitions);
+        if (cmd === 'get_catalog_snapshot') return Promise.resolve(snapshot);
         return Promise.resolve(undefined);
     });
 }

@@ -1,6 +1,5 @@
 import type { IApp } from '../types/coreTypes';
 import { CategoryKey } from '../types/categoryKeys';
-import { appendCustomProviderApps } from '../utils/customProviderSupport';
 import { isAiCategory } from '../utils/moduleCategoryPolicy';
 import type { EventBus } from '../services/EventBus';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
@@ -540,8 +539,7 @@ export class AppUI {
 
     private _getCatalogApps(category: string): IApp[] {
         try {
-            const apps = this._catalogResolver(category);
-            return category === CategoryKey.AI ? appendCustomProviderApps(apps) : apps;
+            return this._catalogResolver(category);
         } catch (err: unknown) {
             this._deps.tracer.warn(
                 `[AppUI] Failed to read catalog category ${category}: ${String(err)}`,

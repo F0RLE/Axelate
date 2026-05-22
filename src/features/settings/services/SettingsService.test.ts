@@ -226,30 +226,23 @@ describe('SettingsService', () => {
     });
 
     describe('saveSecureKey', () => {
-        it('should store cloud provider keys in the shared OpenRouter slot', async () => {
-            await service.saveSecureKey('gemini', 'my-api-key');
+        it('should store keys in the backend-provided secure service slot', async () => {
+            await service.saveSecureKey('cloud_api_key', 'my-api-key');
             expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
                 service: 'cloud_api_key',
                 key: 'my-api-key',
             });
         });
 
-        it('should reject unknown provider secure key storage', async () => {
-            await expect(service.saveSecureKey('unknown-provider', 'my-api-key')).rejects.toThrow(
-                'Provider does not support frontend-managed secrets',
-            );
-            expect(tauri.invoke).not.toHaveBeenCalledWith('save_secure_key', expect.anything());
-        });
-
         it('should handle error gracefully', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
-            await expect(service.saveSecureKey('gemini', 'k')).rejects.toThrow('fail');
+            await expect(service.saveSecureKey('cloud_api_key', 'k')).rejects.toThrow('fail');
         });
     });
 
     describe('removeSecureKey', () => {
         it('should remove secure key through tauri provider helper', async () => {
-            await service.removeSecureKey('gemini');
+            await service.removeSecureKey('cloud_api_key');
 
             expect(tauri.removeSecureKey).toHaveBeenCalledWith('cloud_api_key');
             expect(tauri.invoke).not.toHaveBeenCalledWith('remove_secure_key', expect.anything());
@@ -258,7 +251,7 @@ describe('SettingsService', () => {
         it('should fall back to invoke when helper is unavailable', async () => {
             delete (tauri as unknown as { removeSecureKey?: unknown }).removeSecureKey;
 
-            await service.removeSecureKey('gemini');
+            await service.removeSecureKey('cloud_api_key');
 
             expect(tauri.invoke).toHaveBeenCalledWith('remove_secure_key', {
                 service: 'cloud_api_key',
@@ -270,7 +263,7 @@ describe('SettingsService', () => {
                 new Error('fail'),
             );
 
-            await expect(service.removeSecureKey('gemini')).rejects.toThrow('fail');
+            await expect(service.removeSecureKey('cloud_api_key')).rejects.toThrow('fail');
         });
     });
 
@@ -314,7 +307,7 @@ describe('SettingsService', () => {
         it('should return true when a stored key exists', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
-            const result = await service.hasSecureKey('gemini');
+            const result = await service.hasSecureKey('cloud_api_key');
 
             expect(result).toBe(true);
             expect(tauri.invoke).toHaveBeenCalledWith('has_secure_key', {
@@ -325,7 +318,7 @@ describe('SettingsService', () => {
         it('should return false on error', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
-            const result = await service.hasSecureKey('gemini');
+            const result = await service.hasSecureKey('cloud_api_key');
 
             expect(result).toBe(false);
         });
@@ -336,7 +329,7 @@ describe('SettingsService', () => {
             const meta = { exists: true, length: 24 };
             (tauri.getSecureKeyMeta as ReturnType<typeof vi.fn>).mockResolvedValue(meta);
 
-            const result = await service.getSecureKeyMeta('gemini');
+            const result = await service.getSecureKeyMeta('cloud_api_key');
 
             expect(result).toEqual(meta);
             expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('cloud_api_key');
@@ -347,7 +340,7 @@ describe('SettingsService', () => {
                 new Error('fail'),
             );
 
-            const result = await service.getSecureKeyMeta('gemini');
+            const result = await service.getSecureKeyMeta('cloud_api_key');
 
             expect(result).toEqual({ exists: false, length: 0 });
         });
@@ -357,7 +350,7 @@ describe('SettingsService', () => {
         it('should return the decrypted key from backend', async () => {
             (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockResolvedValue('secret');
 
-            const result = await service.getSecureKey('gemini');
+            const result = await service.getSecureKey('cloud_api_key');
 
             expect(result).toBe('secret');
             expect(tauri.getSecureKey).toHaveBeenCalledWith('cloud_api_key');
@@ -366,7 +359,7 @@ describe('SettingsService', () => {
         it('should return null on error', async () => {
             (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
-            const result = await service.getSecureKey('gemini');
+            const result = await service.getSecureKey('cloud_api_key');
 
             expect(result).toBeNull();
         });

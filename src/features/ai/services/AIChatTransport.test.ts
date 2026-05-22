@@ -31,8 +31,19 @@ function makeRequest(overrides: Partial<IChatRequest> = {}): IChatRequest {
         model: 'gemini-pro',
         messages: [{ role: 'user', content: 'Hello' }],
         api_key: null,
+        cloud_api_base_url: 'https://openrouter.ai/api/v1',
         ...overrides,
     };
+}
+
+function makeLocalRequest(overrides: Partial<IChatRequest> = {}): IChatRequest {
+    const request = makeRequest({
+        provider: 'llamacpp',
+        model: 'model.gguf',
+        ...overrides,
+    });
+    delete request.cloud_api_base_url;
+    return request;
 }
 
 describe('AIChatTransport', () => {
@@ -50,7 +61,7 @@ describe('AIChatTransport', () => {
         };
         transport = new AIChatTransport(tracer);
         mockCore = createMockCore();
-        transport.setCore(mockCore as unknown as Parameters<typeof transport.setCore>[0]);
+        transport.setContext(mockCore as unknown as Parameters<typeof transport.setContext>[0]);
     });
 
     afterEach(() => {
@@ -182,9 +193,7 @@ describe('AIChatTransport', () => {
                     : Promise.resolve(true),
             );
 
-            const sendPromise = transport.send(
-                makeRequest({ provider: 'llamacpp', model: 'model.gguf' }),
-            );
+            const sendPromise = transport.send(makeLocalRequest());
             vi.advanceTimersByTime(90_001);
             await Promise.resolve();
 
@@ -353,9 +362,7 @@ describe('AIChatTransport', () => {
                     : Promise.resolve(true),
             );
 
-            const sendPromise = transport.sendSilent(
-                makeRequest({ provider: 'llamacpp', model: 'model.gguf' }),
-            );
+            const sendPromise = transport.sendSilent(makeLocalRequest());
             vi.advanceTimersByTime(90_001);
             await Promise.resolve();
 

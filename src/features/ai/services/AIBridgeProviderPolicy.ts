@@ -1,4 +1,3 @@
-import { isCloudProviderId } from '@/shared/utils/providerSupport';
 import type { IApp } from '@/shared/types/coreTypes';
 
 type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
@@ -23,7 +22,7 @@ export class AIBridgeProviderPolicy {
     public constructor(private readonly _getCatalog?: ProviderCatalogGetter) {}
 
     public isCloudProvider(providerId: string): boolean {
-        return isCloudProviderId(providerId);
+        return this._catalogProvider(providerId)?.providerPolicy?.isCloudProvider ?? false;
     }
 
     public isImageProvider(providerId: string): boolean {
@@ -67,20 +66,24 @@ export class AIBridgeProviderPolicy {
     }
 
     private _catalogCapability(providerId: string): IApp['capability'] | null {
+        return this._catalogProvider(providerId)?.capability ?? null;
+    }
+
+    private _catalogProvider(providerId: string): Partial<IApp> | null {
         const catalog = this._getCatalog?.();
         const ai = catalog?.ai;
         if (!Array.isArray(ai)) {
             return null;
         }
 
-        const provider = ai.find((entry): entry is Partial<IApp> => {
-            return (
-                typeof entry === 'object' &&
-                entry !== null &&
-                (entry as Partial<IApp>).id === providerId
-            );
-        });
-        const capability = provider?.capability;
-        return capability === 'image' || capability === 'text' ? capability : null;
+        return (
+            ai.find((entry): entry is Partial<IApp> => {
+                return (
+                    typeof entry === 'object' &&
+                    entry !== null &&
+                    (entry as Partial<IApp>).id === providerId
+                );
+            }) ?? null
+        );
     }
 }

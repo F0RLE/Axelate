@@ -7,7 +7,10 @@ vi.mock('dompurify', () => ({
 }));
 
 import { aiSettingsRenderer } from './AISettingsRenderer';
-import { CUSTOM_TEXT_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
+import {
+    CUSTOM_IMAGE_PROVIDER_ID,
+    CUSTOM_TEXT_PROVIDER_ID,
+} from '@/shared/utils/customProviderSupport';
 
 describe('AISettingsRenderer', () => {
     let customModelsState: Array<{
@@ -83,6 +86,56 @@ describe('AISettingsRenderer', () => {
         },
     ];
 
+    const openRouterPolicy = {
+        isCloudProvider: true,
+        isCustomProvider: false,
+        isCleanApp: false,
+        secretService: 'cloud_api_key',
+        keyProviderId: 'cloud',
+        keyProviderUrl: 'https://openrouter.ai/settings/keys',
+        usesCustomProviderKey: false,
+        showApiEndpointSelector: false,
+        showCustomModelComposer: false,
+        showModelStats: true,
+        supportsInternetAccess: true,
+        supportsThinking: true,
+        imageOnly: false,
+    };
+
+    const cleanAppPolicy = {
+        ...openRouterPolicy,
+        isCloudProvider: false,
+        isCleanApp: true,
+        secretService: null,
+        keyProviderId: null,
+        keyProviderUrl: null,
+        supportsInternetAccess: false,
+        supportsThinking: false,
+    };
+
+    const customTextPolicy = {
+        ...openRouterPolicy,
+        isCustomProvider: true,
+        secretService: 'custom_text_api_key',
+        keyProviderId: CUSTOM_TEXT_PROVIDER_ID,
+        keyProviderUrl: null,
+        usesCustomProviderKey: true,
+        showApiEndpointSelector: true,
+        showCustomModelComposer: true,
+        showModelStats: false,
+        supportsInternetAccess: false,
+        supportsThinking: false,
+    };
+
+    const customImagePolicy = {
+        ...customTextPolicy,
+        secretService: 'custom_image_api_key',
+        keyProviderId: CUSTOM_IMAGE_PROVIDER_ID,
+        showApiEndpointSelector: false,
+        showCustomModelComposer: false,
+        imageOnly: true,
+    };
+
     beforeEach(async () => {
         document.body.innerHTML = `<div id="root"></div>`;
         customModelsState = [];
@@ -149,6 +202,7 @@ describe('AISettingsRenderer', () => {
         await aiSettingsRenderer.render(container, {
             id: 'axelate',
             name: 'Axelate',
+            providerPolicy: cleanAppPolicy,
         } as never);
 
         expect(container.textContent).toContain('Axelate Settings');
@@ -162,6 +216,7 @@ describe('AISettingsRenderer', () => {
             id: 'gpt',
             name: 'GPT',
             apiProviderData: { models },
+            providerPolicy: openRouterPolicy,
         } as never);
 
         const input = container.querySelector('#gpt-api-key-input') as HTMLInputElement;
@@ -210,6 +265,7 @@ describe('AISettingsRenderer', () => {
             id: CUSTOM_TEXT_PROVIDER_ID,
             name: 'Custom',
             apiProviderData: { models: [] },
+            providerPolicy: customTextPolicy,
         } as never);
 
         const openAiEndpointCard = container.querySelector(
@@ -226,7 +282,7 @@ describe('AISettingsRenderer', () => {
             'ui.settings.api_endpoint_saved:API endpoint saved',
             'success',
         );
-        expect(settingsService.getSecureKeyMeta).toHaveBeenCalledWith(CUSTOM_TEXT_PROVIDER_ID);
+        expect(settingsService.getSecureKeyMeta).toHaveBeenCalledWith('custom_text_api_key');
     });
 
     it('labels built-in providers as OpenRouter and custom text as a separate provider', async () => {
@@ -236,6 +292,7 @@ describe('AISettingsRenderer', () => {
             id: 'gpt',
             name: 'OpenAI',
             apiProviderData: { models },
+            providerPolicy: openRouterPolicy,
         } as never);
 
         expect(container.textContent).toContain('OpenRouter API key');
@@ -247,11 +304,13 @@ describe('AISettingsRenderer', () => {
             id: CUSTOM_TEXT_PROVIDER_ID,
             name: 'Custom',
             apiProviderData: { models: [] },
+            providerPolicy: customTextPolicy,
         } as never);
 
         expect(container.textContent).toContain('Custom provider API key');
         expect(container.textContent).toContain('Uses a custom provider key.');
         expect(container.textContent).not.toContain('Built-in cloud cards use OpenRouter.');
+        expect(container.querySelector(`#${CUSTOM_TEXT_PROVIDER_ID}-api-link`)).toBeNull();
         expect(
             container.querySelector('.ai-api-endpoint-card[data-provider="openrouter"]'),
         ).not.toBeNull();
@@ -263,6 +322,25 @@ describe('AISettingsRenderer', () => {
         ).not.toBeNull();
     });
 
+    it('labels custom image providers as custom without showing text endpoint controls', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+
+        await aiSettingsRenderer.render(container, {
+            id: CUSTOM_IMAGE_PROVIDER_ID,
+            name: 'Custom',
+            capability: 'image',
+            apiProviderData: { models: [] },
+            providerPolicy: customImagePolicy,
+        } as never);
+
+        expect(container.textContent).toContain('Custom provider API key');
+        expect(container.textContent).toContain('Uses a custom provider key.');
+        expect(container.textContent).not.toContain('Built-in cloud cards use OpenRouter.');
+        expect(container.querySelector(`#${CUSTOM_IMAGE_PROVIDER_ID}-api-link`)).toBeNull();
+        expect(container.querySelector('.ai-api-endpoint-card')).toBeNull();
+        expect(settingsService.getSecureKeyMeta).toHaveBeenCalledWith('custom_image_api_key');
+    });
+
     it('validates custom provider keys against the selected API endpoint', async () => {
         vi.useFakeTimers();
         const container = document.getElementById('root') as HTMLElement;
@@ -272,6 +350,7 @@ describe('AISettingsRenderer', () => {
             id: CUSTOM_TEXT_PROVIDER_ID,
             name: 'Custom',
             apiProviderData: { models: [] },
+            providerPolicy: customTextPolicy,
         } as never);
 
         const input = document.getElementById(
@@ -288,7 +367,7 @@ describe('AISettingsRenderer', () => {
             'https://api.groq.com/openai/v1',
         );
         expect(settingsService.saveSecureKey).toHaveBeenCalledWith(
-            CUSTOM_TEXT_PROVIDER_ID,
+            'custom_text_api_key',
             'gsk-valid-key',
         );
     });
@@ -299,13 +378,14 @@ describe('AISettingsRenderer', () => {
             id: 'gpt',
             name: 'GPT',
             apiProviderData: { models },
+            providerPolicy: openRouterPolicy,
         } as never);
 
         const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
         expect(input.type).toBe('text');
         expect(input.dataset['storedMasked']).toBe('true');
         await aiSettingsRenderer.toggleKeyVisibility('gpt');
-        expect(settingsService.getSecureKey).toHaveBeenCalledWith('cloud');
+        expect(settingsService.getSecureKey).toHaveBeenCalledWith('cloud_api_key');
         expect(input.value).toBe('stored-secret');
         expect(input.dataset['storedMasked']).toBe('true');
         expect(input.dataset['storedRevealed']).toBe('true');
@@ -318,7 +398,7 @@ describe('AISettingsRenderer', () => {
         ).toBe(true);
         expect(
             document.getElementById('gpt-thinking-section')?.classList.contains('is-hidden'),
-        ).toBe(true);
+        ).toBe(false);
         expect(document.getElementById('gpt-model-stats')?.textContent).toContain(
             'Stats unavailable',
         );
@@ -333,6 +413,7 @@ describe('AISettingsRenderer', () => {
             id: 'gpt',
             name: 'GPT',
             apiProviderData: { models },
+            providerPolicy: openRouterPolicy,
         } as never);
 
         await aiSettingsRenderer.toggleKeyVisibility('gpt');
@@ -350,6 +431,7 @@ describe('AISettingsRenderer', () => {
             id: 'gpt',
             name: 'GPT',
             apiProviderData: { models },
+            providerPolicy: openRouterPolicy,
         } as never);
 
         const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
@@ -365,7 +447,7 @@ describe('AISettingsRenderer', () => {
         await aiSettingsRenderer.checkKey('gpt');
         expect(button.classList.contains('success')).toBe(true);
         expect(showToast).toHaveBeenCalledWith('ui.settings.key_valid:Key is valid', 'success');
-        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('cloud', 'valid-key');
+        expect(settingsService.saveSecureKey).toHaveBeenCalledWith('cloud_api_key', 'valid-key');
         expect(input.value).toBe('•••••••••');
         expect(input.dataset['storedMasked']).toBe('true');
 
@@ -378,7 +460,7 @@ describe('AISettingsRenderer', () => {
         input.dispatchEvent(new Event('input', { bubbles: true }));
         await Promise.resolve();
         await Promise.resolve();
-        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('cloud');
+        expect(settingsService.removeSecureKey).toHaveBeenCalledWith('cloud_api_key');
         expect(showToast).toHaveBeenCalledWith(
             'ui.settings.key_removed:API key removed',
             'success',
@@ -419,6 +501,7 @@ describe('AISettingsRenderer', () => {
             id: 'gpt',
             name: 'GPT',
             apiProviderData: { models },
+            providerPolicy: openRouterPolicy,
         } as never);
 
         const input = document.getElementById('gpt-api-key-input') as HTMLInputElement;
@@ -447,12 +530,13 @@ describe('AISettingsRenderer', () => {
             id: CUSTOM_TEXT_PROVIDER_ID,
             name: 'Custom',
             apiProviderData: { models },
+            providerPolicy: customTextPolicy,
         } as never);
 
         expect(container.querySelector(`#${CUSTOM_TEXT_PROVIDER_ID}-model-stats`)).toBeNull();
     });
 
-    it('shows the thinking section on first render for custom text providers', async () => {
+    it('does not show OpenRouter-only thinking or internet controls for custom text providers', async () => {
         const container = document.getElementById('root') as HTMLElement;
         customModelsState = [
             {
@@ -468,13 +552,11 @@ describe('AISettingsRenderer', () => {
             id: CUSTOM_TEXT_PROVIDER_ID,
             name: 'Custom',
             apiProviderData: { models: [] },
+            providerPolicy: customTextPolicy,
         } as never);
 
-        expect(
-            container
-                .querySelector(`#${CUSTOM_TEXT_PROVIDER_ID}-thinking-section`)
-                ?.classList.contains('is-hidden'),
-        ).toBe(false);
+        expect(container.querySelector(`#${CUSTOM_TEXT_PROVIDER_ID}-thinking-section`)).toBeNull();
+        expect(container.querySelector(`#${CUSTOM_TEXT_PROVIDER_ID}-internet-section`)).toBeNull();
     });
 
     it('adds a custom model from the composer card and derives the title from model id', async () => {
@@ -484,6 +566,7 @@ describe('AISettingsRenderer', () => {
             id: CUSTOM_TEXT_PROVIDER_ID,
             name: 'Custom',
             apiProviderData: { models: [] },
+            providerPolicy: customTextPolicy,
         } as never);
 
         const input = container.querySelector(
@@ -521,6 +604,7 @@ describe('AISettingsRenderer', () => {
             id: CUSTOM_TEXT_PROVIDER_ID,
             name: 'Custom',
             apiProviderData: { models: [] },
+            providerPolicy: customTextPolicy,
         } as never);
 
         const removeButton = container.querySelector(

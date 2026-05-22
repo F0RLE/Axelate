@@ -24,8 +24,8 @@ type KeyControllerOptions = {
 export class AISettingsKeyController {
     public constructor(private readonly _options: KeyControllerOptions) {}
 
-    public async hydrateStoredMask(input: KeyInput, providerId: string): Promise<void> {
-        const meta = await this._options.getSettingsService()?.getSecureKeyMeta(providerId);
+    public async hydrateStoredMask(input: KeyInput, secretService: string): Promise<void> {
+        const meta = await this._options.getSettingsService()?.getSecureKeyMeta(secretService);
         if (meta?.exists === true) {
             this.applyStoredKeyMask(input, meta.length);
         }
@@ -42,7 +42,7 @@ export class AISettingsKeyController {
         target.dataset['keyDirty'] = 'true';
     }
 
-    public async removeClearedStoredKey(input: KeyInput, providerId: string): Promise<boolean> {
+    public async removeClearedStoredKey(input: KeyInput, secretService: string): Promise<boolean> {
         if (input.value.trim() !== '') {
             return false;
         }
@@ -54,7 +54,7 @@ export class AISettingsKeyController {
         input.dataset['keyRemoveInFlight'] = 'true';
         try {
             const settingsService = this._requireSettingsService();
-            await settingsService.removeSecureKey(providerId);
+            await settingsService.removeSecureKey(secretService);
             this.clearStoredKeyMask(input);
             this._showToast(
                 this._options.getTranslator()('ui.settings.key_removed', 'API key removed'),
@@ -92,7 +92,7 @@ export class AISettingsKeyController {
     public async toggleVisibility(
         input: KeyInput | null,
         button: KeyButton | null,
-        providerId: string,
+        secretService: string,
     ): Promise<void> {
         if (input === null || button === null) {
             return;
@@ -103,7 +103,7 @@ export class AISettingsKeyController {
             input.dataset['storedRevealed'] !== 'true'
         ) {
             const settingsService = this._options.getSettingsService();
-            const revealedKey = await settingsService?.getSecureKey(providerId);
+            const revealedKey = await settingsService?.getSecureKey(secretService);
             if (revealedKey === undefined || revealedKey === null || revealedKey === '') {
                 this._showToast(
                     this._options.getTranslator()(
@@ -130,7 +130,8 @@ export class AISettingsKeyController {
     public async checkKey(
         input: KeyInput | null,
         button: KeyButton | null,
-        providerId: string,
+        secretService: string,
+        validationProviderId: string,
         validationBaseUrl?: string | undefined,
     ): Promise<void> {
         if (input === null || button === null) {
@@ -160,23 +161,23 @@ export class AISettingsKeyController {
 
             let isValid = false;
             if (shouldRemoveStoredKey) {
-                await this._requireSettingsService().removeSecureKey(providerId);
+                await this._requireSettingsService().removeSecureKey(secretService);
                 this.clearStoredKeyMask(input);
                 this.updateButtonState(button, 'success', this._options.icons.check);
                 this._showToast(t('ui.settings.key_removed', 'API key removed'), 'success');
                 return;
             } else if (shouldValidateTypedKey) {
-                isValid = await this._validateKey(providerId, key, validationBaseUrl);
+                isValid = await this._validateKey(validationProviderId, key, validationBaseUrl);
             } else if (shouldValidateStoredKey) {
                 isValid = await this._requireSettingsService().validateStoredApiKey(
-                    providerId,
+                    validationProviderId,
                     validationBaseUrl,
                 );
             }
 
             if (isValid) {
                 if (shouldValidateTypedKey && key !== '') {
-                    await this._requireSettingsService().saveSecureKey(providerId, key);
+                    await this._requireSettingsService().saveSecureKey(secretService, key);
                     this.applyStoredKeyMask(input, key.length);
                 }
                 this.updateButtonState(button, 'success', this._options.icons.check);

@@ -9,26 +9,76 @@ describe('AISettingsViewPolicy', () => {
     const policy = new AISettingsViewPolicy();
 
     it('should classify clean apps and feature support consistently', () => {
-        expect(policy.isCleanApp('axelate')).toBe(true);
+        const gptApp = {
+            id: 'gpt',
+            providerPolicy: {
+                isCloudProvider: true,
+                isCustomProvider: false,
+                isCleanApp: false,
+                secretService: 'cloud_api_key',
+                keyProviderId: 'cloud',
+                keyProviderUrl: 'https://openrouter.ai/settings/keys',
+                usesCustomProviderKey: false,
+                showApiEndpointSelector: false,
+                showCustomModelComposer: false,
+                showModelStats: true,
+                supportsInternetAccess: true,
+                supportsThinking: true,
+                imageOnly: false,
+            },
+        };
+        const customTextApp = {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            providerPolicy: {
+                ...gptApp.providerPolicy,
+                isCustomProvider: true,
+                secretService: 'custom_text_api_key',
+                keyProviderId: CUSTOM_TEXT_PROVIDER_ID,
+                keyProviderUrl: null,
+                usesCustomProviderKey: true,
+                showApiEndpointSelector: true,
+                showCustomModelComposer: true,
+                showModelStats: false,
+                supportsInternetAccess: false,
+                supportsThinking: false,
+            },
+        };
+        const imageApp = {
+            id: 'gemini-image',
+            capability: 'image' as const,
+            providerPolicy: {
+                ...gptApp.providerPolicy,
+                supportsInternetAccess: false,
+                supportsThinking: false,
+                imageOnly: true,
+            },
+        };
+
+        expect(policy.isCleanApp('axelate')).toBe(false);
+        expect(
+            policy.isCleanApp({
+                id: 'axelate',
+                providerPolicy: { ...gptApp.providerPolicy, isCleanApp: true },
+            }),
+        ).toBe(true);
         expect(policy.isCleanApp('sample-integration')).toBe(false);
         expect(policy.isCleanApp('gpt')).toBe(false);
-        expect(policy.supportsInternetAccess('gpt', 'text')).toBe(true);
-        expect(policy.supportsInternetAccess('axelate')).toBe(false);
-        expect(policy.supportsInternetAccess('gemini-image', 'image')).toBe(false);
-        expect(policy.supportsInternetAccess('seedream-image', 'image')).toBe(false);
-        expect(policy.supportsInternetAccess(CUSTOM_TEXT_PROVIDER_ID, 'text')).toBe(true);
+        expect(policy.supportsInternetAccess(gptApp)).toBe(true);
+        expect(policy.supportsInternetAccess({ id: 'axelate' })).toBe(false);
+        expect(policy.supportsInternetAccess(imageApp)).toBe(false);
+        expect(policy.supportsInternetAccess(customTextApp)).toBe(false);
+        expect(policy.supportsThinking(gptApp)).toBe(true);
+        expect(policy.supportsThinking({ id: 'openrouter' })).toBe(false);
+        expect(policy.supportsThinking(customTextApp)).toBe(false);
+        expect(policy.isImageOnlyProvider(imageApp)).toBe(true);
         expect(
-            policy.supportsThinking('gpt', [
-                { id: 'reasoner', capabilities: { reasoning: true } } as never,
-            ]),
+            policy.isImageOnlyProvider({
+                id: CUSTOM_IMAGE_PROVIDER_ID,
+                capability: 'image',
+            }),
         ).toBe(true);
-        expect(policy.supportsThinking('openrouter', [])).toBe(false);
-        expect(policy.supportsThinking(CUSTOM_TEXT_PROVIDER_ID)).toBe(true);
-        expect(policy.isImageOnlyProvider('gemini-image', 'image')).toBe(true);
-        expect(policy.isImageOnlyProvider('seedream-image', 'image')).toBe(true);
-        expect(policy.isImageOnlyProvider(CUSTOM_IMAGE_PROVIDER_ID)).toBe(true);
-        expect(policy.shouldShowModelStats(CUSTOM_TEXT_PROVIDER_ID)).toBe(false);
-        expect(policy.shouldForceThinkingVisibility(CUSTOM_TEXT_PROVIDER_ID)).toBe(true);
+        expect(policy.shouldShowModelStats(customTextApp)).toBe(false);
+        expect(policy.shouldForceThinkingVisibility(customTextApp)).toBe(false);
     });
 
     it('should format context windows compactly', () => {

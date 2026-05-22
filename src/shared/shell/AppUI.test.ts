@@ -326,13 +326,27 @@ describe('AppUI lifecycle', () => {
         expect(document.getElementById('action-feedback')?.classList.contains('error')).toBe(true);
     });
 
-    it('injects dedicated custom providers into ai modal selections', () => {
+    it('uses backend-provided custom providers in ai modal selections', () => {
         getCatalogCategoryMock.mockReturnValue([
             {
                 id: 'gpt',
                 name: 'GPT',
                 type: 'api',
                 capability: 'text',
+                installed: true,
+            },
+            {
+                id: CUSTOM_TEXT_PROVIDER_ID,
+                name: 'Custom Text',
+                type: 'api',
+                capability: 'text',
+                installed: true,
+            },
+            {
+                id: CUSTOM_IMAGE_PROVIDER_ID,
+                name: 'Custom Image',
+                type: 'api',
+                capability: 'image',
                 installed: true,
             },
         ]);

@@ -5,7 +5,6 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { AppSettings, GpuInfo } from '@/shared/types/bindings';
 import { commands } from '@/shared/types/bindings';
 import { invokeSafe } from '@/shared/api/invoke';
-import { resolveProviderSecretService } from '@/shared/utils/providerSupport';
 export type ISettings = AppSettings;
 export type SettingsValue = string | number | boolean;
 type SettingsLogger = Pick<LoggerService, 'error'>;
@@ -130,11 +129,10 @@ export class SettingsService {
      * Save API key securely using Tauri secure storage.
      * Fallback to localStorage is PROHIBITED for security reasons.
      */
-    public async saveSecureKey(provider: string, key: string): Promise<void> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async saveSecureKey(secretService: string, key: string): Promise<void> {
         try {
             await this._tauri.invoke('save_secure_key', {
-                service: storageKey,
+                service: secretService,
                 key: key,
             });
         } catch (e) {
@@ -146,16 +144,15 @@ export class SettingsService {
     /**
      * Remove a securely stored API key.
      */
-    public async removeSecureKey(provider: string): Promise<void> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async removeSecureKey(secretService: string): Promise<void> {
         try {
             if (typeof this._tauri.removeSecureKey === 'function') {
-                await this._tauri.removeSecureKey(storageKey);
+                await this._tauri.removeSecureKey(secretService);
                 return;
             }
 
             await this._tauri.invoke('remove_secure_key', {
-                service: storageKey,
+                service: secretService,
             });
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to remove secure key:', e);
@@ -166,11 +163,10 @@ export class SettingsService {
     /**
      * Checks whether a secure API key exists without exposing the secret value.
      */
-    public async hasSecureKey(provider: string): Promise<boolean> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async hasSecureKey(secretService: string): Promise<boolean> {
         try {
             return await this._tauri.invoke<boolean>('has_secure_key', {
-                service: storageKey,
+                service: secretService,
             });
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to check secure key presence:', e);
@@ -181,10 +177,9 @@ export class SettingsService {
     /**
      * Returns non-sensitive metadata for a stored key.
      */
-    public async getSecureKeyMeta(provider: string): Promise<SecureKeyMeta> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async getSecureKeyMeta(secretService: string): Promise<SecureKeyMeta> {
         try {
-            return await this._tauri.getSecureKeyMeta(storageKey);
+            return await this._tauri.getSecureKeyMeta(secretService);
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to get secure key metadata:', e);
             return { exists: false, length: 0 };
@@ -194,10 +189,9 @@ export class SettingsService {
     /**
      * Returns the decrypted secure key for explicit user reveal flows.
      */
-    public async getSecureKey(provider: string): Promise<string | null> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async getSecureKey(secretService: string): Promise<string | null> {
         try {
-            return await this._tauri.getSecureKey(storageKey);
+            return await this._tauri.getSecureKey(secretService);
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to get secure key:', e);
             return null;
@@ -281,14 +275,5 @@ export class SettingsService {
             this._tracer.error('[SettingsService] Failed to remove custom model:', e);
             throw e;
         }
-    }
-
-    private _resolveSecureKeyService(provider: string): string {
-        const service = resolveProviderSecretService(provider);
-        if (service === null) {
-            throw new Error(`Provider does not support frontend-managed secrets: ${provider}`);
-        }
-
-        return service;
     }
 }
