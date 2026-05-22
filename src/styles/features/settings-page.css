@@ -35,6 +35,58 @@
     gap: 0;
 }
 
+.settings-section-jump {
+    position: sticky;
+    bottom: 1rem;
+    justify-self: center;
+    z-index: 30;
+    width: 2.55rem;
+    height: 2.55rem;
+    margin-top: -3.55rem;
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: var(--radius-md);
+    background: rgba(30, 30, 35, 0.82);
+    box-shadow:
+        0 10px 24px rgba(0, 0, 0, 0.28),
+        inset 0 1px 0 rgba(255, 255, 255, 0.05);
+    color: rgba(248, 246, 252, 0.88);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0.78;
+    transition:
+        opacity 0.16s ease,
+        background 0.16s ease,
+        border-color 0.16s ease,
+        transform 0.16s ease;
+}
+
+.settings-section-jump::before {
+    content: '';
+    width: 0.62rem;
+    height: 0.62rem;
+    border-right: 2px solid currentColor;
+    border-bottom: 2px solid currentColor;
+    transform: translateY(-0.12rem) rotate(45deg);
+    transition: transform 0.18s ease;
+}
+
+.settings-section-jump.is-up::before {
+    transform: translateY(0.12rem) rotate(225deg);
+}
+
+.settings-section-jump:hover,
+.settings-section-jump:focus-visible {
+    opacity: 1;
+    background: rgba(255, 255, 255, 0.12);
+    border-color: rgba(255, 255, 255, 0.1);
+}
+
+.settings-section-jump:active {
+    transform: translateY(1px);
+}
+
 #page-settings.active .settings-wrapper {
     animation: settings-content-rise 0.3s cubic-bezier(0.22, 1, 0.36, 1);
 }
@@ -700,6 +752,10 @@
     .settings-section {
         min-height: auto;
         justify-content: flex-start;
+    }
+
+    .settings-section-jump {
+        display: none;
     }
 }
 

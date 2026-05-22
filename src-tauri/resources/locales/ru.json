@@ -246,6 +246,7 @@
     "ui.launcher.settings.monitor_vram": "VRAM",
     "ui.launcher.settings.taskbar_desc": "Настройка видимости страниц в боковой панели",
     "ui.launcher.settings.taskbar_title": "Управление боковой панелью",
+    "ui.launcher.settings.section_jump": "Перейти к другой секции настроек",
     "ui.launcher.settings.agent_control_title": "API для внешних агентов",
     "ui.launcher.settings.agent_control_loading": "Загрузка...",
     "ui.launcher.settings.agent_control_load_failed": "Не удалось загрузить внешних агентов",

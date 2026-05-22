@@ -242,6 +242,7 @@
     "ui.launcher.settings.monitor_vram": "显存",
     "ui.launcher.settings.taskbar_desc": "配置侧边栏页面可见性",
     "ui.launcher.settings.taskbar_title": "侧边栏管理",
+    "ui.launcher.settings.section_jump": "切换设置区域",
     "ui.launcher.settings.agent_control_title": "外部代理 API",
     "ui.launcher.settings.agent_control_loading": "正在加载...",
     "ui.launcher.settings.agent_control_load_failed": "无法加载外部代理",

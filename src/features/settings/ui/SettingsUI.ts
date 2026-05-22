@@ -28,6 +28,7 @@ export class SettingsUI {
     private _isDestroyed = false;
     private _initAbortController: AbortController | null = null;
     private _agentControlUnlisten: (() => void) | null = null;
+    private _sectionJumpUnlisten: (() => void) | null = null;
 
     public constructor(
         service: SettingsService,
@@ -82,6 +83,7 @@ export class SettingsUI {
 
         this._generalRenderer.init(this._context);
         this._agentControlRenderer.init(this._context);
+        this._setupSectionJump();
         await this._listenForAgentControlChanges();
     }
 
@@ -97,9 +99,57 @@ export class SettingsUI {
         this._initAbortController = null;
         this._agentControlUnlisten?.();
         this._agentControlUnlisten = null;
+        this._sectionJumpUnlisten?.();
+        this._sectionJumpUnlisten = null;
         this._generalRenderer.destroy();
         this._agentControlRenderer.destroy();
         this._deps.tracer.info('[SettingsUI] Destroyed.');
+    }
+
+    private _setupSectionJump(): void {
+        if (this._sectionJumpUnlisten !== null) {
+            return;
+        }
+
+        const page = document.getElementById('page-settings');
+        const button = document.getElementById('settings-section-jump');
+        if (!(page instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        const sections = Array.from(page.querySelectorAll<HTMLElement>('.settings-section')).filter(
+            (section) => section.offsetParent !== null || section.getClientRects().length > 0,
+        );
+        if (sections.length < 2) {
+            button.hidden = true;
+            return;
+        }
+
+        const label = this._i18n.t('ui.launcher.settings.section_jump', 'Switch settings section');
+        button.title = label;
+        button.setAttribute('aria-label', label);
+
+        const update = () => {
+            const isAgentSection = page.scrollTop > Math.max(48, page.clientHeight * 0.25);
+            button.classList.toggle('is-up', isAgentSection);
+        };
+
+        const handleClick = () => {
+            const isAgentSection = button.classList.contains('is-up');
+            sections[isAgentSection ? 0 : 1]?.scrollIntoView({
+                behavior: 'smooth',
+                block: 'start',
+            });
+        };
+
+        page.addEventListener('scroll', update, { passive: true });
+        button.addEventListener('click', handleClick);
+        update();
+
+        this._sectionJumpUnlisten = () => {
+            page.removeEventListener('scroll', update);
+            button.removeEventListener('click', handleClick);
+        };
     }
 
     private async _listenForAgentControlChanges(): Promise<void> {

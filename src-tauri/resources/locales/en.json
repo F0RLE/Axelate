@@ -245,6 +245,7 @@
     "ui.launcher.settings.monitor_vram": "VRAM",
     "ui.launcher.settings.taskbar_desc": "Configure sidebar page visibility",
     "ui.launcher.settings.taskbar_title": "Sidebar Management",
+    "ui.launcher.settings.section_jump": "Switch settings section",
     "ui.launcher.settings.agent_control_title": "External Agent API",
     "ui.launcher.settings.agent_control_loading": "Loading...",
     "ui.launcher.settings.agent_control_load_failed": "Failed to load external agents",
