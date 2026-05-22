@@ -435,6 +435,51 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn console_overview_deduplicates_running_engines_by_id_not_label() {
+        let shared_name = "Local Engine";
+        let state = EngineState::Ready {
+            slots: vec![
+                SlotStatus {
+                    capability: Capability::Text,
+                    engine: EngineStatus {
+                        id: "engine-a".to_string(),
+                        name: shared_name.to_string(),
+                        capabilities: vec![Capability::Text],
+                        endpoint: "http://127.0.0.1:8001".to_string(),
+                        healthy: true,
+                    },
+                },
+                SlotStatus {
+                    capability: Capability::Image,
+                    engine: EngineStatus {
+                        id: "engine-b".to_string(),
+                        name: shared_name.to_string(),
+                        capabilities: vec![Capability::Image],
+                        endpoint: "http://127.0.0.1:8002".to_string(),
+                        healthy: true,
+                    },
+                },
+            ],
+        };
+
+        let overview = ConsoleOverviewBuilder::build(
+            &state,
+            &Vec::new(),
+            &UIState::default(),
+            &Vec::<LogEntry>::new(),
+        )
+        .await;
+        let status_ids = overview
+            .status_items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(status_ids.contains(&"engine:engine-a"));
+        assert!(status_ids.contains(&"engine:engine-b"));
+    }
+
+    #[tokio::test]
     async fn console_overview_names_logged_engines_from_registry_definitions() {
         let logs = vec![engine_log_entry("custom_engine")];
         let engine_definitions = vec![engine_definition("custom-engine", "Custom Engine")];

@@ -341,13 +341,8 @@ impl ConsoleOverviewBuilder {
             }],
             EngineState::Ready { slots } => {
                 let mut items: BTreeMap<String, ConsoleStatusItem> = BTreeMap::new();
-                let mut label_to_id: BTreeMap<String, String> = BTreeMap::new();
                 for slot in slots {
-                    let label_key = Self::normalize_view_label(&slot.engine.name);
-                    let id = label_to_id
-                        .entry(label_key)
-                        .or_insert_with(|| canonical_engine_id(&slot.engine.id))
-                        .clone();
+                    let id = canonical_engine_id(&slot.engine.id);
                     let detail = ConsoleLabelFormatter::format_capability(slot.capability);
                     items
                         .entry(id.clone())

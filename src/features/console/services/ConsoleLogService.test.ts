@@ -137,6 +137,45 @@ describe('ConsoleLogService', () => {
         ]);
     });
 
+    it('keeps known runtime logs out of the general view after overview sync', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                views: [
+                    { id: 'general', label: 'Platform' },
+                    { id: 'engine:llamacpp', label: 'LLaMA.cpp' },
+                    { id: 'module:axelate-telegram-parser', label: 'Parser' },
+                ],
+                status_items: [],
+            },
+        });
+        vi.mocked(bridge.invoke).mockResolvedValue([
+            { timestamp: 10, source: 'frontend', level: 'INFO', message: 'platform' },
+            { timestamp: 11, source: 'llamacpp', level: 'DEBUG', message: 'engine debug' },
+            {
+                timestamp: 12,
+                source: 'module:axelate-telegram-parser',
+                level: 'INFO',
+                message: 'module info',
+                module_id: 'axelate-telegram-parser',
+            },
+        ] satisfies ILogEntry[]);
+
+        await service.getAvailableViews();
+        const logs = await service.fetchLogs('general');
+
+        expect(logs).toEqual([
+            expect.objectContaining({
+                source: 'frontend',
+                message: 'platform',
+            }),
+        ]);
+        expect(service.getLogsForView('general').map((entry) => entry.message)).toEqual([
+            'platform',
+        ]);
+    });
+
     it('clears only the requested view', async () => {
         setupTauri(bridge, true);
         vi.mocked(bridge.invoke)

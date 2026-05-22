@@ -54,6 +54,7 @@ export class ConsoleLogService {
     private readonly _logsByView = new Map<string, ILogEntry[]>();
     private readonly _lastTimestampByView = new Map<string, number>();
     private readonly _modulePathCache = new Map<string, string | null>();
+    private readonly _knownViewIds = new Set<string>(['general']);
     private readonly _normalizer = new ConsoleLogNormalizer();
 
     constructor(
@@ -68,6 +69,8 @@ export class ConsoleLogService {
     public destroy(): void {
         this._logsByView.clear();
         this._lastTimestampByView.clear();
+        this._knownViewIds.clear();
+        this._knownViewIds.add('general');
     }
 
     public async fetchLogs(viewId = 'general'): Promise<ILogEntry[]> {
@@ -125,7 +128,9 @@ export class ConsoleLogService {
         try {
             const result = await invokeSafe<ConsoleOverviewPayload>('get_console_overview');
             if (result.status === 'ok') {
-                return this._normalizeViews(result.data.views);
+                const views = this._normalizeViews(result.data.views);
+                this._rememberKnownViews(views);
+                return views;
             }
         } catch (error) {
             this._tracer.warn(
@@ -226,7 +231,18 @@ export class ConsoleLogService {
             return [];
         }
 
-        const normalizedLogs = newLogs.map((entry) => this._normalizer.normalize(entry));
+        const normalizedLogs = this._filterLogsForView(
+            viewId,
+            newLogs.map((entry) => this._normalizer.normalize(entry)),
+        );
+        if (normalizedLogs.length === 0) {
+            this._lastTimestampByView.set(
+                viewId,
+                newLogs.at(-1)?.timestamp ?? this._lastTimestampByView.get(viewId) ?? 0,
+            );
+            return [];
+        }
+
         const previousLogs = this._logsByView.get(viewId) ?? [];
         const existingKeys = new Set(previousLogs.map((entry) => this._dedupeKey(entry)));
         const appendedLogs = normalizedLogs.filter((entry) => {
@@ -267,6 +283,39 @@ export class ConsoleLogService {
             byId.set(id, { ...view, id });
         }
         return [...byId.values()];
+    }
+
+    private _rememberKnownViews(views: readonly IConsoleLogView[]): void {
+        this._knownViewIds.clear();
+        this._knownViewIds.add('general');
+        views.forEach((view) => {
+            const id = this._canonicalViewId(view.id);
+            if (id !== '') {
+                this._knownViewIds.add(id);
+            }
+        });
+    }
+
+    private _filterLogsForView(viewId: string, logs: ILogEntry[]): ILogEntry[] {
+        if (viewId !== 'general') {
+            return logs;
+        }
+
+        return logs.filter((entry) => !this._belongsToKnownRuntimeView(entry));
+    }
+
+    private _belongsToKnownRuntimeView(entry: ILogEntry): boolean {
+        const moduleId = entry.module_id?.trim();
+        if (moduleId !== undefined && moduleId !== '') {
+            return this._knownViewIds.has(`module:${moduleId}`);
+        }
+
+        if (entry.source.startsWith('module:')) {
+            return this._knownViewIds.has(`module:${entry.source.slice('module:'.length)}`);
+        }
+
+        const engineId = this._canonicalEngineId(entry.source);
+        return engineId !== '' && this._knownViewIds.has(`engine:${engineId}`);
     }
 
     private _canonicalViewId(viewId: string): string {

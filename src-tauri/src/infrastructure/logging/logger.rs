@@ -555,17 +555,9 @@ fn parse_log_timestamp(line: &str) -> Option<f64> {
     chrono::NaiveDateTime::parse_from_str(timestamp_text, "%Y-%m-%d %H:%M:%S")
         .ok()
         .and_then(|timestamp| {
-            let timestamp = chrono::Local
-                .from_local_datetime(&timestamp)
-                .single()
-                .or_else(|| chrono::Local.from_local_datetime(&timestamp).earliest())?;
-            let seconds = timestamp.timestamp().to_string().parse::<f64>().ok()?;
-            let milliseconds = timestamp
-                .timestamp_subsec_millis()
-                .to_string()
-                .parse::<f64>()
-                .ok()?;
-            Some(seconds + milliseconds / 1000.0)
+            let timestamp = chrono::Utc.from_utc_datetime(&timestamp);
+            let seconds = u32::try_from(timestamp.timestamp()).ok()?;
+            Some(f64::from(seconds) + f64::from(timestamp.timestamp_subsec_millis()) / 1000.0)
         })
 }
 
@@ -851,7 +843,7 @@ impl ConsoleLogParser {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeLogNamespace, parse_runtime_log_line};
+    use super::{RuntimeLogNamespace, parse_log_timestamp, parse_runtime_log_line};
 
     #[test]
     fn module_runtime_log_line_uses_module_source_namespace() -> Result<(), String> {
@@ -899,6 +891,15 @@ mod tests {
         .ok_or_else(|| "engine runtime log entry".to_string())?;
 
         assert_eq!(entry.source, "llama-cpp");
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_log_timestamp_is_interpreted_as_utc() -> Result<(), String> {
+        let timestamp = parse_log_timestamp("2026-04-24 07:00:00 [INFO] model loaded")
+            .ok_or_else(|| "runtime timestamp".to_string())?;
+
+        assert!((timestamp - 1_777_014_000.0).abs() < f64::EPSILON);
         Ok(())
     }
 }
