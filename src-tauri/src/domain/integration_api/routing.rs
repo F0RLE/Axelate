@@ -298,6 +298,15 @@ async fn handle_agent_approval_request(
             payload.risk.trim().to_string(),
         )
         .await?;
+    if let Err(error) = context.app.emit(
+        "agent-control:state-changed",
+        json!({
+            "reason": "approval-request-created",
+            "approvalId": approval.id,
+        }),
+    ) {
+        tracing::warn!("Failed to emit Agent Control state change: {error}");
+    }
     record_agent_audit(
         context,
         &AuthorizedClient::Agent(agent.clone()),

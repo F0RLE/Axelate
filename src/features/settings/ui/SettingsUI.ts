@@ -27,6 +27,7 @@ export class SettingsUI {
     private _isInitialized = false;
     private _isDestroyed = false;
     private _initAbortController: AbortController | null = null;
+    private _agentControlUnlisten: (() => void) | null = null;
 
     public constructor(
         service: SettingsService,
@@ -34,13 +35,13 @@ export class SettingsUI {
         _aiSettings: AISettingsService,
         private readonly _i18n: I18nService,
         private readonly _i18nUI: I18nUI,
-        tauri: TauriProvider,
+        private readonly _tauri: TauriProvider,
         _navigation: NavigationService,
         private readonly _deps: SettingsUIDeps,
     ) {
         this._generalRenderer = new GeneralSettingsRenderer(uiSettings, this._deps.tracer);
         this._agentControlRenderer = new AgentControlSettingsRenderer(service, this._deps.tracer, {
-            copyText: (text) => tauri.writeToClipboard(text),
+            copyText: (text) => this._tauri.writeToClipboard(text),
         });
     }
 
@@ -83,6 +84,7 @@ export class SettingsUI {
 
         this._generalRenderer.init(this._context);
         this._agentControlRenderer.init(this._context);
+        await this._listenForAgentControlChanges();
     }
 
     public close(): void {
@@ -95,9 +97,30 @@ export class SettingsUI {
         this._isInitialized = false;
         this._initAbortController?.abort();
         this._initAbortController = null;
+        this._agentControlUnlisten?.();
+        this._agentControlUnlisten = null;
         this._generalRenderer.destroy();
         this._agentControlRenderer.destroy();
         this._deps.tracer.info('[SettingsUI] Destroyed.');
+    }
+
+    private async _listenForAgentControlChanges(): Promise<void> {
+        if (this._agentControlUnlisten !== null) {
+            return;
+        }
+        try {
+            this._agentControlUnlisten = await this._tauri.listen(
+                'agent-control:state-changed',
+                () => {
+                    this._agentControlRenderer.refresh();
+                },
+            );
+        } catch (error) {
+            this._deps.tracer.warn(
+                '[SettingsUI] Failed to listen for Agent Control updates:',
+                error,
+            );
+        }
     }
 
     private async _waitForContainer(

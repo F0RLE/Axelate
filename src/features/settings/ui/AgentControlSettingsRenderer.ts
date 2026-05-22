@@ -48,6 +48,13 @@ export class AgentControlSettingsRenderer {
         void this._refresh();
     }
 
+    public refresh(): void {
+        if (this._isDestroyed || this._panel === null) {
+            return;
+        }
+        void this._refresh();
+    }
+
     public destroy(): void {
         this._isDestroyed = true;
         this._context = null;

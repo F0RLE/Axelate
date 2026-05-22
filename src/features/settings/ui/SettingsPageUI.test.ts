@@ -4,6 +4,7 @@ const initRenderer = vi.fn();
 const destroyRenderer = vi.fn();
 const initAgentRenderer = vi.fn();
 const destroyAgentRenderer = vi.fn();
+const refreshAgentRenderer = vi.fn();
 
 vi.mock('./GeneralSettingsRenderer', () => ({
     GeneralSettingsRenderer: class {
@@ -16,6 +17,7 @@ vi.mock('./AgentControlSettingsRenderer', () => ({
     AgentControlSettingsRenderer: class {
         public init = initAgentRenderer;
         public destroy = destroyAgentRenderer;
+        public refresh = refreshAgentRenderer;
     },
 }));
 
@@ -38,6 +40,7 @@ describe('SettingsUI page lifecycle', () => {
         destroyRenderer.mockReset();
         initAgentRenderer.mockReset();
         destroyAgentRenderer.mockReset();
+        refreshAgentRenderer.mockReset();
         document.body.innerHTML = '';
         (
             globalThis as unknown as {
@@ -61,7 +64,10 @@ describe('SettingsUI page lifecycle', () => {
             {} as AISettingsService,
             { t: (_key: string, defaultValue = '') => defaultValue } as unknown as I18nService,
             { applyTranslations: vi.fn() } as unknown as I18nUI,
-            {} as TauriProvider,
+            {
+                writeToClipboard: vi.fn().mockResolvedValue(undefined),
+                listen: vi.fn().mockResolvedValue(vi.fn()),
+            } as unknown as TauriProvider,
             {} as NavigationService,
             {
                 tracer: {
@@ -91,6 +97,42 @@ describe('SettingsUI page lifecycle', () => {
 
         expect(initRenderer).toHaveBeenCalledTimes(1);
         expect(initAgentRenderer).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes Agent Control when backend reports agent state changes', async () => {
+        let listener: () => void = () => {
+            throw new Error('Expected Agent Control listener to be registered');
+        };
+        const tauri = {
+            writeToClipboard: vi.fn().mockResolvedValue(undefined),
+            listen: vi.fn().mockImplementation((_event: string, callback: () => void) => {
+                listener = callback;
+                return Promise.resolve(vi.fn());
+            }),
+        } as unknown as TauriProvider;
+        document.body.innerHTML = '<div id="settings-grid"></div>';
+        settingsUI = new SettingsUI(
+            {} as SettingsService,
+            {} as UISettingsService,
+            {} as AISettingsService,
+            { t: (_key: string, defaultValue = '') => defaultValue } as unknown as I18nService,
+            { applyTranslations: vi.fn() } as unknown as I18nUI,
+            tauri,
+            {} as NavigationService,
+            {
+                tracer: {
+                    info: vi.fn(),
+                    warn: vi.fn(),
+                    error: vi.fn(),
+                } as unknown as LoggerService,
+                showToast: vi.fn(),
+            },
+        );
+
+        await settingsUI.init();
+        listener();
+
+        expect(refreshAgentRenderer).toHaveBeenCalledTimes(1);
     });
 
     it('should wait for container insertion without polling loops', async () => {
