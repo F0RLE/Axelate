@@ -225,9 +225,11 @@ Module-scoped integration tokens cannot call this route.
 
 `GET /v1/agent/logs?viewId=engine:llama-cpp&since=0&limit=200`
 
-Returns recent sanitized console logs from memory. `viewId` is optional; omit it
-to read the combined console stream. `limit` defaults to 200 and is capped at
-1000. Raw log files are not exposed through this route.
+Returns recent sanitized console logs from memory for one explicit console view.
+`viewId` is required for useful log output. If it is omitted, the route returns
+an empty `logs` array instead of a combined stream. This keeps agent access from
+accidentally mixing unrelated debug or info logs. `limit` defaults to 200 and is
+capped at 1000. Raw log files are not exposed through this route.
 
 Module-scoped integration tokens cannot call this route.
 
@@ -299,20 +301,14 @@ platform-specific strings and use path utilities such as `path.join` and
 
 Returns the JSON settings object owned by the integration.
 
-`PUT /v1/modules/{moduleId}/settings`
-
-Replaces the integration settings object.
-
-```json
-{
-    "chatId": "12345",
-    "enabled": true
-}
-```
-
 `PATCH /v1/modules/{moduleId}/settings`
 
 Merges the request JSON object into the existing integration settings object.
+This is the only public write path for module settings. Full replacement through
+`PUT /v1/modules/{moduleId}/settings` is intentionally blocked by the launcher
+because it can erase unknown settings or secret references. Agents also cannot
+write sensitive keys such as tokens, API keys, passwords, or secrets through
+this route.
 
 `POST /v1/modules/{moduleId}/stage`
 

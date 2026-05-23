@@ -143,6 +143,9 @@ Work:
 - document what the launcher can expose to agents today and what remains a
   future permissioned control layer
 - keep examples runnable
+- move provider secrets from the current encrypted file store to platform
+  keystores: DPAPI on Windows, Keychain on macOS, and libsecret/KWallet-compatible
+  storage on Linux, with migration from existing `secure.enc`
 
 Exit criteria:
 

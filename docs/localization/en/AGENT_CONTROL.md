@@ -23,9 +23,9 @@ The full token is shown only once. Store it in the local tool that will control
 Axelate. The Settings screen keeps only public profile metadata: profile name,
 scopes, token prefix, creation time, last seen, and revoked state.
 
-Users can rotate, revoke, or delete a token from Settings. Rotation creates a new
-one-time token and invalidates the old token. Revocation keeps the profile record
-but blocks authentication. Delete removes the profile and its pending approvals.
+Users can rotate or delete a token from Settings. Rotation creates a new
+one-time token and invalidates the old token. Delete removes the profile and its
+pending approvals.
 
 ## Development Token
 
@@ -119,14 +119,27 @@ Returns a safer launcher snapshot:
 
 Provider secrets, private files, and raw provider credentials are not returned.
 
+### Capabilities
+
+`GET /v1/agent/capabilities`
+
+Requires `observe`.
+
+Returns the authenticated actor, granted scopes, supported endpoint groups, and
+current safety rules. Agents should call this first instead of hardcoding
+assumptions about which launcher actions are available.
+
 ### Logs
 
 `GET /v1/agent/logs?viewId=<id>&since=0&limit=200`
 
 Requires `observe`.
 
-Returns recent sanitized console logs from the in-memory console store. `viewId`
-is optional. `limit` defaults to `200` and is capped at `1000`.
+Returns recent sanitized console logs from the in-memory console store for one
+explicit console view. `viewId` is required for useful output. If it is omitted,
+the route returns an empty `logs` array instead of a combined stream. This keeps
+agent access from accidentally mixing unrelated debug or info logs. `limit`
+defaults to `200` and is capped at `1000`.
 
 The Agent Control API redacts common bearer tokens, API keys, passwords, tokens,
 and secret assignment patterns before returning logs. It does not expose raw log
@@ -236,15 +249,16 @@ the same selection sync after a successful start.
 
 Requires `configure`.
 
-`PUT /v1/modules/{moduleId}/settings`
-
-Requires `configure` and writes an audit entry.
-
 `PATCH /v1/modules/{moduleId}/settings`
 
 Requires `configure` and writes an audit entry.
 
-Agents should use these routes instead of editing Axelate config files directly.
+Merges safe settings into the existing settings object. Full replacement through
+`PUT /v1/modules/{moduleId}/settings` is intentionally blocked. Agents cannot
+write sensitive keys such as tokens, API keys, passwords, or secrets through
+this route.
+
+Agents should use this route instead of editing Axelate config files directly.
 
 ### Integration Drafts
 
