@@ -7,18 +7,19 @@ use super::http::{
 };
 use super::preflight_http_request;
 use super::routing::{
-    agent_provider_summary, audit_action_from_request, backend_provider_id, default_draft_entry,
-    draft_id_from_name, draft_manifest_text, ensure_launcher_client, ensure_module_route_owner,
-    escape_toml_string, handle_agent_logs_request, is_dangerous_approval_action,
-    merge_json_settings, model_api_id, modules_visible_to_client, normalize_approval_field,
-    normalize_approval_risk, parse_agent_logs_query, parse_module_action,
-    redact_sensitive_log_text, resolve_session_id, sanitize_agent_log_entry,
-    sanitize_agent_module_settings, selected_module_from_api_provider,
+    agent_provider_summary, approvals_visible_to_client, audit_action_from_request,
+    backend_provider_id, default_draft_entry, draft_id_from_name, draft_manifest_text,
+    ensure_launcher_client, ensure_module_route_owner, escape_toml_string,
+    handle_agent_logs_request, is_dangerous_approval_action, merge_json_settings, model_api_id,
+    modules_visible_to_client, normalize_approval_field, normalize_approval_risk,
+    parse_agent_logs_query, parse_module_action, redact_sensitive_log_text, resolve_session_id,
+    sanitize_agent_log_entry, sanitize_agent_module_settings, selected_module_from_api_provider,
     selected_module_from_catalog_item, selected_module_from_runtime_module,
     selection_category_for_capabilities, selection_category_for_runtime_module, tier_rank,
     validate_draft_runtime_kind, validate_relative_draft_path,
 };
 use super::types::{AuthorizedClient, IntegrationTextRequest, ModuleContextApiResponse};
+use crate::domain::agent_control::{AgentApprovalRequest, AgentApprovalStatus, AgentScope};
 use crate::domain::modules::controller::ModuleAction;
 use crate::errors::AppError;
 use crate::infrastructure::logging::LogEntry;
@@ -643,7 +644,11 @@ fn integration_draft_helpers_validate_safe_contract() {
 
     assert!(validate_relative_draft_path("src/main.py").is_ok());
     assert!(validate_relative_draft_path("../outside.py").is_err());
+    assert!(validate_relative_draft_path("/outside.py").is_err());
+    #[cfg(windows)]
     assert!(validate_relative_draft_path("C:/outside.py").is_err());
+    #[cfg(windows)]
+    assert!(validate_relative_draft_path(r"C:temp\file.py").is_err());
 }
 
 #[test]
@@ -712,6 +717,53 @@ fn agent_approval_helpers_accept_only_risky_actions() {
     assert!(is_dangerous_approval_action("install package"));
     assert!(is_dangerous_approval_action("read raw-log file"));
     assert!(!is_dangerous_approval_action("open page"));
+}
+
+#[test]
+fn agent_approvals_are_scoped_to_requesting_agent() {
+    let approvals = vec![
+        AgentApprovalRequest {
+            id: "approval-a".to_string(),
+            agent_id: "agent-a".to_string(),
+            agent_name: "Agent A".to_string(),
+            action: "package.install".to_string(),
+            target: "demo-a".to_string(),
+            diff: "Install A".to_string(),
+            risk: "dangerous".to_string(),
+            status: AgentApprovalStatus::Pending,
+            created_at: "2026-05-23T00:00:00Z".to_string(),
+            decided_at: None,
+        },
+        AgentApprovalRequest {
+            id: "approval-b".to_string(),
+            agent_id: "agent-b".to_string(),
+            agent_name: "Agent B".to_string(),
+            action: "package.install".to_string(),
+            target: "demo-b".to_string(),
+            diff: "Install B".to_string(),
+            risk: "dangerous".to_string(),
+            status: AgentApprovalStatus::Pending,
+            created_at: "2026-05-23T00:00:01Z".to_string(),
+            decided_at: None,
+        },
+    ];
+    let agent = AuthorizedClient::Agent(crate::domain::agent_control::AuthorizedAgent {
+        id: "agent-a".to_string(),
+        name: "Agent A".to_string(),
+        scopes: vec![AgentScope::Observe],
+    });
+
+    let visible = approvals_visible_to_client(approvals.clone(), &agent);
+
+    assert_eq!(visible.len(), 1);
+    assert_eq!(
+        visible.first().map(|approval| approval.id.as_str()),
+        Some("approval-a")
+    );
+    assert_eq!(
+        approvals_visible_to_client(approvals, &AuthorizedClient::Launcher).len(),
+        2
+    );
 }
 
 #[test]

@@ -114,7 +114,7 @@ async fn route_authorized_request(
         ("GET", ["v1", "agent", "approvals"]) => {
             ensure_launcher_client(client)?;
             ensure_agent_scope(client, AgentScope::Observe)?;
-            handle_agent_approvals_request(&context).await
+            handle_agent_approvals_request(&context, client).await
         }
         ("POST", ["v1", "agent", "approval-requests"]) => {
             let agent = ensure_profile_agent(client)?;
@@ -254,7 +254,13 @@ async fn route_authorized_request(
                     ModuleAction::Start | ModuleAction::Restart | ModuleAction::Repair
                 )
             {
-                sync_launcher_selected_module(&context, client, module_id).await?;
+                if let Err(error) = sync_launcher_selected_module(&context, client, module_id).await
+                {
+                    tracing::warn!(
+                        module_id,
+                        "Failed to sync launcher selected module after successful action: {error}"
+                    );
+                }
             }
             Ok(json_response(
                 200,
@@ -434,9 +440,14 @@ pub(super) fn validate_relative_draft_path(path: &str) -> Result<(), AppError> {
     }
     let path = Path::new(path);
     if path.is_absolute()
-        || path
-            .components()
-            .any(|component| matches!(component, std::path::Component::ParentDir))
+        || path.components().any(|component| {
+            matches!(
+                component,
+                std::path::Component::ParentDir
+                    | std::path::Component::Prefix(_)
+                    | std::path::Component::RootDir
+            )
+        })
     {
         return Err(AppError::Validation(
             "Draft entry path must stay inside the draft directory".to_string(),
@@ -698,15 +709,31 @@ const fn is_bearer_token_delimiter(byte: u8) -> bool {
 
 async fn handle_agent_approvals_request(
     context: &LauncherHttpApiContext,
+    client: &AuthorizedClient,
 ) -> Result<HttpResponse, AppError> {
     let state = context
         .agent_control_service
         .state(api_base_url().to_string())
         .await?;
+    let approvals = approvals_visible_to_client(state.approvals, client);
     Ok(json_response(
         200,
-        json!({ "ok": true, "approvals": state.approvals }),
+        json!({ "ok": true, "approvals": approvals }),
     ))
+}
+
+pub(super) fn approvals_visible_to_client(
+    approvals: Vec<AgentApprovalRequest>,
+    client: &AuthorizedClient,
+) -> Vec<AgentApprovalRequest> {
+    match client {
+        AuthorizedClient::Launcher => approvals,
+        AuthorizedClient::Agent(agent) => approvals
+            .into_iter()
+            .filter(|approval| approval.agent_id == agent.id)
+            .collect(),
+        AuthorizedClient::Module(_) => Vec::new(),
+    }
 }
 
 async fn handle_agent_approval_request(

@@ -133,7 +133,7 @@ export class SettingsUI {
             return;
         }
 
-        const label = this._i18n.t('ui.launcher.settings.section_jump', 'Switch settings section');
+        const label = this._i18n.t('ui.launcher.settings.section_jump');
         button.title = label;
         button.setAttribute('aria-label', label);
 
