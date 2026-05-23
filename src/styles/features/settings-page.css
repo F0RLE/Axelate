@@ -80,11 +80,11 @@
     height: 4px;
     background: transparent;
     box-shadow:
-        -8px -4px 0 currentColor,
-        8px -4px 0 currentColor,
-        -4px 0 0 currentColor,
-        4px 0 0 currentColor,
-        0 4px 0 currentColor;
+        -8px -4px 0 currentcolor,
+        8px -4px 0 currentcolor,
+        -4px 0 0 currentcolor,
+        4px 0 0 currentcolor,
+        0 4px 0 currentcolor;
     image-rendering: pixelated;
     transform: translateY(1px);
     transition: transform 0.18s ease;
