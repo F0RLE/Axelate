@@ -59,14 +59,16 @@ pub async fn copy_agent_profile_token(
     service: tauri::State<'_, AgentControlService>,
     id: String,
 ) -> Result<(), AppError> {
-    let token = service.take_pending_token(&id).await?;
-    app.clipboard()
-        .write_text(token)
-        .map_err(|error| AppError::External {
-            message: format!("Failed to copy Agent Control token: {error}"),
-            request_id: None,
-        })?;
-    Ok(())
+    service
+        .copy_pending_token_with(&id, |token| {
+            app.clipboard()
+                .write_text(token)
+                .map_err(|error| AppError::External {
+                    message: format!("Failed to copy Agent Control token: {error}"),
+                    request_id: None,
+                })
+        })
+        .await
 }
 
 /// Deletes a trusted local agent profile.

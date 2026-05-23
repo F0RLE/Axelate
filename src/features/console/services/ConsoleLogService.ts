@@ -64,7 +64,7 @@ export class ConsoleLogService {
     constructor(
         private readonly bridge: IBridge,
         private readonly _tracer: ConsoleLogServiceLogger,
-        private readonly _translate: ConsoleLogTranslate = (key) => key,
+        private readonly _translate: ConsoleLogTranslate,
     ) {}
 
     public init(): Promise<void> {

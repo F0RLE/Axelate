@@ -15,10 +15,14 @@ describe('ConsoleLogService', () => {
     beforeEach(() => {
         vi.restoreAllMocks();
         bridge = createMockBridge();
-        service = new ConsoleLogService(bridge, {
-            warn: vi.fn(),
-            error: vi.fn(),
-        });
+        service = new ConsoleLogService(
+            bridge,
+            {
+                warn: vi.fn(),
+                error: vi.fn(),
+            },
+            (key) => key,
+        );
     });
 
     it('fetches only the requested console view in Tauri mode', async () => {
@@ -221,6 +225,42 @@ describe('ConsoleLogService', () => {
 
         expect(cleared).toBe(true);
         expect(bridge.invoke).not.toHaveBeenCalledWith('clear_console_logs', expect.anything());
+        expect(service.getLogsForView('agent')).toEqual([]);
+    });
+
+    it('clears agent audit logs during clearAllLogs without clearing console log files for agent', async () => {
+        setupTauri(bridge, true);
+        vi.spyOn(invokeModule, 'invokeSafe').mockResolvedValue({
+            status: 'ok',
+            data: {
+                enabled: true,
+                apiBaseUrl: 'http://127.0.0.1:3000',
+                profiles: [],
+                approvals: [],
+                audit: [
+                    {
+                        id: 'audit-1',
+                        actorId: 'agent-1',
+                        actorName: 'Trusted Local',
+                        action: 'launcher.open-page',
+                        target: 'console',
+                        result: 'success',
+                        createdAt: '2026-05-22T12:00:01Z',
+                    },
+                ],
+            },
+        });
+
+        await service.fetchLogs('agent');
+        const cleared = await service.clearAllLogs();
+        const afterClear = await service.fetchLogs('agent');
+
+        expect(cleared).toBe(true);
+        expect(bridge.invoke).toHaveBeenCalledWith('clear_logs');
+        expect(bridge.invoke).not.toHaveBeenCalledWith('clear_console_logs', {
+            viewId: 'agent',
+        });
+        expect(afterClear).toEqual([]);
         expect(service.getLogsForView('agent')).toEqual([]);
     });
 

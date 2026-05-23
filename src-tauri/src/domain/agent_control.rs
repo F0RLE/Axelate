@@ -310,6 +310,23 @@ impl AgentControlService {
         Ok(token)
     }
 
+    /// Copies the one-time plaintext token and consumes it only after copy succeeds.
+    pub async fn copy_pending_token_with<F>(&self, id: &str, copy: F) -> Result<(), AppError>
+    where
+        F: FnOnce(&str) -> Result<(), AppError>,
+    {
+        let mut pending_tokens = self.pending_tokens.lock().await;
+        let Some(token) = pending_tokens.get(id) else {
+            return Err(AppError::Validation(
+                "No one-time token is available for this profile; rotate it to create a new token"
+                    .to_string(),
+            ));
+        };
+        copy(token)?;
+        pending_tokens.remove(id);
+        Ok(())
+    }
+
     /// Authenticates a bearer token against enabled, non-revoked profiles.
     pub async fn authorize_token(&self, token: &str) -> Option<AuthorizedAgent> {
         let _guard = self.lock.lock().await;
@@ -522,6 +539,7 @@ mod tests {
     #![allow(clippy::expect_used)]
 
     use super::{AgentControlService, AgentScope};
+    use crate::errors::AppError;
     use crate::infrastructure::filesystem::local_file_service::LocalFileService;
     use crate::infrastructure::persistence::json_store::JsonStore;
     use crate::utils::paths::FILE_AGENT_CONTROL;
@@ -572,6 +590,40 @@ mod tests {
             .await
             .expect("pending token");
         assert!(first.starts_with("axl_agent_"));
+        assert!(
+            service
+                .take_pending_token(&response.profile.id)
+                .await
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn copy_pending_token_consumes_only_after_success() {
+        let _guard = TEST_LOCK.lock().await;
+        reset_store().await;
+        let service = service();
+        let response = service.create_profile(None, None).await.expect("profile");
+        let mut copied = String::new();
+
+        let failed = service
+            .copy_pending_token_with(&response.profile.id, |_| {
+                Err(AppError::External {
+                    message: "clipboard unavailable".to_string(),
+                    request_id: None,
+                })
+            })
+            .await;
+        assert!(failed.is_err());
+
+        service
+            .copy_pending_token_with(&response.profile.id, |token| {
+                copied = token.to_string();
+                Ok(())
+            })
+            .await
+            .expect("copy succeeds");
+        assert!(copied.starts_with("axl_agent_"));
         assert!(
             service
                 .take_pending_token(&response.profile.id)
