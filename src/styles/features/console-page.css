@@ -226,16 +226,33 @@
 }
 
 .console-tab--agent {
-    min-width: 94px;
+    min-width: 74px;
+    padding: 0.45rem 0.68rem;
+    border-color: rgba(255, 255, 255, 0.075);
+    background: rgba(255, 255, 255, 0.028);
+    color: var(--text-secondary);
 }
 
 .console-tab--agent::before {
     content: '';
-    width: 6px;
-    height: 6px;
+    width: 5px;
+    height: 5px;
     border-radius: 999px;
-    background: rgba(77, 214, 143, 0.72);
-    box-shadow: 0 0 10px rgba(77, 214, 143, 0.22);
+    background: rgba(77, 214, 143, 0.82);
+    box-shadow: 0 0 8px rgba(77, 214, 143, 0.2);
+}
+
+.console-tab--agent:hover,
+.console-tab--agent.active {
+    background: rgba(255, 255, 255, 0.055);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow: none;
+    color: var(--text-primary);
+}
+
+.console-tab--agent.active::before {
+    background: rgba(108, 224, 160, 0.96);
+    box-shadow: 0 0 10px rgba(77, 214, 143, 0.28);
 }
 
 .console-btn {

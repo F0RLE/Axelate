@@ -55,6 +55,7 @@ describe('SettingsUI page lifecycle', () => {
         settingsUI = null;
         document.body.innerHTML = '';
         vi.clearAllMocks();
+        vi.restoreAllMocks();
     });
 
     function createSettingsUI(): SettingsUI {
@@ -162,5 +163,40 @@ describe('SettingsUI page lifecycle', () => {
         expect(initAgentRenderer).not.toHaveBeenCalled();
         expect(destroyRenderer).toHaveBeenCalledTimes(1);
         expect(destroyAgentRenderer).toHaveBeenCalledTimes(1);
+    });
+
+    it('should keep jump control geometry in the already zoom-compensated page viewport', async () => {
+        document.documentElement.style.setProperty('--app-zoom', '1.25');
+        document.body.innerHTML = `
+            <div id="page-settings">
+                <button id="settings-section-jump" type="button"></button>
+                <div id="settings-grid"></div>
+                <section class="settings-section"></section>
+                <section class="settings-section"></section>
+            </div>
+        `;
+
+        const page = document.getElementById('page-settings') as HTMLElement;
+        Object.defineProperty(page, 'clientHeight', {
+            configurable: true,
+            value: 800,
+        });
+        Object.defineProperty(page, 'scrollHeight', {
+            configurable: true,
+            value: 1600,
+        });
+        Object.defineProperty(page, 'offsetTop', {
+            configurable: true,
+            value: 0,
+        });
+        vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue({ length: 1 } as never);
+
+        const ui = createSettingsUI();
+
+        await ui.init();
+
+        expect(
+            (document.getElementById('settings-section-jump') as HTMLButtonElement).style.top,
+        ).toBe('752px');
     });
 });

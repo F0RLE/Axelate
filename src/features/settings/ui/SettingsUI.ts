@@ -20,6 +20,14 @@ type SettingsUIDeps = {
     tracer: LoggerService;
 };
 
+const SECTION_SCROLL_DURATION_MS = 460;
+const WHEEL_LOCK_RELEASE_DELAY_MS = 120;
+const WHEEL_SECTION_DELTA_THRESHOLD = 8;
+
+function easeInOutCubic(progress: number): number {
+    return progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
+}
+
 export class SettingsUI {
     private readonly _generalRenderer: GeneralSettingsRenderer;
     private readonly _agentControlRenderer: AgentControlSettingsRenderer;
@@ -147,29 +155,97 @@ export class SettingsUI {
             syncButtonPosition();
         };
 
+        let animationFrame: number | null = null;
+        let unlockTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+        let wheelLocked = false;
+
+        const clearUnlockTimer = () => {
+            if (unlockTimer !== null) {
+                globalThis.clearTimeout(unlockTimer);
+                unlockTimer = null;
+            }
+        };
+
+        const releaseWheelLockSoon = () => {
+            clearUnlockTimer();
+            unlockTimer = globalThis.setTimeout(() => {
+                wheelLocked = false;
+                unlockTimer = null;
+            }, WHEEL_LOCK_RELEASE_DELAY_MS);
+        };
+
+        const finishAnimation = (releaseLock = true) => {
+            if (animationFrame !== null) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+            }
+            page.classList.remove('is-section-scrolling');
+            if (releaseLock) {
+                clearUnlockTimer();
+                wheelLocked = false;
+            }
+        };
+
         const scrollToSection = (toTop: boolean) => {
-            page.scrollTo({
-                top: toTop ? getTopScroll() : getAgentScroll(),
-                behavior: 'smooth',
-            });
-            requestAnimationFrame(update);
+            const target = toTop ? getTopScroll() : getAgentScroll();
+            const start = page.scrollTop;
+            const distance = target - start;
+            finishAnimation(false);
+            clearUnlockTimer();
+
+            if (Math.abs(distance) < 1) {
+                page.scrollTop = target;
+                update();
+                wheelLocked = false;
+                return;
+            }
+
+            wheelLocked = true;
+            const reduceMotion = globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduceMotion === true) {
+                page.scrollTop = target;
+                update();
+                releaseWheelLockSoon();
+                return;
+            }
+
+            const startedAt = performance.now();
+            page.classList.add('is-section-scrolling');
+
+            const tick = (now: number) => {
+                const elapsed = now - startedAt;
+                const progress = Math.min(1, elapsed / SECTION_SCROLL_DURATION_MS);
+                page.scrollTop = start + distance * easeInOutCubic(progress);
+                update();
+
+                if (progress < 1) {
+                    animationFrame = requestAnimationFrame(tick);
+                    return;
+                }
+
+                page.scrollTop = target;
+                update();
+                finishAnimation(false);
+                releaseWheelLockSoon();
+            };
+
+            animationFrame = requestAnimationFrame(tick);
         };
 
         const handleClick = () => {
             scrollToSection(getIsAgentSection());
         };
 
-        let wheelLocked = false;
         const handleWheel = (event: WheelEvent) => {
-            if (Math.abs(event.deltaY) < 8 || wheelLocked) {
+            if (wheelLocked) {
+                event.preventDefault();
+                return;
+            }
+            if (Math.abs(event.deltaY) < WHEEL_SECTION_DELTA_THRESHOLD) {
                 return;
             }
             event.preventDefault();
-            wheelLocked = true;
             scrollToSection(event.deltaY < 0);
-            globalThis.setTimeout(() => {
-                wheelLocked = false;
-            }, 420);
         };
 
         page.addEventListener('scroll', update, { passive: true });
@@ -183,6 +259,7 @@ export class SettingsUI {
             page.removeEventListener('wheel', handleWheel);
             globalThis.removeEventListener('resize', update);
             button.removeEventListener('click', handleClick);
+            finishAnimation();
         };
     }
 
