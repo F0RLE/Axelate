@@ -205,15 +205,6 @@ export class SettingsService {
         throw new Error(appErrorMessage(result.error));
     }
 
-    public async revokeAgentProfile(id: string): Promise<AgentControlState> {
-        const result = await invokeSafe(commands.revokeAgentProfile(id));
-        if (result.status === 'ok') {
-            return result.data;
-        }
-        this._tracer.error('[SettingsService] Failed to revoke Agent profile:', result.error);
-        throw new Error(appErrorMessage(result.error));
-    }
-
     public async deleteAgentProfile(id: string): Promise<AgentControlState> {
         const result = await invokeSafe(commands.deleteAgentProfile(id));
         if (result.status === 'ok') {

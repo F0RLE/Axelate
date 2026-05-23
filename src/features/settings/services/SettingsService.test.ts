@@ -13,7 +13,6 @@ const mocks = vi.hoisted(() => ({
         createAgentProfile: vi.fn(),
         rotateAgentProfile: vi.fn(),
         copyAgentProfileToken: vi.fn(),
-        revokeAgentProfile: vi.fn(),
         deleteAgentProfile: vi.fn(),
         decideAgentApproval: vi.fn(),
     },
@@ -35,7 +34,6 @@ vi.mock('@/shared/types/bindings', async (importOriginal) => {
             createAgentProfile: mocks.commands.createAgentProfile,
             rotateAgentProfile: mocks.commands.rotateAgentProfile,
             copyAgentProfileToken: mocks.commands.copyAgentProfileToken,
-            revokeAgentProfile: mocks.commands.revokeAgentProfile,
             deleteAgentProfile: mocks.commands.deleteAgentProfile,
             decideAgentApproval: mocks.commands.decideAgentApproval,
         },
@@ -234,7 +232,7 @@ describe('SettingsService', () => {
             ]);
         });
 
-        it('should rotate, revoke, delete, toggle, and decide approvals via backend-owned state', async () => {
+        it('should rotate, delete, toggle, and decide approvals via backend-owned state', async () => {
             const stateResponse = Promise.resolve({
                 status: 'ok',
                 data: {
@@ -246,7 +244,6 @@ describe('SettingsService', () => {
                 },
             });
             mocks.commands.setAgentControlEnabled.mockReturnValueOnce(stateResponse);
-            mocks.commands.revokeAgentProfile.mockReturnValueOnce(stateResponse);
             mocks.commands.deleteAgentProfile.mockReturnValueOnce(stateResponse);
             mocks.commands.decideAgentApproval.mockReturnValueOnce(stateResponse);
             mocks.commands.rotateAgentProfile.mockReturnValueOnce(
@@ -275,14 +272,12 @@ describe('SettingsService', () => {
             await service.setAgentControlEnabled(true);
             await service.rotateAgentProfile('agent-1');
             await service.copyAgentProfileToken('agent-1');
-            await service.revokeAgentProfile('agent-1');
             await service.deleteAgentProfile('agent-1');
             await service.decideAgentApproval('approval-1', false);
 
             expect(mocks.commands.setAgentControlEnabled).toHaveBeenCalledWith(true);
             expect(mocks.commands.rotateAgentProfile).toHaveBeenCalledWith('agent-1');
             expect(mocks.commands.copyAgentProfileToken).toHaveBeenCalledWith('agent-1');
-            expect(mocks.commands.revokeAgentProfile).toHaveBeenCalledWith('agent-1');
             expect(mocks.commands.deleteAgentProfile).toHaveBeenCalledWith('agent-1');
             expect(mocks.commands.decideAgentApproval).toHaveBeenCalledWith('approval-1', false);
         });

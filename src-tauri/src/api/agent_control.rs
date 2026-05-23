@@ -69,16 +69,6 @@ pub async fn copy_agent_profile_token(
     Ok(())
 }
 
-/// Revokes a trusted local agent profile.
-#[tauri::command]
-#[specta::specta]
-pub async fn revoke_agent_profile(
-    service: tauri::State<'_, AgentControlService>,
-    id: String,
-) -> Result<AgentControlState, AppError> {
-    service.revoke_profile(&id, api_base_url()).await
-}
-
 /// Deletes a trusted local agent profile.
 #[tauri::command]
 #[specta::specta]

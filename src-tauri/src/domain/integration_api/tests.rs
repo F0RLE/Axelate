@@ -7,14 +7,16 @@ use super::http::{
 };
 use super::preflight_http_request;
 use super::routing::{
-    agent_provider_summary, backend_provider_id, default_draft_entry, draft_id_from_name,
-    draft_manifest_text, ensure_launcher_client, ensure_module_route_owner, escape_toml_string,
-    merge_json_settings, model_api_id, modules_visible_to_client, parse_agent_logs_query,
-    parse_module_action, redact_sensitive_log_text, resolve_session_id, sanitize_agent_log_entry,
-    selected_module_from_api_provider, selected_module_from_catalog_item,
-    selected_module_from_runtime_module, selection_category_for_capabilities,
-    selection_category_for_runtime_module, tier_rank, validate_draft_runtime_kind,
-    validate_relative_draft_path,
+    agent_provider_summary, audit_action_from_request, backend_provider_id, default_draft_entry,
+    draft_id_from_name, draft_manifest_text, ensure_launcher_client, ensure_module_route_owner,
+    escape_toml_string, handle_agent_logs_request, is_dangerous_approval_action,
+    merge_json_settings, model_api_id, modules_visible_to_client, normalize_approval_field,
+    normalize_approval_risk, parse_agent_logs_query, parse_module_action,
+    redact_sensitive_log_text, resolve_session_id, sanitize_agent_log_entry,
+    sanitize_agent_module_settings, selected_module_from_api_provider,
+    selected_module_from_catalog_item, selected_module_from_runtime_module,
+    selection_category_for_capabilities, selection_category_for_runtime_module, tier_rank,
+    validate_draft_runtime_kind, validate_relative_draft_path,
 };
 use super::types::{AuthorizedClient, IntegrationTextRequest, ModuleContextApiResponse};
 use crate::domain::modules::controller::ModuleAction;
@@ -185,18 +187,47 @@ fn agent_logs_query_rejects_invalid_since_and_limit() {
 }
 
 #[test]
+fn agent_logs_without_view_id_return_empty_list() {
+    let request = super::types::HttpRequest {
+        method: "GET".to_string(),
+        path: "/v1/agent/logs?limit=5".to_string(),
+        headers: HashMap::new(),
+        body: Vec::new(),
+    };
+
+    let response = handle_agent_logs_request(&request).expect("logs response");
+
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body.get("logs"), Some(&serde_json::json!([])));
+    assert_eq!(response.body.get("viewId"), Some(&serde_json::Value::Null));
+}
+
+#[test]
 fn agent_logs_redact_sensitive_values() {
     let redacted = redact_sensitive_log_text(
-        "Authorization: Bearer axl_agent_secret token=abc api_key=\"sk-test\" url=/x?api_key=query&ok=1",
+        "Authorization: Bearer axl_agent_secret token=abc api_key=\"sk-test\" access_key=ak private_key=pk secret_key=sk openaiKey=o anthropicKey=a ssh_key=ssh safe=ok url=/x?api_key=query&ok=1",
     );
 
     assert!(!redacted.contains("axl_agent_secret"));
     assert!(!redacted.contains("token=abc"));
     assert!(!redacted.contains("sk-test"));
+    assert!(!redacted.contains("access_key=ak"));
+    assert!(!redacted.contains("private_key=pk"));
+    assert!(!redacted.contains("secret_key=sk"));
+    assert!(!redacted.contains("openaiKey=o"));
+    assert!(!redacted.contains("anthropicKey=a"));
+    assert!(!redacted.contains("ssh_key=ssh"));
     assert!(!redacted.contains("api_key=query"));
     assert!(redacted.contains("Authorization: [REDACTED]"));
     assert!(redacted.contains("token=[REDACTED]"));
     assert!(redacted.contains("api_key=\"[REDACTED]\""));
+    assert!(redacted.contains("access_key=[REDACTED]"));
+    assert!(redacted.contains("private_key=[REDACTED]"));
+    assert!(redacted.contains("secret_key=[REDACTED]"));
+    assert!(redacted.contains("openaiKey=[REDACTED]"));
+    assert!(redacted.contains("anthropicKey=[REDACTED]"));
+    assert!(redacted.contains("ssh_key=[REDACTED]"));
+    assert!(redacted.contains("safe=ok"));
     assert!(redacted.contains("api_key=[REDACTED]&ok=1"));
 }
 
@@ -399,6 +430,98 @@ fn patch_settings_merge_nested_objects_without_dropping_existing_keys() {
 }
 
 #[test]
+fn agent_module_settings_redact_sensitive_keys_recursively() {
+    let settings = HashMap::from([
+        ("bot_token".to_string(), serde_json::json!("secret-token")),
+        ("openaiKey".to_string(), serde_json::json!("openai-secret")),
+        (
+            "anthropicKey".to_string(),
+            serde_json::json!("anthropic-secret"),
+        ),
+        ("module_language".to_string(), serde_json::json!("auto")),
+        (
+            "nested".to_string(),
+            serde_json::json!({
+                "api_key": "secret-key",
+                "access_key": "access-secret",
+                "private_key": "private-secret",
+                "secret_key": "nested-secret",
+                "ssh_key": "ssh-secret",
+                "safe": true,
+            }),
+        ),
+    ]);
+
+    let sanitized = sanitize_agent_module_settings(settings);
+
+    assert_eq!(
+        sanitized.get("bot_token"),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized.get("openaiKey"),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized.get("anthropicKey"),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized.get("module_language"),
+        Some(&serde_json::json!("auto"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("api_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("access_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("private_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("secret_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("ssh_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("safe")),
+        Some(&serde_json::json!(true))
+    );
+}
+
+#[test]
+fn agent_module_settings_updates_reject_sensitive_keys() {
+    let updates = HashMap::from([(
+        "nested".to_string(),
+        serde_json::json!({ "openaiKey": "new-secret" }),
+    )]);
+
+    let error = super::routing::ensure_agent_settings_update_is_safe(&updates)
+        .expect_err("secret updates must be rejected");
+
+    assert!(matches!(error, AppError::PermissionDenied(_)));
+}
+
+#[test]
 fn module_context_response_uses_public_camel_case_contract() {
     let response = serde_json::to_value(ModuleContextApiResponse {
         ok: true,
@@ -569,6 +692,37 @@ fn json_response_helpers_preserve_status_and_error_shape() {
     assert_eq!(
         error.body.get("error").and_then(serde_json::Value::as_str),
         Some("denied")
+    );
+}
+
+#[test]
+fn agent_approval_helpers_accept_only_risky_actions() {
+    assert_eq!(
+        normalize_approval_field("action", "install module", 96).expect("action"),
+        "install module"
+    );
+    assert!(normalize_approval_field("target", "", 96).is_err());
+    assert!(normalize_approval_field("diff", "x".repeat(97).as_str(), 96).is_err());
+    assert_eq!(
+        normalize_approval_risk("Dangerous").expect("dangerous"),
+        "dangerous"
+    );
+    assert_eq!(normalize_approval_risk("HIGH").expect("high"), "high");
+    assert!(normalize_approval_risk("medium").is_err());
+    assert!(is_dangerous_approval_action("install package"));
+    assert!(is_dangerous_approval_action("read raw-log file"));
+    assert!(!is_dangerous_approval_action("open page"));
+}
+
+#[test]
+fn failed_agent_requests_get_stable_audit_action_names() {
+    assert_eq!(
+        audit_action_from_request("PATCH", "/v1/modules/demo/settings?x=1"),
+        "http.patch.v1.modules.demo.settings"
+    );
+    assert_eq!(
+        audit_action_from_request("GET", "/v1/agent/capabilities"),
+        "http.get.v1.agent.capabilities"
     );
 }
 

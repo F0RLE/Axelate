@@ -21,8 +21,6 @@ export const commands = {
 	rotateAgentProfile: (id: string) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("rotate_agent_profile", { id })),
 	/**  Copies a one-time agent token to the OS clipboard without exposing it to the frontend. */
 	copyAgentProfileToken: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_agent_profile_token", { id })),
-	/**  Revokes a trusted local agent profile. */
-	revokeAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("revoke_agent_profile", { id })),
 	/**  Deletes a trusted local agent profile. */
 	deleteAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("delete_agent_profile", { id })),
 	/**  Applies a user decision to a pending agent approval request. */

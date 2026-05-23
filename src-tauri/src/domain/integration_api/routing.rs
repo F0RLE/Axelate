@@ -67,9 +67,19 @@ pub(super) async fn dispatch_http_request(
         return json_error(401, "Missing or invalid launcher API token");
     };
 
-    match route_authorized_request(path, &request, context, &client).await {
+    match route_authorized_request(path, &request, context.clone(), &client).await {
         Ok(response) => response,
-        Err(error) => json_error(status_for_app_error(&error), &error.to_string()),
+        Err(error) => {
+            record_agent_audit(
+                &context,
+                &client,
+                audit_action_from_request(&request.method, path),
+                path.to_string(),
+                audit_result_for_error(&error).to_string(),
+            )
+            .await;
+            json_error(status_for_app_error(&error), &error.to_string())
+        }
     }
 }
 
@@ -90,6 +100,11 @@ async fn route_authorized_request(
             ensure_launcher_client(client)?;
             ensure_agent_scope(client, AgentScope::Observe)?;
             handle_agent_state_request(&context).await
+        }
+        ("GET", ["v1", "agent", "capabilities"]) => {
+            ensure_launcher_client(client)?;
+            ensure_agent_scope(client, AgentScope::Observe)?;
+            Ok(handle_agent_capabilities_request(client))
         }
         ("GET", ["v1", "agent", "logs"]) => {
             ensure_launcher_client(client)?;
@@ -182,7 +197,7 @@ async fn route_authorized_request(
         ("PUT", ["v1", "modules", module_id, "settings"]) => {
             ensure_module_route_owner(client, module_id)?;
             ensure_agent_scope(client, AgentScope::Configure)?;
-            let response = handle_put_module_settings_request(request, &context, module_id).await?;
+            let response = handle_put_module_settings_request(request, &context, module_id)?;
             record_agent_audit(
                 &context,
                 client,
@@ -347,13 +362,13 @@ async fn handle_create_integration_draft_request(
     })
 }
 
-fn handle_agent_logs_request(request: &HttpRequest) -> Result<HttpResponse, AppError> {
+pub(super) fn handle_agent_logs_request(request: &HttpRequest) -> Result<HttpResponse, AppError> {
     let query = parse_agent_logs_query(&request.path)?;
     let logs = match query.view_id.as_deref() {
         Some(view_id) => {
             crate::api::system::logs::get_console_logs(view_id.to_string(), query.since)?
         }
-        None => crate::api::system::logs::get_logs(query.since)?,
+        None => Vec::new(),
     };
     let skip = logs.len().saturating_sub(query.limit);
     let logs = logs
@@ -671,6 +686,7 @@ fn is_sensitive_key(key: &str) -> bool {
         normalized.as_str(),
         "apikey" | "authorization" | "auth" | "password" | "secret" | "token" | "key"
     ) || normalized.ends_with("apikey")
+        || normalized.ends_with("key")
         || normalized.ends_with("token")
         || normalized.ends_with("secret")
         || normalized.ends_with("password")
@@ -699,25 +715,20 @@ async fn handle_agent_approval_request(
     agent: &crate::domain::agent_control::AuthorizedAgent,
 ) -> Result<HttpResponse, AppError> {
     let payload: IntegrationAgentApprovalRequest = parse_json_body(request)?;
-    if payload.action.trim().is_empty()
-        || payload.target.trim().is_empty()
-        || payload.diff.trim().is_empty()
-    {
+    let action = normalize_approval_field("action", payload.action.trim(), 96)?;
+    let target = normalize_approval_field("target", payload.target.trim(), 160)?;
+    let diff = normalize_approval_field("diff", payload.diff.trim(), 4_000)?;
+    let risk = normalize_approval_risk(payload.risk.trim())?;
+    if !is_dangerous_approval_action(&action) && risk != "dangerous" {
         return Ok(json_error(
             400,
-            "Agent approval requests require action, target, and diff",
+            "Approval requests are reserved for dangerous or high-risk actions",
         ));
     }
 
     let approval = context
         .agent_control_service
-        .create_approval_request(
-            agent,
-            payload.action.trim().to_string(),
-            payload.target.trim().to_string(),
-            payload.diff.trim().to_string(),
-            payload.risk.trim().to_string(),
-        )
+        .create_approval_request(agent, action, target, diff, risk)
         .await?;
     if let Err(error) = context.app.emit(
         "agent-control:state-changed",
@@ -741,6 +752,69 @@ async fn handle_agent_approval_request(
         202,
         json!(AgentApprovalCreatedResponse { ok: true, approval }),
     ))
+}
+
+fn handle_agent_capabilities_request(client: &AuthorizedClient) -> HttpResponse {
+    json_response(
+        200,
+        json!({
+            "ok": true,
+            "apiVersion": SDK_API_VERSION,
+            "auth": {
+                "actorId": client.actor_id(),
+                "actorName": client.actor_name(),
+                "scopes": granted_agent_scopes(client),
+            },
+            "endpoints": {
+                "observe": [
+                    "GET /v1/health",
+                    "GET /v1/agent/capabilities",
+                    "GET /v1/agent/state",
+                    "GET /v1/agent/logs?viewId=<console-view-id>",
+                    "GET /v1/modules",
+                    "GET /v1/modules/:id/status",
+                    "GET /v1/modules/:id/context"
+                ],
+                "operate": [
+                    "POST /v1/launcher/open-page",
+                    "POST /v1/launcher/select-module",
+                    "POST /v1/modules/:id/start",
+                    "POST /v1/modules/:id/stop",
+                    "POST /v1/modules/:id/restart",
+                    "POST /v1/ai/text",
+                    "POST /v1/ai/image"
+                ],
+                "configure": [
+                    "GET /v1/modules/:id/settings",
+                    "PATCH /v1/modules/:id/settings",
+                    "POST /v1/modules/:id/stage"
+                ],
+                "draftCreate": [
+                    "POST /v1/integration-drafts"
+                ],
+                "approval": [
+                    "GET /v1/agent/approvals",
+                    "POST /v1/agent/approval-requests"
+                ]
+            },
+            "safety": {
+                "loopbackOnly": true,
+                "secretsRedacted": true,
+                "rawLogsBlocked": true,
+                "fullSettingsReplacementBlocked": true,
+                "dangerousActionsRequireApproval": [
+                    "install",
+                    "delete",
+                    "uninstall",
+                    "update",
+                    "secret",
+                    "raw-log",
+                    "filesystem",
+                    "network-permission"
+                ]
+            }
+        }),
+    )
 }
 
 #[derive(Debug, serde::Serialize)]
@@ -1027,10 +1101,12 @@ async fn handle_get_module_settings_request(
     module_id: &str,
 ) -> Result<HttpResponse, AppError> {
     ensure_installed_module_id(module_id)?;
-    let settings = context
-        .settings_service
-        .get_module_settings(module_id)
-        .await?;
+    let settings = sanitize_agent_module_settings(
+        context
+            .settings_service
+            .get_module_settings(module_id)
+            .await?,
+    );
 
     Ok(json_response(
         200,
@@ -1038,21 +1114,91 @@ async fn handle_get_module_settings_request(
     ))
 }
 
-async fn handle_put_module_settings_request(
-    request: &HttpRequest,
-    context: &LauncherHttpApiContext,
-    module_id: &str,
-) -> Result<HttpResponse, AppError> {
-    ensure_installed_module_id(module_id)?;
-    let settings: HashMap<String, serde_json::Value> = parse_json_body(request)?;
-    context
-        .settings_service
-        .save_module_settings(module_id, &settings)
-        .await?;
+pub(super) fn sanitize_agent_module_settings(
+    settings: HashMap<String, serde_json::Value>,
+) -> HashMap<String, serde_json::Value> {
+    settings
+        .into_iter()
+        .map(|(key, value)| {
+            let value = if is_sensitive_key(&key) {
+                serde_json::Value::String("[REDACTED]".to_string())
+            } else {
+                sanitize_agent_setting_value(value)
+            };
+            (key, value)
+        })
+        .collect()
+}
 
-    Ok(json_response(
-        200,
-        json!({ "ok": true, "moduleId": module_id, "settings": settings }),
+fn sanitize_agent_setting_value(value: serde_json::Value) -> serde_json::Value {
+    match value {
+        serde_json::Value::Object(map) => serde_json::Value::Object(
+            map.into_iter()
+                .map(|(key, value)| {
+                    let value = if is_sensitive_key(&key) {
+                        serde_json::Value::String("[REDACTED]".to_string())
+                    } else {
+                        sanitize_agent_setting_value(value)
+                    };
+                    (key, value)
+                })
+                .collect(),
+        ),
+        serde_json::Value::Array(values) => serde_json::Value::Array(
+            values
+                .into_iter()
+                .map(sanitize_agent_setting_value)
+                .collect(),
+        ),
+        value => value,
+    }
+}
+
+pub(super) fn ensure_agent_settings_update_is_safe(
+    settings: &HashMap<String, serde_json::Value>,
+) -> Result<(), AppError> {
+    for (key, value) in settings {
+        ensure_agent_setting_key_is_safe(key)?;
+        ensure_agent_setting_value_is_safe(value)?;
+    }
+    Ok(())
+}
+
+fn ensure_agent_setting_value_is_safe(value: &serde_json::Value) -> Result<(), AppError> {
+    match value {
+        serde_json::Value::Object(map) => {
+            for (key, value) in map {
+                ensure_agent_setting_key_is_safe(key)?;
+                ensure_agent_setting_value_is_safe(value)?;
+            }
+        }
+        serde_json::Value::Array(values) => {
+            for value in values {
+                ensure_agent_setting_value_is_safe(value)?;
+            }
+        }
+        _ => {}
+    }
+    Ok(())
+}
+
+fn ensure_agent_setting_key_is_safe(key: &str) -> Result<(), AppError> {
+    if is_sensitive_key(key) {
+        return Err(AppError::PermissionDenied(format!(
+            "Agent API cannot read or change sensitive module setting: {key}"
+        )));
+    }
+    Ok(())
+}
+
+fn handle_put_module_settings_request(
+    _request: &HttpRequest,
+    _context: &LauncherHttpApiContext,
+    _module_id: &str,
+) -> Result<HttpResponse, AppError> {
+    Err(AppError::PermissionDenied(
+        "Full module settings replacement is not allowed through Agent API; use PATCH for safe settings"
+            .to_string(),
     ))
 }
 
@@ -1063,6 +1209,7 @@ async fn handle_patch_module_settings_request(
 ) -> Result<HttpResponse, AppError> {
     ensure_installed_module_id(module_id)?;
     let updates: HashMap<String, serde_json::Value> = parse_json_body(request)?;
+    ensure_agent_settings_update_is_safe(&updates)?;
     let mut settings = context
         .settings_service
         .get_module_settings(module_id)
@@ -1075,7 +1222,11 @@ async fn handle_patch_module_settings_request(
 
     Ok(json_response(
         200,
-        json!({ "ok": true, "moduleId": module_id, "settings": settings }),
+        json!({
+            "ok": true,
+            "moduleId": module_id,
+            "settings": sanitize_agent_module_settings(settings),
+        }),
     ))
 }
 
@@ -1158,6 +1309,14 @@ fn ensure_agent_scope(client: &AuthorizedClient, scope: AgentScope) -> Result<()
     }
 }
 
+fn granted_agent_scopes(client: &AuthorizedClient) -> Vec<AgentScope> {
+    match client {
+        AuthorizedClient::Agent(agent) => agent.scopes.clone(),
+        AuthorizedClient::Launcher => vec![AgentScope::FullAccess],
+        AuthorizedClient::Module(_) => Vec::new(),
+    }
+}
+
 fn ensure_profile_agent(
     client: &AuthorizedClient,
 ) -> Result<&crate::domain::agent_control::AuthorizedAgent, AppError> {
@@ -1232,6 +1391,82 @@ const fn module_action_name(action: ModuleAction) -> &'static str {
         ModuleAction::Install => "install",
         ModuleAction::Uninstall => "uninstall",
         ModuleAction::Update => "update",
+    }
+}
+
+pub(super) fn normalize_approval_field(
+    field: &str,
+    value: &str,
+    max_len: usize,
+) -> Result<String, AppError> {
+    if value.is_empty() {
+        return Err(AppError::Validation(format!(
+            "Agent approval {field} cannot be empty"
+        )));
+    }
+    if value.len() > max_len {
+        return Err(AppError::Validation(format!(
+            "Agent approval {field} is too long"
+        )));
+    }
+    Ok(value.to_string())
+}
+
+pub(super) fn normalize_approval_risk(value: &str) -> Result<String, AppError> {
+    let normalized = value.trim().to_ascii_lowercase();
+    match normalized.as_str() {
+        "high" | "dangerous" => Ok(normalized),
+        "medium" | "low" | "" => Err(AppError::Validation(
+            "Agent approval risk must be high or dangerous".to_string(),
+        )),
+        _ => Err(AppError::Validation(format!(
+            "Unsupported agent approval risk: {value}"
+        ))),
+    }
+}
+
+pub(super) fn is_dangerous_approval_action(action: &str) -> bool {
+    let normalized = action.to_ascii_lowercase();
+    [
+        "install",
+        "delete",
+        "remove",
+        "uninstall",
+        "update",
+        "upgrade",
+        "secret",
+        "token",
+        "raw-log",
+        "raw_logs",
+        "filesystem",
+        "file-system",
+        "network-permission",
+        "permission",
+    ]
+    .iter()
+    .any(|marker| normalized.contains(marker))
+}
+
+pub(super) fn audit_action_from_request(method: &str, path: &str) -> String {
+    let normalized_path = path
+        .split('?')
+        .next()
+        .unwrap_or(path)
+        .trim_matches('/')
+        .replace('/', ".");
+    format!("http.{}.{}", method.to_ascii_lowercase(), normalized_path)
+}
+
+const fn audit_result_for_error(error: &AppError) -> &'static str {
+    match error {
+        AppError::PermissionDenied(_) | AppError::FrontendSecretForbidden(_) => "denied",
+        AppError::Validation(_) => "rejected",
+        AppError::NotFound(_) => "not-found",
+        AppError::Io(_)
+        | AppError::Serialization(_)
+        | AppError::Config(_)
+        | AppError::External { .. }
+        | AppError::Internal { .. } => "failed",
     }
 }
 

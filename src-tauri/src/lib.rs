@@ -103,7 +103,6 @@ pub fn create_specta_builder() -> Builder<tauri::Wry> {
             agent_control::create_agent_profile,
             agent_control::rotate_agent_profile,
             agent_control::copy_agent_profile_token,
-            agent_control::revoke_agent_profile,
             agent_control::delete_agent_profile,
             agent_control::decide_agent_approval,
             config::get_config,
