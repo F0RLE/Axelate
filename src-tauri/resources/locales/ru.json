@@ -266,7 +266,7 @@
     "ui.launcher.settings.agent_control_create_profile_hint": "Создать токен с выбранными правами",
     "ui.launcher.settings.agent_control_create_full_access": "Полный доступ",
     "ui.launcher.settings.agent_control_create_full_access_hint": "Создать токен со всеми правами. Опасные действия все равно требуют подтверждения.",
-    "ui.launcher.settings.agent_control_trusted_local": "Выбранные права",
+    "ui.launcher.settings.agent_control_trusted_local": "Доверенный локальный",
     "ui.launcher.settings.agent_control_full_access": "Полный доступ",
     "ui.launcher.settings.agent_control_full_access_confirm": "Создать токен для внешнего агента с полным локальным доступом к лаунчеру?",
     "ui.launcher.settings.agent_control_confirm_action": "Подтвердить",

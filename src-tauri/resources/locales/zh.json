@@ -266,7 +266,7 @@
     "ui.launcher.settings.agent_control_create_profile_hint": "使用所选权限创建令牌",
     "ui.launcher.settings.agent_control_create_full_access": "完全访问",
     "ui.launcher.settings.agent_control_create_full_access_hint": "创建拥有全部权限的令牌。危险操作仍需确认。",
-    "ui.launcher.settings.agent_control_trusted_local": "所选权限",
+    "ui.launcher.settings.agent_control_trusted_local": "可信本地",
     "ui.launcher.settings.agent_control_full_access": "完全访问",
     "ui.launcher.settings.agent_control_full_access_confirm": "为外部代理创建拥有启动器本地完全访问权限的令牌？",
     "ui.launcher.settings.agent_control_confirm_action": "确认",

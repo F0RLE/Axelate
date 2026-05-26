@@ -73,7 +73,7 @@ export function restoreSelectedModules(args: RestoreSelectedModulesArgs): Restor
 
 function resolveRestoredApp(
     catalog: CatalogService,
-    _category: string,
+    category: string,
     selectedModule: Partial<IApp>,
 ): IApp | null {
     if (typeof selectedModule.id !== 'string' || selectedModule.id === '') {
@@ -85,5 +85,13 @@ function resolveRestoredApp(
         return catalogApp;
     }
 
+    if (isAiCategory(category) && typeof selectedModule.name === 'string') {
+        return selectedModule as IApp;
+    }
+
     return null;
+}
+
+function isAiCategory(category: string): boolean {
+    return category === 'ai_text' || category === 'ai_image';
 }

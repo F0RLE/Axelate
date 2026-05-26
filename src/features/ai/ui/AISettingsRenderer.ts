@@ -254,7 +254,10 @@ class AISettingsRenderer extends BaseComponent {
             },
             openKeyProviderUrl: () => {
                 if (this._tauri) {
-                    void this._tauri.openUrl(this._getKeyProviderUrl(appId));
+                    const url = this._getKeyProviderUrl(appId);
+                    if (url !== null) {
+                        void this._tauri.openUrl(url);
+                    }
                 }
             },
             toggleKeyVisibility: async () => this.toggleKeyVisibility(appId),
@@ -396,10 +399,7 @@ class AISettingsRenderer extends BaseComponent {
             .map((model) => ({
                 id: model.id,
                 name: model.name.trim() !== '' ? model.name : model.id,
-                desc: translate(
-                    'ui.settings.custom_model_desc',
-                    'Manual OpenAI-compatible model ID',
-                ),
+                desc: translate('ui.settings.custom_model_desc', ''),
                 isCustom: true,
             }));
 
@@ -564,8 +564,18 @@ class AISettingsRenderer extends BaseComponent {
         return this._getActiveProviderPolicy(appId)?.keyProviderId ?? appId;
     }
 
-    private _getKeyProviderUrl(appId: string): string {
-        return this._getActiveProviderPolicy(appId)?.keyProviderUrl ?? '#';
+    private _getKeyProviderUrl(appId: string): string | null {
+        const rawUrl = this._getActiveProviderPolicy(appId)?.keyProviderUrl;
+        if (typeof rawUrl !== 'string') {
+            return null;
+        }
+
+        try {
+            const url = new URL(rawUrl.trim());
+            return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+        } catch {
+            return null;
+        }
     }
 
     private _getActiveProviderPolicy(appId: string): IApp['providerPolicy'] | null {

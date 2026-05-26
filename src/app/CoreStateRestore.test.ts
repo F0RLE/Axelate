@@ -74,4 +74,33 @@ describe('CoreStateRestore', () => {
 
         expect(updateModuleCard).toHaveBeenCalledWith('ai_text', customTextApp);
     });
+
+    it('should preserve persisted AI selections that are not in the catalog snapshot', () => {
+        const updateModuleCard = vi.fn();
+        const selectedTextApp = {
+            id: 'external-ai-provider',
+            name: 'External Provider',
+            type: 'api',
+            capability: 'text',
+        };
+
+        restoreSelectedModules({
+            tracer: {
+                warn: vi.fn(),
+            },
+            moduleSettings: {
+                getSelectedModules: () => ({
+                    ai_text: selectedTextApp,
+                }),
+            } as never,
+            catalog: {
+                getAppById: () => undefined,
+            } as never,
+            appUI: {
+                updateModuleCard,
+            } as never,
+        });
+
+        expect(updateModuleCard).toHaveBeenCalledWith('ai_text', selectedTextApp);
+    });
 });

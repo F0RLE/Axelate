@@ -145,7 +145,6 @@ jobs:
     name: Cross-platform Compatibility (${{ matrix.os }})
     runs-on: ${{ matrix.os }}
     timeout-minutes: 35
-    continue-on-error: true
     strategy:
       fail-fast: false
       matrix:

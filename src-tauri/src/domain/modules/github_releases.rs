@@ -604,6 +604,13 @@ mod tests {
     }
 
     #[test]
+    fn os_arch_tokens_without_binary_extension_are_not_cpu_assets() {
+        assert!(!is_cpu_asset_name("llama-windows-x64.sha256"));
+        assert!(!is_cpu_asset_name("llama-linux-amd64.txt"));
+        assert!(is_cpu_asset_name("llama-linux-amd64.tar.gz"));
+    }
+
+    #[test]
     fn unknown_accelerator_tokens_are_not_classified_as_cpu() {
         assert!(!is_cpu_asset_name("llama-b8981-bin-win-metal-x64.zip"));
         assert!(!is_cpu_asset_name("llama-b8981-bin-win-npu-x64.zip"));

@@ -190,7 +190,9 @@ fn build_catalog_item(
         coming_soon: item.coming_soon,
         managed_externally: item.managed_externally,
         version: item.version.clone(),
-        config_schema: installed_module.and_then(|module| module.config_schema.clone()),
+        config_schema: installed_module
+            .and_then(|module| module.config_schema.clone())
+            .or_else(|| item.config_schema.clone()),
         settings_ui: installed_module.and_then(|module| module.settings_ui.clone()),
         api_provider_data: api_provider.clone(),
         status: installed_module.and_then(|module| module.status.clone()),

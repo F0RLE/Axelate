@@ -134,9 +134,28 @@ pub(super) fn is_cpu_asset_name(name: &str) -> bool {
         }
     }
 
-    (has_cpu_token || has_os_or_arch_token)
+    (has_cpu_token || (has_os_or_arch_token && is_packaged_binary_name(&lower)))
         && !has_unknown_accelerator_token
         && !is_gpu_asset_name_lower(&lower)
+}
+
+fn is_packaged_binary_name(lower: &str) -> bool {
+    let path = std::path::Path::new(lower);
+    let extension = path.extension().and_then(std::ffi::OsStr::to_str);
+    if matches!(
+        extension,
+        Some("zip" | "tgz" | "7z" | "exe" | "msi" | "dmg" | "appimage")
+    ) {
+        return true;
+    }
+
+    extension == Some("gz")
+        && path
+            .file_stem()
+            .and_then(std::ffi::OsStr::to_str)
+            .and_then(|stem| std::path::Path::new(stem).extension())
+            .and_then(std::ffi::OsStr::to_str)
+            == Some("tar")
 }
 
 fn release_asset_tokens(name: &str) -> impl Iterator<Item = &str> {

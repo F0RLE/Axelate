@@ -122,6 +122,7 @@ async fn route_authorized_request(
         }
         ("POST", ["v1", "launcher", "open-page"]) => {
             ensure_agent_scope(client, AgentScope::Operate)?;
+            ensure_launcher_client(client)?;
             let response = handle_open_page_request(request, &context).await?;
             record_agent_audit(
                 &context,
@@ -138,6 +139,7 @@ async fn route_authorized_request(
         }
         ("POST", ["v1", "launcher", "select-module"]) => {
             ensure_agent_scope(client, AgentScope::Operate)?;
+            ensure_launcher_client(client)?;
             let response = handle_select_module_request(request, &context).await?;
             record_agent_audit(
                 &context,
@@ -154,6 +156,7 @@ async fn route_authorized_request(
         }
         ("POST", ["v1", "integration-drafts"]) => {
             ensure_agent_scope(client, AgentScope::DraftCreate)?;
+            ensure_launcher_client(client)?;
             let response = handle_create_integration_draft_request(request).await?;
             record_agent_audit(
                 &context,

@@ -297,7 +297,12 @@ export class CoreLifecycleController {
         const unlisten = await tauriProvider.listen<AgentOpenPagePayload>(
             'agent-control:open-page',
             (payload) => {
-                void this._applyAgentOpenPageRequest(payload);
+                void this._applyAgentOpenPageRequest(payload).catch((error: unknown) => {
+                    this._deps.bootstrap.tracer.warn(
+                        '[Core] Failed to apply Agent Control open-page request:',
+                        error,
+                    );
+                });
             },
         );
         if (this._deps.state.isDestroyed()) {

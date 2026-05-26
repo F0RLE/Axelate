@@ -104,8 +104,9 @@ Future package and module UX should make this much more visible.
 Agents should use documented launcher APIs, not the UI DOM and not private files.
 
 Agent Control is local-only and token-based. Users create Trusted Local or Full
-Access profiles in Settings. The full token is shown once, stored by the local
-tool, and can be rotated or deleted by the user.
+Access profiles in Settings. The token is retrieved through the copy-only
+`copyAgentProfileToken` flow, not exposed as persistent frontend state, and can
+be rotated or deleted by the user.
 
 The normal agent scopes are:
 

@@ -261,6 +261,25 @@ describe('AISettingsRenderer', () => {
         expect(i18nUI.applyTranslations).toHaveBeenCalled();
     });
 
+    it('does not open unsafe provider key URLs', async () => {
+        const container = document.getElementById('root') as HTMLElement;
+
+        await aiSettingsRenderer.render(container, {
+            id: 'gpt',
+            name: 'GPT',
+            apiProviderData: { models },
+            providerPolicy: {
+                ...openRouterPolicy,
+                keyProviderUrl: 'file:///C:/Users/FORLE/secrets.txt',
+            },
+        } as never);
+
+        const link = container.querySelector('#gpt-api-link') as HTMLElement;
+        link.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+
+        expect(tauri.openUrl).not.toHaveBeenCalled();
+    });
+
     it('renders API endpoint presets only for custom text providers', async () => {
         const container = document.getElementById('root') as HTMLElement;
 

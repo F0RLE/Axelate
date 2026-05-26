@@ -305,9 +305,6 @@ The repository still contains surfaces or ideas that are ahead of the stable pro
 
 What does not exist yet as a finished system:
 
-- agent scopes and approval prompts
-- sanitized console log APIs meant for external agents
-- integration draft generation through the launcher
 - an Axelate MCP server backed by documented launcher capabilities
 - package signing service
 - verified package distribution

@@ -25,4 +25,4 @@
 - [Releases](../en/RELEASES.md) - 发布流程
 
 英文目录中的 `VISION.md` 和 `ROADMAP.md` 是规划文档，不只描述已经发布的功能。
-第一版本地 Agent Control 已在 `AGENT_CONTROL.md` 中说明；MCP、SDK 和完整的包权限模型仍是后续阶段。
+第一版本地 Agent Control 已在 `AGENT_CONTROL.md` 中说明。

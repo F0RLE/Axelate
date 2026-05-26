@@ -28,7 +28,6 @@ struct LocalContextBudget {
 
 struct LocalContextState {
     turn_ranges: Vec<(usize, usize)>,
-    recent_start_index: usize,
     persisted_summary_count: usize,
 }
 
@@ -38,8 +37,16 @@ pub(super) fn build_local_context_messages(
     model: &str,
 ) -> (Vec<ChatMessage>, bool) {
     let budget = LocalContextBudget::new(context_size);
-    let state = LocalContextState::from_session(session, budget.recent_turns);
-    let summary_changed = state.refresh_summary(session, budget.summary_tokens, model);
+    let state = LocalContextState::from_session(session);
+    let summary_cutoff_index = state.recent_context_start_index(
+        session,
+        budget.available_tokens,
+        budget.summary_tokens,
+        model,
+        budget.recent_turns,
+    );
+    let summary_changed =
+        state.refresh_summary(session, budget.summary_tokens, model, summary_cutoff_index);
     let context = state.build_context(session, &budget, model);
 
     (context, summary_changed)
@@ -259,19 +266,13 @@ const fn recent_turn_count(context_size: usize) -> usize {
 }
 
 impl LocalContextState {
-    fn from_session(session: &ChatSession, recent_turns: usize) -> Self {
+    fn from_session(session: &ChatSession) -> Self {
         let turn_ranges = group_turn_ranges(&session.history);
-        let recent_start_index = turn_ranges
-            .len()
-            .checked_sub(recent_turns)
-            .and_then(|index| turn_ranges.get(index))
-            .map_or(0, |(start, _)| *start);
         let persisted_summary_count =
             usize::try_from(session.summary_message_count).unwrap_or(usize::MAX);
 
         Self {
             turn_ranges,
-            recent_start_index,
             persisted_summary_count,
         }
     }
@@ -281,20 +282,21 @@ impl LocalContextState {
         session: &mut ChatSession,
         summary_budget: usize,
         model: &str,
+        summary_cutoff_index: usize,
     ) -> bool {
-        if self.recent_start_index < self.persisted_summary_count {
+        if summary_cutoff_index < self.persisted_summary_count {
             session.summary = None;
             session.summary_message_count = 0;
             return true;
         }
 
-        if self.recent_start_index <= self.persisted_summary_count {
+        if summary_cutoff_index <= self.persisted_summary_count {
             return false;
         }
 
         let Some(new_summary_slice) = session
             .history
-            .get(self.persisted_summary_count..self.recent_start_index)
+            .get(self.persisted_summary_count..summary_cutoff_index)
         else {
             return false;
         };
@@ -315,7 +317,7 @@ impl LocalContextState {
         };
 
         session.summary = Some(merged_summary);
-        session.summary_message_count = u32::try_from(self.recent_start_index).unwrap_or(u32::MAX);
+        session.summary_message_count = u32::try_from(summary_cutoff_index).unwrap_or(u32::MAX);
         true
     }
 
@@ -398,6 +400,49 @@ impl LocalContextState {
         }
 
         kept_recent
+    }
+
+    fn recent_context_start_index(
+        &self,
+        session: &ChatSession,
+        available_budget: usize,
+        initial_tokens: usize,
+        model: &str,
+        recent_turns: usize,
+    ) -> usize {
+        let recent_turn_ranges = self
+            .turn_ranges
+            .len()
+            .checked_sub(recent_turns)
+            .and_then(|start| self.turn_ranges.get(start..))
+            .unwrap_or(&self.turn_ranges);
+
+        let mut used_tokens = initial_tokens;
+        let mut first_kept_index = session.history.len();
+
+        for (start, end) in recent_turn_ranges.iter().rev() {
+            let Some(turn) = session.history.get(*start..*end) else {
+                continue;
+            };
+            let turn_tokens = estimate_messages_tokens(turn, model);
+            if used_tokens + turn_tokens > available_budget {
+                break;
+            }
+
+            first_kept_index = *start;
+            used_tokens += turn_tokens;
+        }
+
+        first_kept_index
+    }
+
+    #[cfg(test)]
+    fn planned_recent_start_index(&self, recent_turns: usize) -> usize {
+        self.turn_ranges
+            .len()
+            .checked_sub(recent_turns)
+            .and_then(|index| self.turn_ranges.get(index))
+            .map_or(0, |(start, _)| *start)
     }
 }
 
@@ -559,15 +604,16 @@ mod tests {
     fn local_context_summary_boundary_uses_scaled_recent_turns() {
         let session = session_with_turns(10);
 
-        let small_state =
-            LocalContextState::from_session(&session, LocalContextBudget::new(4096).recent_turns);
-        let large_state = LocalContextState::from_session(
-            &session,
-            LocalContextBudget::new(131_072).recent_turns,
-        );
+        let state = LocalContextState::from_session(&session);
 
-        assert_eq!(small_state.recent_start_index, 14);
-        assert_eq!(large_state.recent_start_index, 4);
+        assert_eq!(
+            state.planned_recent_start_index(LocalContextBudget::new(4096).recent_turns),
+            14
+        );
+        assert_eq!(
+            state.planned_recent_start_index(LocalContextBudget::new(131_072).recent_turns),
+            4
+        );
     }
 
     #[test]
@@ -575,9 +621,14 @@ mod tests {
         let mut session = session_with_turns(5);
         session.summary = Some("existing summary".to_string());
         session.summary_message_count = 0;
-        let state = LocalContextState::from_session(&session, LOCAL_RECENT_TURNS);
+        let state = LocalContextState::from_session(&session);
 
-        let changed = state.refresh_summary(&mut session, 0, "local-model");
+        let changed = state.refresh_summary(
+            &mut session,
+            0,
+            "local-model",
+            state.planned_recent_start_index(LOCAL_RECENT_TURNS),
+        );
 
         assert!(!changed);
         assert_eq!(session.summary.as_deref(), Some("existing summary"));
@@ -599,7 +650,7 @@ mod tests {
             summary_message_count: 0,
             last_updated: 0.0,
         };
-        let state = LocalContextState::from_session(&session, LOCAL_RECENT_TURNS);
+        let state = LocalContextState::from_session(&session);
 
         let kept = state.collect_recent_turns(&session, 80, 0, "local-model", LOCAL_RECENT_TURNS);
 
@@ -608,6 +659,29 @@ mod tests {
             .filter_map(|message| message.content.as_str())
             .collect::<Vec<_>>();
         assert_eq!(kept_text, vec!["latest user", "latest assistant"]);
+    }
+
+    #[test]
+    fn recent_context_start_index_tracks_first_turn_that_fits() {
+        let session = ChatSession {
+            history: vec![
+                message("user", "older user"),
+                message("assistant", "older assistant"),
+                message("user", &"large ".repeat(400)),
+                message("assistant", &"large ".repeat(400)),
+                message("user", "latest user"),
+                message("assistant", "latest assistant"),
+            ],
+            summary: None,
+            summary_message_count: 0,
+            last_updated: 0.0,
+        };
+        let state = LocalContextState::from_session(&session);
+
+        let start =
+            state.recent_context_start_index(&session, 80, 0, "local-model", LOCAL_RECENT_TURNS);
+
+        assert_eq!(start, 4);
     }
 
     #[test]
