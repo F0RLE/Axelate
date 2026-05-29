@@ -130,6 +130,7 @@ viable:
 - [User Guide](USER_GUIDE.md)
 - [Development Workflow](DEVELOPMENT_WORKFLOW.md)
 - [Integration API](INTEGRATION_API.md)
+- [Agent Control](AGENT_CONTROL.md)
 - [Integration Development](INTEGRATION_DEVELOPMENT.md)
 - [Custom Integrations](CUSTOM_INTEGRATIONS.md)
 - [Trust Model](TRUST_MODEL.md)

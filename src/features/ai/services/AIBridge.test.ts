@@ -1,4 +1,4 @@
-﻿/**
+/**
  * AIBridge Unit Tests — Full Coverage
  */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
@@ -16,6 +16,37 @@ const mockListen = vi.fn().mockResolvedValue(() => {
     /* no-op */
 });
 const mockEmit = vi.fn();
+
+const cloudProviderPolicy = {
+    isCloudProvider: true,
+    isCustomProvider: false,
+    isCleanApp: false,
+    secretService: 'cloud_api_key',
+    keyProviderId: 'cloud',
+    keyProviderUrl: 'https://openrouter.ai/settings/keys',
+    usesCustomProviderKey: false,
+    showApiEndpointSelector: false,
+    showCustomModelComposer: false,
+    showModelStats: true,
+    supportsInternetAccess: true,
+    supportsThinking: true,
+    imageOnly: false,
+};
+
+const localTextProviderPolicy = {
+    ...cloudProviderPolicy,
+    isCloudProvider: false,
+    secretService: null,
+    keyProviderId: null,
+    keyProviderUrl: null,
+    supportsInternetAccess: false,
+    supportsThinking: false,
+};
+
+const localImageProviderPolicy = {
+    ...localTextProviderPolicy,
+    imageOnly: true,
+};
 
 // Mock Core dependency
 const mockCore = {
@@ -65,12 +96,12 @@ const mockCore = {
     catalog: {
         getCatalog: vi.fn().mockReturnValue({
             ai: [
-                { id: 'gpt', capability: 'text' },
-                { id: 'gemini', capability: 'text' },
-                { id: 'llamacpp', capability: 'text' },
-                { id: 'sdcpp', capability: 'image' },
-                { id: 'gpt-image', capability: 'image' },
-                { id: 'seedream-image', capability: 'image' },
+                { id: 'gpt', capability: 'text', providerPolicy: cloudProviderPolicy },
+                { id: 'gemini', capability: 'text', providerPolicy: cloudProviderPolicy },
+                { id: 'llamacpp', capability: 'text', providerPolicy: localTextProviderPolicy },
+                { id: 'sdcpp', capability: 'image', providerPolicy: localImageProviderPolicy },
+                { id: 'gpt-image', capability: 'image', providerPolicy: cloudProviderPolicy },
+                { id: 'seedream-image', capability: 'image', providerPolicy: cloudProviderPolicy },
             ],
             services: [],
         }),
@@ -153,7 +184,7 @@ describe('AIBridge', () => {
         localStorage.clear();
         aiBridge = new AIBridge(mockTracer);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        aiBridge.setCore(mockCore as any);
+        aiBridge.setContext(mockCore as any);
 
         // Mock session ID for init
         mockInvoke.mockResolvedValueOnce('test-session-123');
@@ -180,7 +211,7 @@ describe('AIBridge', () => {
         it('should abort initialization when core dependency is missing', async () => {
             const bridge2 = new AIBridge(mockTracer);
 
-            await bridge2.init();
+            await expect(bridge2.init()).rejects.toThrow('context dependency is missing');
 
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             expect((bridge2 as any)._initialized).toBe(false);
@@ -194,13 +225,13 @@ describe('AIBridge', () => {
         it('should clean up transport state when initialization fails', async () => {
             const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            bridge2.setCore(mockCore as any);
+            bridge2.setContext(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const transportDestroySpy = vi.spyOn((bridge2 as any)._transport, 'destroy');
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((bridge2 as any)._transport, 'init').mockRejectedValue(new Error('boom'));
 
-            await bridge2.init();
+            await expect(bridge2.init()).rejects.toThrow('boom');
 
             expect(transportDestroySpy).toHaveBeenCalled();
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -210,7 +241,7 @@ describe('AIBridge', () => {
         it('should broadcast chunks and thoughts via transport callbacks', async () => {
             const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            bridge2.setCore(mockCore as any);
+            bridge2.setContext(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
 
             let chunkCallback: ((payload: string) => void) | undefined;
@@ -808,7 +839,7 @@ describe('AIBridge', () => {
 
             const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            bridge2.setCore(mockCore as any);
+            bridge2.setContext(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session-id');
             await bridge2.init(); // should not throw when IPC streaming is unavailable
 
@@ -816,17 +847,17 @@ describe('AIBridge', () => {
             mockCore.tauriProvider.isTauri.mockReturnValue(true);
         });
 
-        it('should handle IPC initialization failure gracefully (line 86)', async () => {
+        it('should surface IPC initialization failure', async () => {
             // Make onStream throw to trigger the catch block
             const bridge2 = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            bridge2.setCore(mockCore as any);
+            bridge2.setContext(mockCore as any);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             vi.spyOn((bridge2 as any)._transport, 'onStream').mockImplementation(() => {
                 throw new Error('IPC broken');
             });
             mockInvoke.mockResolvedValueOnce('session-id');
-            await expect(bridge2.init()).resolves.not.toThrow(); // error is caught internally
+            await expect(bridge2.init()).rejects.toThrow('IPC broken');
         });
     });
 
@@ -945,13 +976,12 @@ describe('AIBridge', () => {
 
     // ---------------------------------------------------------- additional branch coverage
     describe('Additional branch coverage', () => {
-        it('should handle setCore when _transport is not AIChatTransport (Line 39)', () => {
+        it('should ignore transports without a context setter', () => {
             const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            (tempBridge as any)._transport = { setCore: vi.fn() };
+            (tempBridge as any)._transport = {};
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            tempBridge.setCore(mockCore as any);
-            // Should not throw and Should not call setCore on the plain object since it fails instanceof
+            tempBridge.setContext(mockCore as any);
         });
 
         it('should handle DEV false branch (Lines 61-72)', async () => {
@@ -961,7 +991,7 @@ describe('AIBridge', () => {
 
             const tempBridge = new AIBridge(mockTracer);
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            tempBridge.setCore(mockCore as any);
+            tempBridge.setContext(mockCore as any);
             mockInvoke.mockResolvedValueOnce('session');
             await tempBridge.init();
 
@@ -969,9 +999,9 @@ describe('AIBridge', () => {
             (import.meta.env as any).DEV = orgDev;
         });
 
-        it('should reject sendMessage when _core is null and no model can be resolved', async () => {
+        it('should reject sendMessage when context is null and no model can be resolved', async () => {
             const tempBridge = new AIBridge(mockTracer);
-            // Do NOT call setCore here to leave _core as null
+            // Do NOT call setContext here to leave the bridge context as null
 
             // Bypass API key checks logic just to test missing core/model resolution.
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -993,7 +1023,7 @@ describe('AIBridge', () => {
 
             const result = await tempBridge.sendMessage('test message');
             expect(result.ok).toBe(false);
-            expect(result.error).toBe('No AI model selected');
+            expect(result.error).toBe('AI bridge is not ready');
         });
 
         it('should handle an empty error string in backend mismatch logic (Line 218)', async () => {

@@ -8,14 +8,10 @@ import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { IAIModelData } from '../types/aiTypes';
+import type { CatalogProviderPolicy } from '@/shared/types/bindings';
 import { BaseComponent } from '@/shared/ui/BaseComponent';
 import { type TauriProvider } from '@/infrastructure/tauri/TauriProvider';
-import { CUSTOM_TEXT_PROVIDER_ID, isCustomProviderId } from '@/shared/utils/customProviderSupport';
-import {
-    getSharedCloudSecretService,
-    resolveProviderSecretService,
-    SHARED_CLOUD_KEY_PROVIDER_ID,
-} from '@/shared/utils/providerSupport';
+import { isCustomProviderId } from '@/shared/utils/customProviderSupport';
 import { bindAISettingsInteractions } from './AISettingsInteractionBinder';
 import { AISettingsViewPolicy } from './AISettingsViewPolicy';
 import { AISettingsKeyController } from './AISettingsKeyController';
@@ -154,6 +150,7 @@ class AISettingsRenderer extends BaseComponent {
 
         const appId = app.id;
         const models = await this._getProviderModels(app);
+        const providerPolicy = this._resolveProviderPolicy(app);
 
         const firstModel = models.length > 0 ? models[0] : undefined;
         const defaultModelId = firstModel ? firstModel.id : '';
@@ -171,13 +168,17 @@ class AISettingsRenderer extends BaseComponent {
             models,
             savedModel,
             apiBaseUrl: this._getApiBaseUrl(app),
-            showApiEndpointSelector: appId === CUSTOM_TEXT_PROVIDER_ID,
-            showModelStats: this._viewPolicy.shouldShowModelStats(appId),
-            showCustomModelComposer: isCustomProviderId(appId),
+            showApiEndpointSelector: providerPolicy.showApiEndpointSelector,
+            usesCustomProviderKey: providerPolicy.usesCustomProviderKey,
+            showModelStats: this._viewPolicy.shouldShowModelStats({
+                ...app,
+                providerPolicy,
+            }),
+            showCustomModelComposer: providerPolicy.showCustomModelComposer,
             translate: t,
             viewPolicy: this._viewPolicy,
-            supportsInternetAccess: this._viewPolicy.supportsInternetAccess(appId, app.capability),
-            supportsThinking: this._viewPolicy.supportsThinking(appId, models),
+            supportsInternetAccess: providerPolicy.supportsInternetAccess,
+            supportsThinking: providerPolicy.supportsThinking,
             thinkingLevel: this._selectionController.getThinkingLevel(appId, this._aiSettings),
             internetAccessEnabled: this._selectionController.getInternetAccessEnabled(
                 appId,
@@ -220,15 +221,15 @@ class AISettingsRenderer extends BaseComponent {
 
         this._renderAbortController = new AbortController();
         const renderSignal = this._renderAbortController.signal;
-        const keyProviderId = this._getKeyProviderId(appId);
+        const secretService = this._getSecretService(appId);
 
         const input = container.querySelector(`#${appId}-api-key-input`) as
             | HTMLInputElement
             | HTMLTextAreaElement
             | null;
 
-        if (input !== null) {
-            await this._keyController.hydrateStoredMask(input, keyProviderId);
+        if (input !== null && secretService !== null) {
+            await this._keyController.hydrateStoredMask(input, secretService);
         }
         bindAISettingsInteractions({
             appId,
@@ -245,7 +246,7 @@ class AISettingsRenderer extends BaseComponent {
                     target.dataset['storedRevealed'] === 'true';
                 this._keyController.normalizeInput(event);
                 if (hadStoredKey) {
-                    void this._removeClearedStoredKey(target, keyProviderId, appId);
+                    void this._removeClearedStoredKey(target, secretService, appId);
                 }
             },
             maybeClearStoredMask: (event) => {
@@ -253,7 +254,10 @@ class AISettingsRenderer extends BaseComponent {
             },
             openKeyProviderUrl: () => {
                 if (this._tauri) {
-                    void this._tauri.openUrl(this._getKeyProviderUrl(keyProviderId));
+                    const url = this._getKeyProviderUrl(appId);
+                    if (url !== null) {
+                        void this._tauri.openUrl(url);
+                    }
                 }
             },
             toggleKeyVisibility: async () => this.toggleKeyVisibility(appId),
@@ -285,7 +289,11 @@ class AISettingsRenderer extends BaseComponent {
             `#${appId}-api-key-input`,
         );
         const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-toggle-btn`);
-        await this._keyController.toggleVisibility(input, btn, this._getKeyProviderId(appId));
+        const secretService = this._getSecretService(appId);
+        if (secretService === null) {
+            return;
+        }
+        await this._keyController.toggleVisibility(input, btn, secretService);
     }
 
     /**
@@ -299,20 +307,29 @@ class AISettingsRenderer extends BaseComponent {
             `#${appId}-api-key-input`,
         );
         const btn = this._queryActiveElement<HTMLButtonElement>(`#${appId}-key-check-btn`);
+        const secretService = this._getSecretService(appId);
+        if (secretService === null) {
+            return;
+        }
         await this._keyController.checkKey(
             input,
             btn,
-            this._getKeyProviderId(appId),
+            secretService,
+            this._getValidationProviderId(appId),
             this._getValidationBaseUrl(appId),
         );
     }
 
     private async _removeClearedStoredKey(
         input: KeyInput,
-        keyProviderId: string,
+        secretService: string | null,
         appId: string,
     ): Promise<void> {
-        const removed = await this._keyController.removeClearedStoredKey(input, keyProviderId);
+        if (secretService === null) {
+            return;
+        }
+
+        const removed = await this._keyController.removeClearedStoredKey(input, secretService);
         if (removed && input.value.trim() === '') {
             this._resetKeyCheckButton(appId);
         }
@@ -334,6 +351,7 @@ class AISettingsRenderer extends BaseComponent {
             i18nUI: this._i18nUI,
             contentRenderer: this._contentRenderer,
             viewPolicy: this._viewPolicy,
+            app: this._activeRenderTarget?.app ?? { id: appId },
         });
     }
 
@@ -381,7 +399,7 @@ class AISettingsRenderer extends BaseComponent {
             .map((model) => ({
                 id: model.id,
                 name: model.name.trim() !== '' ? model.name : model.id,
-                desc: translate('ui.settings.custom_model_desc', 'Manual OpenRouter model ID'),
+                desc: translate('ui.settings.custom_model_desc', ''),
                 isCustom: true,
             }));
 
@@ -523,7 +541,7 @@ class AISettingsRenderer extends BaseComponent {
     }
 
     private _getValidationBaseUrl(appId: string): string | undefined {
-        if (appId !== CUSTOM_TEXT_PROVIDER_ID) {
+        if (this._getActiveProviderPolicy(appId)?.showApiEndpointSelector !== true) {
             return undefined;
         }
 
@@ -538,19 +556,57 @@ class AISettingsRenderer extends BaseComponent {
         await this.render(this._activeRenderTarget.container, this._activeRenderTarget.app);
     }
 
-    private _getKeyProviderId(appId: string): string {
-        const secretService = resolveProviderSecretService(appId);
-        return secretService !== null && secretService !== getSharedCloudSecretService()
-            ? appId
-            : SHARED_CLOUD_KEY_PROVIDER_ID;
+    private _getSecretService(appId: string): string | null {
+        return this._getActiveProviderPolicy(appId)?.secretService ?? null;
     }
 
-    private _getKeyProviderUrl(providerId: string): string {
-        return (
-            {
-                [SHARED_CLOUD_KEY_PROVIDER_ID]: 'https://openrouter.ai/settings/keys',
-            }[providerId] ?? '#'
-        );
+    private _getValidationProviderId(appId: string): string {
+        return this._getActiveProviderPolicy(appId)?.keyProviderId ?? appId;
+    }
+
+    private _getKeyProviderUrl(appId: string): string | null {
+        const rawUrl = this._getActiveProviderPolicy(appId)?.keyProviderUrl;
+        if (typeof rawUrl !== 'string') {
+            return null;
+        }
+
+        try {
+            const url = new URL(rawUrl.trim());
+            return url.protocol === 'http:' || url.protocol === 'https:' ? url.toString() : null;
+        } catch {
+            return null;
+        }
+    }
+
+    private _getActiveProviderPolicy(appId: string): IApp['providerPolicy'] | null {
+        const app = this._activeRenderTarget?.app;
+        if (app?.id !== appId) {
+            return null;
+        }
+
+        return this._resolveProviderPolicy(app);
+    }
+
+    private _resolveProviderPolicy(app: IApp): CatalogProviderPolicy {
+        if (app.providerPolicy !== null && app.providerPolicy !== undefined) {
+            return app.providerPolicy;
+        }
+
+        return {
+            isCloudProvider: false,
+            isCustomProvider: false,
+            isCleanApp: this._viewPolicy.isCleanApp(app.id),
+            secretService: null,
+            keyProviderId: null,
+            keyProviderUrl: null,
+            usesCustomProviderKey: false,
+            showApiEndpointSelector: false,
+            showCustomModelComposer: false,
+            showModelStats: true,
+            supportsInternetAccess: false,
+            supportsThinking: false,
+            imageOnly: app.capability === 'image',
+        };
     }
 
     private _queryActiveElement<T extends Element>(selector: string): T | null {

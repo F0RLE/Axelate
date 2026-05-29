@@ -34,6 +34,8 @@ Release tags must match project versions and point to commits reachable from `ma
 Current application security posture:
 
 - provider secrets are backend-owned
+- provider secrets are stored in an encrypted backend file today; platform
+  keystore storage is planned but not implemented yet
 - frontend/backend contracts are generated from Rust types
 - local integration API tokens are runtime-issued and scoped
 - import paths, runtime entry paths, settings UI paths, archive entries, and log

@@ -10,14 +10,22 @@
 ## Канонические английские документы
 
 - [Current State](../en/CURRENT_STATE.md) - что реально есть в проекте сейчас
+- [Vision](../en/VISION.md) - направление продукта и границы будущей платформы
+- [Roadmap](../en/ROADMAP.md) - порядок работ, включая Integration API,
+  Agent Control API, SDK, permissions и MCP
 - [User Guide](../en/USER_GUIDE.md) - пользовательский обзор текущего приложения
 - [Getting Started](../en/GETTING_STARTED.md) - установка и запуск из исходников
 - [Development Workflow](../en/DEVELOPMENT_WORKFLOW.md) - ежедневная разработка
 - [Architecture](../en/ARCHITECTURE.md) - карта frontend/backend/integration слоев
 - [Trust Model](../en/TRUST_MODEL.md) - текущие и будущие границы доверия
-- [Integration API](../en/INTEGRATION_API.md) - локальный HTTP API интеграций
+- [Agent Control](../en/AGENT_CONTROL.md) - локальное управление лаунчером через
+  доверенные agent-токены, scopes, approvals и audit
+- [Integration API](../en/INTEGRATION_API.md) - локальный HTTP API интеграций и
+  agent-control слоя
 - [Custom Integrations](../en/CUSTOM_INTEGRATIONS.md) - формат пользовательских интеграций
 - [Releases](../en/RELEASES.md) - релизный процесс
 
-`VISION.md` и `ROADMAP.md` в английской папке описывают планы, а не уже
-поставленные возможности.
+Английские `VISION.md` и `ROADMAP.md` описывают планы, а не только уже
+поставленные возможности. Первая локальная версия Agent Control уже описана в
+`AGENT_CONTROL.md`; MCP, SDK и полноценная permission-модель для пакетов остаются
+следующими этапами.

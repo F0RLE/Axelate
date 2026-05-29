@@ -327,10 +327,24 @@ export class ModuleCardRenderer {
     }
 
     public updateSlotCardRuntimeStatus(card: HTMLElement, status: string | null | undefined): void {
-        const normalizedStatus = status === 'running' ? 'running' : 'stopped';
+        const normalizedStatus = this._normalizeRuntimeStatus(status);
         card.dataset['runtimeStatus'] = normalizedStatus;
         card.classList.toggle('module-running', normalizedStatus === 'running');
-        card.classList.toggle('module-stopped', normalizedStatus !== 'running');
+        card.classList.toggle('engine-error', normalizedStatus === 'error');
+        card.classList.toggle('module-stopped', normalizedStatus === 'stopped');
+    }
+
+    private _normalizeRuntimeStatus(
+        status: string | null | undefined,
+    ): 'running' | 'stopped' | 'error' {
+        const normalized = status?.trim().toLowerCase();
+        if (normalized === 'running') {
+            return 'running';
+        }
+        if (normalized === 'error' || normalized === 'failed') {
+            return 'error';
+        }
+        return 'stopped';
     }
 
     private _updateCardIcon(card: HTMLElement, app: IApp): void {

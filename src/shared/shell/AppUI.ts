@@ -1,6 +1,5 @@
 import type { IApp } from '../types/coreTypes';
 import { CategoryKey } from '../types/categoryKeys';
-import { appendCustomProviderApps } from '../utils/customProviderSupport';
 import { isAiCategory } from '../utils/moduleCategoryPolicy';
 import type { EventBus } from '../services/EventBus';
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
@@ -360,6 +359,28 @@ export class AppUI {
         this._dashboardSupport.applySelectedCardState(card, app, category);
         this._selectionState.set(category, app);
         this._updateMultiSlotBadge();
+        void this._refreshSelectedCardRuntimeStatus(category, app);
+    }
+
+    private async _refreshSelectedCardRuntimeStatus(category: string, app: IApp): Promise<void> {
+        if (app.installed === false) {
+            return;
+        }
+
+        try {
+            const status = await this._platformService.getStatus(app);
+            if (this._selectionState.get(category)?.id !== app.id) {
+                return;
+            }
+            this._dashboardSupport.updateRuntimeStatus(category, app, status);
+        } catch (error) {
+            this._deps.tracer.warn(
+                `[AppUI] Failed to refresh runtime status for ${app.id}: ${String(error)}`,
+            );
+            if (this._selectionState.get(category)?.id === app.id) {
+                this._dashboardSupport.updateRuntimeStatus(category, app, 'error');
+            }
+        }
     }
 
     /**
@@ -540,8 +561,7 @@ export class AppUI {
 
     private _getCatalogApps(category: string): IApp[] {
         try {
-            const apps = this._catalogResolver(category);
-            return category === CategoryKey.AI ? appendCustomProviderApps(apps) : apps;
+            return this._catalogResolver(category);
         } catch (err: unknown) {
             this._deps.tracer.warn(
                 `[AppUI] Failed to read catalog category ${category}: ${String(err)}`,

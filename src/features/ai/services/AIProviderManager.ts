@@ -5,9 +5,7 @@ import type { AIProviderManagerContext } from './AIBridgeContext';
 import {
     CUSTOM_TEXT_PROVIDER_ID,
     getCustomProviderDisplayName,
-    isCustomProviderId,
 } from '@/shared/utils/customProviderSupport';
-import { isCloudProviderId, resolveProviderSecretService } from '@/shared/utils/providerSupport';
 
 type AIProviderManagerLogger = Pick<LoggerService, 'info' | 'error'>;
 
@@ -23,10 +21,6 @@ export class AIProviderManager {
 
     public setContext(context: AIProviderManagerContext): void {
         this._context = context;
-    }
-
-    public setCore(context: AIProviderManagerContext): void {
-        this.setContext(context);
     }
 
     public async init(): Promise<void> {
@@ -184,8 +178,11 @@ export class AIProviderManager {
     // --- Private Helpers ---
 
     private async _resolveHasApiKey(providerId: string): Promise<boolean> {
-        const secretService = resolveProviderSecretService(providerId);
+        const secretService = this._getCatalogProvider(providerId)?.providerPolicy?.secretService;
         if (secretService === null) {
+            return false;
+        }
+        if (secretService === undefined) {
             return false;
         }
 
@@ -195,14 +192,17 @@ export class AIProviderManager {
     /**
      * Returns true if the provider ID represents a local engine
      * (not a cloud API provider requiring an API key).
-     * Any ID that doesn't match a known cloud provider prefix is treated as local.
      */
     private _isLocalProvider(providerId: string): boolean {
-        if (isCustomProviderId(providerId)) {
-            return false;
+        const policy = this._getCatalogProvider(providerId)?.providerPolicy;
+        if (policy !== null && policy !== undefined) {
+            return !policy.isCloudProvider;
         }
 
-        return !isCloudProviderId(providerId);
+        this._tracer.error(
+            `[AIProviderManager] Missing provider policy for "${providerId}", denying startup`,
+        );
+        return false;
     }
 
     private _getPersistedModel(providerId: string): string | null {
@@ -245,6 +245,10 @@ export class AIProviderManager {
 
         const aiCatalog = (catalog as { ai?: unknown[] }).ai;
         return Array.isArray(aiCatalog) ? (aiCatalog as IAICatalogApp[]) : [];
+    }
+
+    private _getCatalogProvider(providerId: string): IAICatalogApp | null {
+        return this._getAiCatalogApps().find((provider) => provider.id === providerId) ?? null;
     }
 
     private async _getSecureVal(key: string): Promise<string | null> {

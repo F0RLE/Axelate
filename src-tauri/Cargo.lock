@@ -312,6 +312,7 @@ dependencies = [
  "flate2",
  "futures-util",
  "hex",
+ "libc",
  "log",
  "machine-uid",
  "notify",

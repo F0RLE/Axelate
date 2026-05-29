@@ -2,8 +2,10 @@
 pub mod bootstrap;
 /// Configuration management commands
 pub mod config;
+mod console_overview;
 /// Health check commands
 pub mod health;
+mod log_targets;
 /// Logging commands
 pub mod logs;
 

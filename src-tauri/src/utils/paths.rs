@@ -1,7 +1,9 @@
 use crate::errors::AppError;
+use std::cmp::Ordering;
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::LazyLock;
+use std::time::SystemTime;
 
 #[cfg(not(test))]
 const APPDATA_DIR_NAME: &str = "AxelateData";
@@ -182,6 +184,10 @@ pub static FILE_ENGINE_CONFIG: LazyLock<PathBuf> =
 /// Path to UI state file (`AxelateData/User/UI/ui_state.json`)
 pub static FILE_UI_STATE: LazyLock<PathBuf> = LazyLock::new(|| UI_DIR.join("ui_state.json"));
 
+/// Path to Agent Control profiles and audit state (`AxelateData/User/Configs/agent_control.json`)
+pub static FILE_AGENT_CONTROL: LazyLock<PathBuf> =
+    LazyLock::new(|| CONFIG_DIR.join("agent_control.json"));
+
 /// Directory for Chat history (`AxelateData/User/Chat`)
 pub static CHAT_DIR: LazyLock<PathBuf> = LazyLock::new(|| USER_ROOT.join("Chat"));
 
@@ -245,11 +251,12 @@ fn cleanup_old_logs() -> Result<(), AppError> {
         return Ok(());
     }
 
-    // Sort by modification time (oldest first)
+    // Sort by modification time (oldest first). Files with unreadable metadata stay last so
+    // cleanup does not delete them ahead of logs whose age is known.
     log_files.sort_by(|a, b| {
         let time_a = a.metadata().and_then(|m| m.modified()).ok();
         let time_b = b.metadata().and_then(|m| m.modified()).ok();
-        time_a.cmp(&time_b)
+        compare_log_modified_times(time_a, time_b)
     });
 
     // Remove oldest files
@@ -266,11 +273,25 @@ fn cleanup_old_logs() -> Result<(), AppError> {
     Ok(())
 }
 
+fn compare_log_modified_times(left: Option<SystemTime>, right: Option<SystemTime>) -> Ordering {
+    match (left, right) {
+        (Some(left), Some(right)) => left.cmp(&right),
+        (Some(_), None) => Ordering::Less,
+        (None, Some(_)) => Ordering::Greater,
+        (None, None) => Ordering::Equal,
+    }
+}
+
 #[cfg(test)]
 mod tests {
     #![allow(clippy::expect_used)]
 
-    use super::{RESOURCES_DIR_NAME, development_resource_dir_candidates, manifest_dir};
+    use super::{
+        RESOURCES_DIR_NAME, compare_log_modified_times, development_resource_dir_candidates,
+        manifest_dir,
+    };
+    use std::cmp::Ordering;
+    use std::time::{Duration, SystemTime};
 
     #[test]
     fn development_resource_dir_candidates_are_manifest_relative() {
@@ -294,5 +315,26 @@ mod tests {
                 .join("src-tauri")
                 .join(RESOURCES_DIR_NAME)
         );
+    }
+
+    #[test]
+    fn log_cleanup_orders_unreadable_metadata_after_known_times() {
+        let old = SystemTime::UNIX_EPOCH + Duration::from_secs(1);
+        let new = SystemTime::UNIX_EPOCH + Duration::from_secs(2);
+
+        assert_eq!(
+            compare_log_modified_times(Some(old), Some(new)),
+            Ordering::Less
+        );
+        assert_eq!(
+            compare_log_modified_times(Some(new), Some(old)),
+            Ordering::Greater
+        );
+        assert_eq!(compare_log_modified_times(Some(old), None), Ordering::Less);
+        assert_eq!(
+            compare_log_modified_times(None, Some(old)),
+            Ordering::Greater
+        );
+        assert_eq!(compare_log_modified_times(None, None), Ordering::Equal);
     }
 }

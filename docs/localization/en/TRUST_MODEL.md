@@ -12,6 +12,7 @@ That only works if the launcher is explicit about:
 - what lives in the backend
 - what the frontend is allowed to do
 - what local modules are allowed to do
+- what agents are allowed to do through launcher APIs
 - what future MCP and package permissions should look like
 
 ## What Is Protected Today
@@ -22,7 +23,8 @@ Current repository-grounded trust decisions:
 - Rust owns domain logic and persisted state
 - frontend bindings are generated from Rust types
 - process and module lifecycle are controlled from the backend side
-- secure storage infrastructure exists for provider secrets
+- encrypted file-based secure storage infrastructure exists for provider
+  secrets; it is backend-owned, but it is not yet backed by the OS keystore
 - local integration API tokens are issued at runtime and scoped to the launcher
   process or a specific module
 - module-owned local API routes reject access to other module ids
@@ -45,9 +47,18 @@ These controls exist in the current codebase and should stay protected by tests:
   entries, file count limits, single-file size limits, and total-size limits
 - explicit validation before opening console log target folders
 - external URL protocol allowlisting before frontend shell-open calls
+- local integration API routes that keep module-owned operations scoped to the
+  owning module
 
 These controls reduce accidental trust escalation. They do not make imported
 integrations sandboxed or verified packages.
+
+Current secure storage uses AES-GCM with a key derived from the machine identity
+and an application pepper. That is better than plaintext and keeps secrets out
+of frontend state, but it is weaker than DPAPI on Windows, Keychain on macOS, or
+libsecret/KWallet on Linux against a local user or process with filesystem
+access. Moving provider secrets to platform keystores is tracked as security
+debt, not claimed as done.
 
 ## Current Security Boundaries
 
@@ -88,6 +99,44 @@ Current practical rule:
 
 Future package and module UX should make this much more visible.
 
+### Agents And Automation
+
+Agents should use documented launcher APIs, not the UI DOM and not private files.
+
+Agent Control is local-only and token-based. Users create Trusted Local or Full
+Access profiles in Settings. The token is retrieved through the copy-only
+`copyAgentProfileToken` flow, not exposed as persistent frontend state, and can
+be rotated or deleted by the user.
+
+The normal agent scopes are:
+
+- `observe`: launcher health, installed module list, module status, provider and
+  model inventory, pending approvals, and recent sanitized console logs
+- `operate`: open launcher pages, select module cards, start, stop, restart,
+  repair, and run AI requests
+- `configure`: read and update non-secret module settings
+- `draft-create`: create integration draft folders without installing or running
+  them
+- `full-access`: explicit user-granted local override
+
+Mutating actions need a stronger scope and should be logged:
+
+- start, stop, or restart an integration
+- update integration settings
+- request a repair action
+- create an integration draft
+
+Some actions should require user approval even after an agent is connected:
+
+- install, delete, or update packages
+- change provider secrets
+- expose raw logs that may contain sensitive data
+- grant broader filesystem or network permissions
+
+This keeps agents useful without turning them into a hidden admin surface.
+
+The detailed API contract lives in [Agent Control](AGENT_CONTROL.md).
+
 ## What Users Should Be Able To Trust
 
 Current repository direction already supports these expectations:
@@ -114,6 +163,7 @@ What still needs clearer product-level documentation and UX:
 - secret storage model
 - package permission model
 - module capability boundaries
+- agent scopes and approval rules
 - MCP server and tool permission prompts
 - package verification and signing flow
 - difference between local, managed, and hybrid execution
@@ -126,6 +176,7 @@ The launcher should move toward explicit permission surfaces for:
 - network access
 - local process execution
 - model/provider usage
+- launcher control actions
 - MCP server connection
 - MCP tool invocation
 - package install and update trust
@@ -137,6 +188,10 @@ The important rule is simple:
 ## MCP Direction
 
 MCP support should be opt-in and permissioned.
+
+Axelate should expose its own MCP server only as an adapter over the documented
+Agent Control API. The MCP server should not get private shortcuts around
+authorization, audit logs, or approval prompts.
 
 Good future behavior:
 

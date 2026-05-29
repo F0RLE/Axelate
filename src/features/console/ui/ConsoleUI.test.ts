@@ -495,6 +495,49 @@ describe('ConsoleUI lifecycle', () => {
         );
     });
 
+    it('should render the Agent console tab as a separate audit view', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn((view: string) =>
+                normalizeLogs(
+                    view === 'agent'
+                        ? [
+                              {
+                                  level: 'INFO',
+                                  message: 'settings -> success',
+                                  source: 'agent-control',
+                                  source_label: 'Trusted Local',
+                                  source_class: 'src-AGENT',
+                                  scope: 'launcher.open-page',
+                                  timestamp: 1,
+                              },
+                          ]
+                        : [],
+                ),
+            ),
+            getAvailableViews: vi.fn().mockResolvedValue([
+                { id: 'general', label: 'General' },
+                { id: 'agent', label: 'Agent' },
+            ]),
+            fetchLogs: vi.fn().mockResolvedValue([]),
+            openLogsFolder: vi.fn().mockResolvedValue(false),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await flushPromises();
+
+        const agentTab = document.querySelector('[data-view="agent"]') as HTMLElement;
+        agentTab.click();
+
+        const openFolderButton = document.getElementById(
+            'open-logs-folder-btn',
+        ) as HTMLButtonElement;
+        expect(agentTab.textContent).toContain('ui.launcher.web.logs_agent');
+        expect(document.getElementById('logs-agent')?.hidden).toBe(false);
+        expect(document.getElementById('logs-agent')?.textContent).toContain('settings -> success');
+        expect(openFolderButton.disabled).toBe(true);
+    });
+
     it('should expose tab scroll controls when log tabs overflow', async () => {
         const toolbar = document.querySelector('.console-toolbar-left') as HTMLElement;
         Object.defineProperty(toolbar, 'clientWidth', { configurable: true, value: 160 });
@@ -706,6 +749,49 @@ describe('ConsoleUI lifecycle', () => {
         expect(document.getElementById('logs-general')?.textContent).toContain('Page settings');
     });
 
+    it('should render an empty console when the selected level has no matching logs', async () => {
+        const service = createServiceMock({
+            getLogsForView: vi.fn().mockReturnValue(
+                normalizeLogs([
+                    {
+                        level: 'INFO',
+                        message: '[NavigationService] Navigating to: settings',
+                        source: 'frontend',
+                        timestamp: 1,
+                    },
+                    {
+                        level: 'DEBUG',
+                        message: '[NavigationUI] Page modules',
+                        source: 'frontend',
+                        timestamp: 2,
+                    },
+                ]),
+            ),
+        });
+
+        ui = new ConsoleUI(service, createDeps());
+        ui.init();
+        await (
+            ui as unknown as {
+                _refreshLogsOnConsoleOpen: () => Promise<void>;
+            }
+        )._refreshLogsOnConsoleOpen();
+        await flushPromises();
+
+        const errorButton = document.querySelector(
+            '.console-filter-chip[data-level="ERROR"]',
+        ) as HTMLButtonElement;
+        errorButton.click();
+
+        const pane = document.getElementById('logs-general') as HTMLElement;
+        const emptyState = pane.querySelector('#console-filter-empty-state');
+        expect(emptyState).not.toBeNull();
+        expect(emptyState?.textContent).toContain('ui.debug.logs_filter_empty');
+        expect(pane.querySelector('.log-entry-card')).toBeNull();
+        expect(pane.textContent).not.toContain('Page settings');
+        expect(pane.textContent).not.toContain('Page modules');
+    });
+
     it('should allow multi-select level filters with ctrl or shift click', async () => {
         const service = createServiceMock({
             getLogsForView: vi.fn().mockReturnValue(
@@ -776,19 +862,20 @@ describe('ConsoleUI lifecycle', () => {
     it('should replace stale rendered rows with the empty state when filters match nothing', () => {
         const pane = document.createElement('div');
         const staleRow = document.createElement('div');
+        const emptyStateText = 'filtered empty state';
         staleRow.textContent = 'stale debug row';
         pane.append(staleRow);
 
         const helper = new ConsoleLogRenderHelper({
             emptyStateId: 'console-filter-empty-state',
-            getEmptyStateText: () => 'No logs match selected levels',
+            getEmptyStateText: () => emptyStateText,
             getNormalizedLevel: () => 'INFO',
             matchesNormalizedLevel: () => false,
         });
 
         helper.applyFiltersToPane(pane, []);
 
-        expect(pane.textContent).toBe('No logs match selected levels');
+        expect(pane.textContent).toBe(emptyStateText);
         expect(pane.querySelector('.log-entry-card')).toBeNull();
     });
 

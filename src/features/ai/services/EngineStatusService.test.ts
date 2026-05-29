@@ -38,7 +38,7 @@ describe('EngineStatusService', () => {
             error: vi.fn(),
         };
         service = new EngineStatusService(tracer);
-        service.setCore(core);
+        service.setContext(core);
     });
 
     it('does not initialize outside tauri', () => {
@@ -48,7 +48,7 @@ describe('EngineStatusService', () => {
                 listen: vi.fn(),
             },
         } as unknown as EngineStatusContext;
-        service.setCore(webCore);
+        service.setContext(webCore);
         service.init();
         expect(webCore.tauriProvider.listen).not.toHaveBeenCalled();
     });
@@ -247,7 +247,7 @@ describe('EngineStatusService', () => {
                 listen: vi.fn(),
             },
         } as unknown as EngineStatusContext;
-        service.setCore(webCore);
+        service.setContext(webCore);
         const noop = (
             service as unknown as {
                 _listen: (event: string, handler: (payload: unknown) => void) => () => void;
@@ -258,7 +258,7 @@ describe('EngineStatusService', () => {
 
         const deferred: { resolve?: (fn: () => void) => void; reject?: (err: unknown) => void } =
             {};
-        service.setCore(core);
+        service.setContext(core);
         vi.mocked(core.tauriProvider.listen).mockImplementation(
             () =>
                 new Promise<() => void>((resolve, reject) => {

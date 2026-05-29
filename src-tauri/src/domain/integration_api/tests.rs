@@ -5,14 +5,24 @@ use super::http::{
     find_header_end, json_error, json_response, parse_header_line, parse_header_lines,
     parse_json_body, read_http_request, status_for_app_error, status_text,
 };
+use super::preflight_http_request;
 use super::routing::{
-    backend_provider_id, ensure_module_route_owner, merge_json_settings, model_api_id,
-    modules_visible_to_client, parse_module_action, resolve_session_id,
-    selected_module_from_api_provider, selected_module_from_catalog_item, tier_rank,
+    agent_provider_summary, approvals_visible_to_client, audit_action_from_request,
+    backend_provider_id, default_draft_entry, draft_id_from_name, draft_manifest_text,
+    ensure_launcher_client, ensure_module_route_owner, escape_toml_string,
+    handle_agent_logs_request, is_dangerous_approval_action, merge_json_settings, model_api_id,
+    modules_visible_to_client, normalize_approval_field, normalize_approval_risk,
+    parse_agent_logs_query, parse_module_action, redact_sensitive_log_text, resolve_session_id,
+    sanitize_agent_log_entry, sanitize_agent_module_settings, selected_module_from_api_provider,
+    selected_module_from_catalog_item, selected_module_from_runtime_module,
+    selection_category_for_capabilities, selection_category_for_runtime_module, tier_rank,
+    validate_draft_runtime_kind, validate_relative_draft_path,
 };
 use super::types::{AuthorizedClient, IntegrationTextRequest, ModuleContextApiResponse};
+use crate::domain::agent_control::{AgentApprovalRequest, AgentApprovalStatus, AgentScope};
 use crate::domain::modules::controller::ModuleAction;
 use crate::errors::AppError;
+use crate::infrastructure::logging::LogEntry;
 use crate::models::{
     AiModel, ApiModelConfig, ModelStats, ModelTier, Module, ModuleItem, ProviderType,
     SelectedModule,
@@ -82,13 +92,23 @@ fn authorization_accepts_bearer_token() {
         "authorization".to_string(),
         format!("Bearer {}", super::api_token()),
     );
-    assert!(auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_some());
 
     headers.insert(
         "authorization".to_string(),
         format!("bearer {}", super::api_token()),
     );
-    assert!(auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_some());
+}
+
+#[test]
+fn authorization_accepts_explicit_agent_token() {
+    let token = "agent-token-123456789012345678901234567890";
+
+    assert!(auth::agent_api_token_matches(token, Some(token)));
+    assert!(!auth::agent_api_token_matches("wrong-token", Some(token)));
+    assert!(!auth::agent_api_token_matches("short", Some("short")));
+    assert!(!auth::agent_api_token_matches(token, None));
 }
 
 #[test]
@@ -99,7 +119,7 @@ fn authorization_rejects_old_header_token() {
         super::api_token().to_string(),
     );
 
-    assert!(!auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_none());
 }
 
 #[test]
@@ -126,6 +146,120 @@ fn authorization_maps_module_tokens_to_module_owner() {
         ),
         Err(AppError::PermissionDenied(_))
     ));
+}
+
+#[test]
+fn launcher_wide_agent_state_requires_launcher_client() {
+    assert!(ensure_launcher_client(&AuthorizedClient::Launcher).is_ok());
+    assert!(matches!(
+        ensure_launcher_client(&AuthorizedClient::Module("sample-module".to_string())),
+        Err(AppError::PermissionDenied(_))
+    ));
+}
+
+#[test]
+fn agent_logs_query_defaults_and_clamps_limit() {
+    let defaults = parse_agent_logs_query("/v1/agent/logs").expect("defaults");
+    assert_eq!(defaults.view_id, None);
+    assert!(defaults.since.abs() < f64::EPSILON);
+    assert_eq!(defaults.limit, 200);
+
+    let parsed = parse_agent_logs_query("/v1/agent/logs?viewId=engine:sdcpp&since=12.5&limit=5000")
+        .expect("query");
+    assert_eq!(parsed.view_id.as_deref(), Some("engine:sdcpp"));
+    assert!((parsed.since - 12.5).abs() < f64::EPSILON);
+    assert_eq!(parsed.limit, 1000);
+}
+
+#[test]
+fn agent_logs_query_decodes_view_id() {
+    let parsed =
+        parse_agent_logs_query("/v1/agent/logs?viewId=engine%3Allamacpp&since=1").expect("query");
+
+    assert_eq!(parsed.view_id.as_deref(), Some("engine:llamacpp"));
+    assert!((parsed.since - 1.0).abs() < f64::EPSILON);
+}
+
+#[test]
+fn agent_logs_query_rejects_invalid_since_and_limit() {
+    assert!(parse_agent_logs_query("/v1/agent/logs?since=-1").is_err());
+    assert!(parse_agent_logs_query("/v1/agent/logs?since=inf").is_err());
+    assert!(parse_agent_logs_query("/v1/agent/logs?limit=0").is_err());
+}
+
+#[test]
+fn agent_logs_without_view_id_return_empty_list() {
+    let request = super::types::HttpRequest {
+        method: "GET".to_string(),
+        path: "/v1/agent/logs?limit=5".to_string(),
+        headers: HashMap::new(),
+        body: Vec::new(),
+    };
+
+    let response = handle_agent_logs_request(&request).expect("logs response");
+
+    assert_eq!(response.status, 200);
+    assert_eq!(response.body.get("logs"), Some(&serde_json::json!([])));
+    assert_eq!(response.body.get("viewId"), Some(&serde_json::Value::Null));
+}
+
+#[test]
+fn agent_logs_redact_sensitive_values() {
+    let redacted = redact_sensitive_log_text(
+        "Authorization: Bearer axl_agent_secret token=abc api_key=\"sk-test\" access_key=ak private_key=pk secret_key=sk openaiKey=o anthropicKey=a ssh_key=ssh safe=ok url=/x?api_key=query&ok=1",
+    );
+
+    assert!(!redacted.contains("axl_agent_secret"));
+    assert!(!redacted.contains("token=abc"));
+    assert!(!redacted.contains("sk-test"));
+    assert!(!redacted.contains("access_key=ak"));
+    assert!(!redacted.contains("private_key=pk"));
+    assert!(!redacted.contains("secret_key=sk"));
+    assert!(!redacted.contains("openaiKey=o"));
+    assert!(!redacted.contains("anthropicKey=a"));
+    assert!(!redacted.contains("ssh_key=ssh"));
+    assert!(!redacted.contains("api_key=query"));
+    assert!(redacted.contains("Authorization: [REDACTED]"));
+    assert!(redacted.contains("token=[REDACTED]"));
+    assert!(redacted.contains("api_key=\"[REDACTED]\""));
+    assert!(redacted.contains("access_key=[REDACTED]"));
+    assert!(redacted.contains("private_key=[REDACTED]"));
+    assert!(redacted.contains("secret_key=[REDACTED]"));
+    assert!(redacted.contains("openaiKey=[REDACTED]"));
+    assert!(redacted.contains("anthropicKey=[REDACTED]"));
+    assert!(redacted.contains("ssh_key=[REDACTED]"));
+    assert!(redacted.contains("safe=ok"));
+    assert!(redacted.contains("api_key=[REDACTED]&ok=1"));
+}
+
+#[test]
+fn agent_log_entry_sanitizes_string_fields() {
+    let entry = LogEntry {
+        timestamp: 1.0,
+        source: "module:demo".to_string(),
+        level: "info".to_string(),
+        message: "apiKey=secret-value".to_string(),
+        module_id: Some("demo".to_string()),
+        display_time: None,
+        normalized_level: None,
+        scope: None,
+        summary_message: Some("Bearer bearer-secret".to_string()),
+        source_label: None,
+        source_class: None,
+        page: None,
+        action: None,
+        expected: Some("password: hunter2".to_string()),
+    };
+
+    let sanitized = sanitize_agent_log_entry(entry);
+
+    assert_eq!(sanitized.message, "apiKey=[REDACTED]");
+    assert_eq!(
+        sanitized.summary_message.as_deref(),
+        Some("Bearer [REDACTED]")
+    );
+    assert_eq!(sanitized.expected.as_deref(), Some("password: [REDACTED]"));
+    assert_eq!(sanitized.module_id.as_deref(), Some("demo"));
 }
 
 #[test]
@@ -171,13 +305,30 @@ fn authorization_rejects_malformed_bearer_values() {
         "authorization".to_string(),
         format!("Bearer {} extra", super::api_token()),
     );
-    assert!(!auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_none());
 
     headers.insert(
         "authorization".to_string(),
         format!("Token {}", super::api_token()),
     );
-    assert!(!auth::is_authorized(&headers));
+    assert!(auth::authorize_request(&headers).is_none());
+}
+
+#[test]
+fn preflight_keeps_profile_tokens_for_dispatch_authorization() {
+    let request = super::types::HttpRequest {
+        method: "GET".to_string(),
+        path: "/v1/agent/state".to_string(),
+        headers: HashMap::from([(
+            "authorization".to_string(),
+            "Bearer axl_agent_profile_token".to_string(),
+        )]),
+        body: Vec::new(),
+    };
+
+    assert!(
+        preflight_http_request(&request, Some("127.0.0.1:3000".parse().expect("peer"))).is_none()
+    );
 }
 
 #[test]
@@ -280,6 +431,98 @@ fn patch_settings_merge_nested_objects_without_dropping_existing_keys() {
 }
 
 #[test]
+fn agent_module_settings_redact_sensitive_keys_recursively() {
+    let settings = HashMap::from([
+        ("bot_token".to_string(), serde_json::json!("secret-token")),
+        ("openaiKey".to_string(), serde_json::json!("openai-secret")),
+        (
+            "anthropicKey".to_string(),
+            serde_json::json!("anthropic-secret"),
+        ),
+        ("module_language".to_string(), serde_json::json!("auto")),
+        (
+            "nested".to_string(),
+            serde_json::json!({
+                "api_key": "secret-key",
+                "access_key": "access-secret",
+                "private_key": "private-secret",
+                "secret_key": "nested-secret",
+                "ssh_key": "ssh-secret",
+                "safe": true,
+            }),
+        ),
+    ]);
+
+    let sanitized = sanitize_agent_module_settings(settings);
+
+    assert_eq!(
+        sanitized.get("bot_token"),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized.get("openaiKey"),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized.get("anthropicKey"),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized.get("module_language"),
+        Some(&serde_json::json!("auto"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("api_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("access_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("private_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("secret_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("ssh_key")),
+        Some(&serde_json::json!("[REDACTED]"))
+    );
+    assert_eq!(
+        sanitized
+            .get("nested")
+            .and_then(|nested| nested.get("safe")),
+        Some(&serde_json::json!(true))
+    );
+}
+
+#[test]
+fn agent_module_settings_updates_reject_sensitive_keys() {
+    let updates = HashMap::from([(
+        "nested".to_string(),
+        serde_json::json!({ "openaiKey": "new-secret" }),
+    )]);
+
+    let error = super::routing::ensure_agent_settings_update_is_safe(&updates)
+        .expect_err("secret updates must be rejected");
+
+    assert!(matches!(error, AppError::PermissionDenied(_)));
+}
+
+#[test]
 fn module_context_response_uses_public_camel_case_contract() {
     let response = serde_json::to_value(ModuleContextApiResponse {
         ok: true,
@@ -378,10 +621,52 @@ fn module_action_parser_accepts_integration_routes_only() {
         parse_module_action("restart").expect("restart"),
         ModuleAction::Restart
     );
+    assert_eq!(
+        parse_module_action("repair").expect("repair"),
+        ModuleAction::Repair
+    );
     assert!(matches!(
         parse_module_action("install"),
         Err(AppError::Validation(_))
     ));
+}
+
+#[test]
+fn integration_draft_helpers_validate_safe_contract() {
+    assert_eq!(draft_id_from_name("My Draft Tool"), "my-draft-tool");
+    assert!(validate_draft_runtime_kind("python").is_ok());
+    assert!(validate_draft_runtime_kind("node").is_ok());
+    assert!(validate_draft_runtime_kind("bun").is_ok());
+    assert!(validate_draft_runtime_kind("binary").is_err());
+    assert_eq!(default_draft_entry("node"), "src/main.js");
+    assert_eq!(default_draft_entry("bun"), "src/main.ts");
+    assert_eq!(default_draft_entry("python"), "src/main.py");
+
+    assert!(validate_relative_draft_path("src/main.py").is_ok());
+    assert!(validate_relative_draft_path("../outside.py").is_err());
+    assert!(validate_relative_draft_path("/outside.py").is_err());
+    #[cfg(windows)]
+    assert!(validate_relative_draft_path("C:/outside.py").is_err());
+    #[cfg(windows)]
+    assert!(validate_relative_draft_path(r"C:temp\file.py").is_err());
+}
+
+#[test]
+fn integration_draft_manifest_escapes_toml_strings() {
+    assert_eq!(escape_toml_string("a\"b\nc"), "a\\\"b\\nc");
+    let manifest = draft_manifest_text(
+        "demo",
+        "Demo \"Tool\"",
+        "Line one\nLine two",
+        "python",
+        "src/main.py",
+    );
+
+    assert!(manifest.contains("id = \"demo\""));
+    assert!(manifest.contains("name = \"Demo \\\"Tool\\\"\""));
+    assert!(manifest.contains("description = \"Line one\\nLine two\""));
+    assert!(manifest.contains("kind = \"python\""));
+    assert!(manifest.contains("entry = \"src/main.py\""));
 }
 
 #[test]
@@ -412,6 +697,84 @@ fn json_response_helpers_preserve_status_and_error_shape() {
     assert_eq!(
         error.body.get("error").and_then(serde_json::Value::as_str),
         Some("denied")
+    );
+}
+
+#[test]
+fn agent_approval_helpers_accept_only_risky_actions() {
+    assert_eq!(
+        normalize_approval_field("action", "install module", 96).expect("action"),
+        "install module"
+    );
+    assert!(normalize_approval_field("target", "", 96).is_err());
+    assert!(normalize_approval_field("diff", "x".repeat(97).as_str(), 96).is_err());
+    assert_eq!(
+        normalize_approval_risk("Dangerous").expect("dangerous"),
+        "dangerous"
+    );
+    assert_eq!(normalize_approval_risk("HIGH").expect("high"), "high");
+    assert!(normalize_approval_risk("medium").is_err());
+    assert!(is_dangerous_approval_action("install package"));
+    assert!(is_dangerous_approval_action("read raw-log file"));
+    assert!(!is_dangerous_approval_action("open page"));
+}
+
+#[test]
+fn agent_approvals_are_scoped_to_requesting_agent() {
+    let approvals = vec![
+        AgentApprovalRequest {
+            id: "approval-a".to_string(),
+            agent_id: "agent-a".to_string(),
+            agent_name: "Agent A".to_string(),
+            action: "package.install".to_string(),
+            target: "demo-a".to_string(),
+            diff: "Install A".to_string(),
+            risk: "dangerous".to_string(),
+            status: AgentApprovalStatus::Pending,
+            created_at: "2026-05-23T00:00:00Z".to_string(),
+            decided_at: None,
+        },
+        AgentApprovalRequest {
+            id: "approval-b".to_string(),
+            agent_id: "agent-b".to_string(),
+            agent_name: "Agent B".to_string(),
+            action: "package.install".to_string(),
+            target: "demo-b".to_string(),
+            diff: "Install B".to_string(),
+            risk: "dangerous".to_string(),
+            status: AgentApprovalStatus::Pending,
+            created_at: "2026-05-23T00:00:01Z".to_string(),
+            decided_at: None,
+        },
+    ];
+    let agent = AuthorizedClient::Agent(crate::domain::agent_control::AuthorizedAgent {
+        id: "agent-a".to_string(),
+        name: "Agent A".to_string(),
+        scopes: vec![AgentScope::Observe],
+    });
+
+    let visible = approvals_visible_to_client(approvals.clone(), &agent);
+
+    assert_eq!(visible.len(), 1);
+    assert_eq!(
+        visible.first().map(|approval| approval.id.as_str()),
+        Some("approval-a")
+    );
+    assert_eq!(
+        approvals_visible_to_client(approvals, &AuthorizedClient::Launcher).len(),
+        2
+    );
+}
+
+#[test]
+fn failed_agent_requests_get_stable_audit_action_names() {
+    assert_eq!(
+        audit_action_from_request("PATCH", "/v1/modules/demo/settings?x=1"),
+        "http.patch.v1.modules.demo.settings"
+    );
+    assert_eq!(
+        audit_action_from_request("GET", "/v1/agent/capabilities"),
+        "http.get.v1.agent.capabilities"
     );
 }
 
@@ -512,6 +875,107 @@ fn selected_module_from_api_provider_maps_provider_type() {
     assert_eq!(selected_cloud.type_, "api");
     assert_eq!(selected_cloud.desc, "Cloud provider");
     assert_eq!(selected_local.type_, "local");
+}
+
+#[test]
+fn runtime_module_selection_maps_service_modules_to_services_card() {
+    let module = Module {
+        id: "telegram-parser".to_string(),
+        name: "Telegram Parser".to_string(),
+        description: "Reads exports".to_string(),
+        version: "1.0.0".to_string(),
+        author: "Axelate".to_string(),
+        category: "service".to_string(),
+        icon: "box".to_string(),
+        preview: None,
+        path: String::new(),
+        installed: true,
+        local: true,
+        enabled: false,
+        status: Some("running".to_string()),
+        is_deletable: true,
+        config: HashMap::new(),
+        config_schema: None,
+        settings_ui: None,
+    };
+
+    let selected = selected_module_from_runtime_module(&module);
+
+    assert_eq!(selection_category_for_runtime_module(&module), "services");
+    assert_eq!(selected.id, "telegram-parser");
+    assert_eq!(selected.name, "Telegram Parser");
+    assert_eq!(selected.type_, "local");
+    assert_eq!(selected.desc, "Reads exports");
+}
+
+#[test]
+fn runtime_module_selection_maps_ai_modules_to_text_slot() {
+    let module = Module {
+        id: "local-agent".to_string(),
+        name: "Local Agent".to_string(),
+        description: "AI module".to_string(),
+        version: "1.0.0".to_string(),
+        author: "Axelate".to_string(),
+        category: "AI".to_string(),
+        icon: "cpu".to_string(),
+        preview: None,
+        path: String::new(),
+        installed: true,
+        local: true,
+        enabled: false,
+        status: Some("running".to_string()),
+        is_deletable: true,
+        config: HashMap::new(),
+        config_schema: None,
+        settings_ui: None,
+    };
+
+    assert_eq!(selection_category_for_runtime_module(&module), "ai_text");
+}
+
+#[test]
+fn selection_category_uses_image_slot_for_image_only_capabilities() {
+    assert_eq!(
+        selection_category_for_capabilities(&["image".to_string()]),
+        "ai_image"
+    );
+    assert_eq!(
+        selection_category_for_capabilities(&["text".to_string(), "image".to_string()]),
+        "ai_text"
+    );
+}
+
+#[test]
+fn agent_provider_summary_does_not_expose_secret_or_endpoint_fields() {
+    let provider = crate::models::ApiProvider {
+        id: "custom-text".to_string(),
+        name: "Custom Text".to_string(),
+        desc_key: None,
+        description: Some("Custom provider".to_string()),
+        icon: Some("AI".to_string()),
+        provider_type: Some(ProviderType::OpenaiCompatible),
+        base_url: Some("https://api.example.test/v1".to_string()),
+        api_key_env: Some("CUSTOM_TEXT_API_KEY".to_string()),
+        models: Some(vec![model_with_api_ids()]),
+        capabilities: Some(vec!["text".to_string()]),
+        model_aliases: None,
+    };
+
+    let summary = serde_json::to_value(agent_provider_summary(&provider)).expect("summary");
+
+    assert_eq!(
+        summary.get("id").and_then(serde_json::Value::as_str),
+        Some("custom-text")
+    );
+    assert!(summary.get("baseUrl").is_none());
+    assert!(summary.get("apiKeyEnv").is_none());
+    assert_eq!(
+        summary
+            .get("models")
+            .and_then(serde_json::Value::as_array)
+            .map(Vec::len),
+        Some(1)
+    );
 }
 
 #[test]

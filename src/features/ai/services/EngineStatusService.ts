@@ -62,10 +62,6 @@ export class EngineStatusService {
         this._context = context;
     }
 
-    public setCore(context: EngineStatusContext): void {
-        this.setContext(context);
-    }
-
     public init(): void {
         if (this._initialized) {
             return;

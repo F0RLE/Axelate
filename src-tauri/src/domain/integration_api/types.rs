@@ -1,8 +1,12 @@
 //! DTOs and internal types for the local launcher HTTP API.
 
+use crate::domain::agent_control::AuthorizedAgent;
 use crate::domain::ai::types::{
     ChatMessage, ChatResponse, ImageGenerationResponse, WebSearchOptions,
 };
+use crate::domain::engine::types::EngineState;
+use crate::infrastructure::logging::LogEntry;
+use crate::models::{ModelCapabilities, SelectedModule};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::net::{SocketAddr, TcpStream};
@@ -40,7 +44,26 @@ pub(super) type HttpWorkerReceiver = Arc<Mutex<mpsc::Receiver<ValidatedHttpReque
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(super) enum AuthorizedClient {
     Launcher,
+    Agent(AuthorizedAgent),
     Module(String),
+}
+
+impl AuthorizedClient {
+    pub(super) fn actor_id(&self) -> String {
+        match self {
+            Self::Launcher => "launcher-env".to_string(),
+            Self::Agent(agent) => agent.id.clone(),
+            Self::Module(module_id) => format!("module:{module_id}"),
+        }
+    }
+
+    pub(super) fn actor_name(&self) -> String {
+        match self {
+            Self::Launcher => "Launcher token".to_string(),
+            Self::Agent(agent) => agent.name.clone(),
+            Self::Module(module_id) => format!("Module {module_id}"),
+        }
+    }
 }
 
 // ── Integration request DTOs ─────────────────────────────────────────────────
@@ -89,6 +112,38 @@ pub(super) struct IntegrationModuleStageRequest {
     pub progress: Option<f64>,
 }
 
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationAgentApprovalRequest {
+    pub action: String,
+    pub target: String,
+    pub diff: String,
+    pub risk: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationOpenPageRequest {
+    pub page_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationSelectModuleRequest {
+    pub category: String,
+    pub module_id: String,
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationDraftCreateRequest {
+    pub id: Option<String>,
+    pub name: String,
+    pub runtime_kind: Option<String>,
+    pub entry: Option<String>,
+    pub description: Option<String>,
+}
+
 // ── Integration response DTOs ────────────────────────────────────────────────
 
 #[derive(Debug, Serialize)]
@@ -111,6 +166,16 @@ pub(super) struct ImageApiResponse {
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
+pub(super) struct IntegrationDraftCreateResponse {
+    pub ok: bool,
+    pub id: String,
+    pub draft_dir: String,
+    pub manifest_path: String,
+    pub entry_path: String,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
 pub(super) struct ModuleContextApiResponse {
     pub ok: bool,
     pub api_version: &'static str,
@@ -122,6 +187,57 @@ pub(super) struct ModuleContextApiResponse {
     pub http_api_base: String,
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentLauncherStateResponse {
+    pub ok: bool,
+    pub api_version: &'static str,
+    pub selected_modules: HashMap<String, SelectedModule>,
+    pub modules: Vec<AgentModuleSummary>,
+    pub providers: Vec<AgentProviderSummary>,
+    pub engine_state: EngineState,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentLogsResponse {
+    pub ok: bool,
+    pub api_version: &'static str,
+    pub view_id: Option<String>,
+    pub since: f64,
+    pub limit: usize,
+    pub logs: Vec<LogEntry>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentModuleSummary {
+    pub id: String,
+    pub name: String,
+    pub category: String,
+    pub installed: bool,
+    pub enabled: bool,
+    pub status: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentProviderSummary {
+    pub id: String,
+    pub name: String,
+    pub provider_type: Option<String>,
+    pub capabilities: Vec<String>,
+    pub models: Vec<AgentModelSummary>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentModelSummary {
+    pub id: String,
+    pub name: String,
+    pub capabilities: Option<ModelCapabilities>,
+}
+
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(super) struct ModuleStageChangedEvent {
@@ -130,5 +246,12 @@ pub(super) struct ModuleStageChangedEvent {
     pub label: String,
     pub details: Option<String>,
     pub progress: Option<f64>,
+    pub source: &'static str,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(super) struct AgentOpenPageEvent {
+    pub page_id: String,
     pub source: &'static str,
 }

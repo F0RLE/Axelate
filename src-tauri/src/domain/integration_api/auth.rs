@@ -48,17 +48,35 @@ pub(super) fn is_loopback_peer(peer_addr: Option<std::net::SocketAddr>) -> bool 
     peer_addr.is_some_and(|addr| addr.ip().is_loopback())
 }
 
-pub(super) fn is_authorized(headers: &HashMap<String, String>) -> bool {
-    authorize_request(headers).is_some()
-}
-
 pub(super) fn authorize_request(headers: &HashMap<String, String>) -> Option<AuthorizedClient> {
     headers
         .get("authorization")
         .and_then(|value| authorized_bearer_client(value))
 }
 
+pub(super) async fn authorize_request_with_agent_profiles(
+    headers: &HashMap<String, String>,
+    agent_control: &crate::domain::agent_control::AgentControlService,
+) -> Option<AuthorizedClient> {
+    if let Some(client) = authorize_request(headers) {
+        return Some(client);
+    }
+
+    let token = headers
+        .get("authorization")
+        .and_then(|value| bearer_token(value))?;
+    agent_control
+        .authorize_token(token)
+        .await
+        .map(AuthorizedClient::Agent)
+}
+
 fn authorized_bearer_client(value: &str) -> Option<AuthorizedClient> {
+    let token = bearer_token(value)?;
+    authorized_token_client(token)
+}
+
+fn bearer_token(value: &str) -> Option<&str> {
     let mut parts = value.split_whitespace();
     let scheme = parts.next()?;
     let token = parts.next()?;
@@ -66,11 +84,11 @@ fn authorized_bearer_client(value: &str) -> Option<AuthorizedClient> {
         return None;
     }
 
-    authorized_token_client(token)
+    Some(token)
 }
 
 fn authorized_token_client(token: &str) -> Option<AuthorizedClient> {
-    if token == super::api_token() {
+    if token == super::api_token() || is_configured_agent_api_token(token) {
         return Some(AuthorizedClient::Launcher);
     }
 
@@ -85,4 +103,20 @@ fn authorized_token_client(token: &str) -> Option<AuthorizedClient> {
         .and_then(|tokens| tokens.get(module_id).cloned())
         .filter(|expected| expected == token)
         .map(|_| AuthorizedClient::Module(module_id.to_string()))
+}
+
+fn is_configured_agent_api_token(token: &str) -> bool {
+    let Ok(configured) = std::env::var("AXELATE_AGENT_API_TOKEN") else {
+        return false;
+    };
+
+    agent_api_token_matches(token, Some(configured.as_str()))
+}
+
+pub(super) fn agent_api_token_matches(token: &str, configured: Option<&str>) -> bool {
+    let Some(configured) = configured.map(str::trim).filter(|value| value.len() >= 32) else {
+        return false;
+    };
+
+    token == configured
 }

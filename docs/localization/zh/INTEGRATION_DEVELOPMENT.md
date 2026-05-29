@@ -37,6 +37,9 @@ npm run integration:doctor -- ./my-integration
 
 真正的运行时契约仍然是 [Integration API](../en/INTEGRATION_API.md) 中描述的本地
 HTTP API。
+它适合 launcher-managed 集成，也支撑当前的本地 Agent Control 层。外部 agent
+必须使用 agent profile token、scopes、audit 和 approvals，不能通过文件或 UI
+绕过权限模型。
 
 ## 集成结构
 
@@ -82,6 +85,26 @@ Axelate 启动 script-runtime 集成时会设置：
 - `AXELATE_MODULE_LOG_DIR`
 
 在进程启动时读取这些值。不要硬编码端口或数据路径。
+
+## Agent Control
+
+当前 Integration API 对普通集成仍然是模块级、受限制的接口：集成拿到
+runtime token 后，只能使用自己的设置、状态、日志目录和 AI 请求能力。
+
+Agent Control 已由单独的英文规范文档说明：
+[Agent Control](../en/AGENT_CONTROL.md)。它是面向 Codex、本地 CLI agent、
+IDE assistant 和本地脚本的 `127.0.0.1` 本地控制 API。
+
+主要 scopes：
+
+- `observe` 读取状态、健康信息、模块列表和清理后的控制台日志
+- `operate` 打开页面、选择卡片、start、stop、restart 和 repair
+- `configure` 修改设置，必要时需要用户确认
+- `draft-create` 创建集成草稿文件夹，但不安装或运行
+- `full-access` 由用户手动授予完整本地访问
+
+Agent 不应该读取 Axelate 内部文件、抓取 UI，或拿到 provider secrets。
+危险操作需要 scopes、audit log 和用户确认。
 
 ## 调用 AI
 

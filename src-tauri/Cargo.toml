@@ -102,6 +102,9 @@ tar = "0.4.46"
 sevenz-rust2 = "0.21.0"
 notify = "8.2.0"
 
+[target.'cfg(unix)'.dependencies]
+libc = "0.2.178"
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62.2", features = [
     "Foundation",

@@ -1,6 +1,8 @@
 mod ai_dispatch;
+mod ai_provider_resolution;
 /// AI service implementation
 pub mod ai_service;
+mod ai_validation;
 /// Custom model management service
 pub mod custom_model_service;
 mod image_cloud;
@@ -23,6 +25,7 @@ mod session_context;
 mod session_persistence;
 /// AI streaming abstractions and provider implementations
 pub mod streaming;
+mod streaming_chunks;
 /// AI Data Transfer Objects (DTOs)
 pub mod types;
 // Re-export public surface so existing callers need no changes
