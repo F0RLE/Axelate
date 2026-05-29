@@ -3,6 +3,8 @@
  * @description Domain-specific type definitions and contracts for the AI module infrastructure.
  */
 
+import type { CatalogProviderPolicy } from '@/shared/types/bindings';
+
 // ============================================================================
 // Communication Contracts
 // ============================================================================
@@ -246,6 +248,7 @@ export interface IAICatalogApp {
     name?: string;
     type?: 'api' | 'local';
     apiProviderData?: IAIProviderData;
+    providerPolicy?: CatalogProviderPolicy | null;
 }
 
 /**

@@ -1,3 +1,5 @@
+/// Trusted local Agent Control commands
+pub mod agent_control;
 /// AI-related commands (chat, models)
 pub mod ai;
 /// Engine lifecycle commands (start, stop, status)

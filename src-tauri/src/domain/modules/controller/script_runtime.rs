@@ -92,6 +92,42 @@ pub async fn spawn_process(
     }
 }
 
+/// Removes launcher-managed dependency/runtime environments for one module.
+pub async fn repair_environment(
+    module_id: &str,
+    manifest: &ModuleManifest,
+) -> Result<(), AppError> {
+    match manifest.runtime.kind {
+        ModuleRuntimeKind::Python => {
+            let runtime_root = python_runtime_root();
+            let python_version = resolve_python_version(manifest);
+            remove_managed_env(&venv_dir(&runtime_root, module_id, &python_version)).await
+        }
+        ModuleRuntimeKind::Node => {
+            let runtime_root = node_runtime_root();
+            let version = resolve_runtime_version(manifest, "system");
+            remove_managed_env(&js_env_dir(&runtime_root, module_id, &version)).await
+        }
+        ModuleRuntimeKind::Bun => {
+            let runtime_root = bun_runtime_root();
+            let version = resolve_runtime_version(manifest, "system");
+            remove_managed_env(&js_env_dir(&runtime_root, module_id, &version)).await
+        }
+        ModuleRuntimeKind::Binary => Ok(()),
+    }
+}
+
+async fn remove_managed_env(path: &Path) -> Result<(), AppError> {
+    match tokio::fs::remove_dir_all(path).await {
+        Ok(()) => Ok(()),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(()),
+        Err(error) => Err(AppError::Io(format!(
+            "Failed to remove managed runtime environment {}: {error}",
+            path.display()
+        ))),
+    }
+}
+
 async fn spawn_python_process(
     module_id: &str,
     module_path: &Path,
@@ -154,10 +190,8 @@ async fn spawn_node_process(
         .map_err(|e| AppError::Io(format!("Failed to create Node runtime root: {e}")))?;
 
     let node_executable = find_node_executable().await?;
-    let npm_executable = find_program("npm").await?;
     let env_dir = js_env_dir(&runtime_root, module_id, &version);
     ensure_js_dependencies_installed(JsDependencyInstall {
-        package_manager: &npm_executable,
         runtime_root: &runtime_root,
         env_dir: &env_dir,
         module_path,
@@ -192,7 +226,6 @@ async fn spawn_bun_process(
     let bun_executable = find_program("bun").await?;
     let env_dir = js_env_dir(&runtime_root, module_id, &version);
     ensure_js_dependencies_installed(JsDependencyInstall {
-        package_manager: &bun_executable,
         runtime_root: &runtime_root,
         env_dir: &env_dir,
         module_path,
@@ -578,7 +611,6 @@ async fn ensure_requirements_installed(
 }
 
 struct JsDependencyInstall<'a> {
-    package_manager: &'a OsString,
     runtime_root: &'a Path,
     env_dir: &'a Path,
     module_path: &'a Path,
@@ -590,7 +622,6 @@ struct JsDependencyInstall<'a> {
 
 async fn ensure_js_dependencies_installed(args: JsDependencyInstall<'_>) -> Result<(), AppError> {
     let JsDependencyInstall {
-        package_manager,
         runtime_root,
         env_dir,
         module_path,
@@ -634,13 +665,8 @@ async fn ensure_js_dependencies_installed(args: JsDependencyInstall<'_>) -> Resu
         ))
     })?;
 
-    let manager = manifest
-        .runtime
-        .package_manager
-        .as_deref()
-        .map(str::trim)
-        .filter(|value| !value.is_empty())
-        .unwrap_or(default_package_manager);
+    let manager = resolve_js_package_manager(manifest, default_package_manager)?;
+    let package_manager = find_program(manager).await?;
 
     let mut command = Command::new(package_manager);
     match manager {
@@ -676,6 +702,26 @@ async fn ensure_js_dependencies_installed(args: JsDependencyInstall<'_>) -> Resu
     })?;
 
     Ok(())
+}
+
+fn resolve_js_package_manager<'a>(
+    manifest: &'a ModuleManifest,
+    default_package_manager: &'a str,
+) -> Result<&'a str, AppError> {
+    let manager = manifest
+        .runtime
+        .package_manager
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty())
+        .unwrap_or(default_package_manager);
+
+    match manager {
+        "npm" | "bun" => Ok(manager),
+        other => Err(AppError::Validation(format!(
+            "Unsupported package manager '{other}'"
+        ))),
+    }
 }
 
 fn compute_sha256(path: &Path) -> Result<String, AppError> {
@@ -864,5 +910,43 @@ mod tests {
             venv_dir(runtime_root, "sample-integration", "3.11"),
             venv_dir(runtime_root, "sample-integration", "3.12")
         );
+    }
+
+    #[test]
+    fn resolve_js_package_manager_defaults_and_respects_overrides() {
+        let mut node_manifest = manifest_with_runtime(ModuleRuntimeKind::Node, "src/main.js");
+        assert_eq!(
+            resolve_js_package_manager(&node_manifest, "npm").expect("default npm"),
+            "npm"
+        );
+
+        node_manifest.runtime.package_manager = Some("bun".to_string());
+        assert_eq!(
+            resolve_js_package_manager(&node_manifest, "npm").expect("bun override"),
+            "bun"
+        );
+
+        let mut bun_manifest = manifest_with_runtime(ModuleRuntimeKind::Bun, "src/main.ts");
+        assert_eq!(
+            resolve_js_package_manager(&bun_manifest, "bun").expect("default bun"),
+            "bun"
+        );
+
+        bun_manifest.runtime.package_manager = Some("npm".to_string());
+        assert_eq!(
+            resolve_js_package_manager(&bun_manifest, "bun").expect("npm override"),
+            "npm"
+        );
+    }
+
+    #[test]
+    fn resolve_js_package_manager_rejects_unsupported_values() {
+        let mut manifest = manifest_with_runtime(ModuleRuntimeKind::Node, "src/main.js");
+        manifest.runtime.package_manager = Some("pnpm".to_string());
+
+        assert!(matches!(
+            resolve_js_package_manager(&manifest, "npm"),
+            Err(AppError::Validation(_))
+        ));
     }
 }

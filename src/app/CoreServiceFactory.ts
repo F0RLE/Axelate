@@ -60,7 +60,9 @@ export function createCoreServiceBundle(tracer: LoggerService): CoreServiceBundl
     const navigation = new NavigationService(tracer);
     const soundService = new SoundService(tracer);
     const monitoringService = new MonitoringService(tauriProvider, tracer);
-    const consoleLogService = new ConsoleLogService(tauriProvider, tracer);
+    const consoleLogService = new ConsoleLogService(tauriProvider, tracer, (key, fallback) =>
+        i18n.t(key, fallback),
+    );
     const settingsService = new SettingsService(tauriProvider, tracer);
 
     return {

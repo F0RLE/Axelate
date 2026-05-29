@@ -45,6 +45,11 @@ type SelectedModuleChangedPayload = {
     source?: string;
 };
 
+type AgentOpenPagePayload = {
+    pageId: string;
+    source?: string;
+};
+
 export type CoreBootstrapDeps = {
     aiBridge: AIBridge;
     tauriProvider: TauriProvider;
@@ -130,6 +135,7 @@ export type CoreLifecycleDeps = {
 export class CoreLifecycleController {
     private _deferredChatInitTimer: ReturnType<typeof setTimeout> | null = null;
     private _selectedModuleChangedUnlisten: (() => void) | null = null;
+    private _agentOpenPageUnlisten: (() => void) | null = null;
     private _activeGlobalShortcutKeydown: ((e: KeyboardEvent) => void) | null = null;
 
     constructor(private readonly _deps: CoreLifecycleDeps) {}
@@ -178,6 +184,10 @@ export class CoreLifecycleController {
         if (this._deps.state.isDestroyed()) {
             return;
         }
+        await this._listenForAgentOpenPageRequests();
+        if (this._deps.state.isDestroyed()) {
+            return;
+        }
 
         this._deps.bootstrap.tracer.info('[Core] Ready.');
     }
@@ -196,6 +206,15 @@ export class CoreLifecycleController {
             );
         }
         this._selectedModuleChangedUnlisten = null;
+        try {
+            this._agentOpenPageUnlisten?.();
+        } catch (error) {
+            this._deps.bootstrap.tracer.warn(
+                '[Core] Failed to remove Agent Control open-page listener during destroy:',
+                error,
+            );
+        }
+        this._agentOpenPageUnlisten = null;
         try {
             await destroyCoreResources({
                 deferredChatInitTimer: this._deferredChatInitTimer,
@@ -267,5 +286,41 @@ export class CoreLifecycleController {
             false,
         );
         this._deps.backendSelection.appUI.updateModuleCard(payload.category, payload.module);
+    }
+
+    private async _listenForAgentOpenPageRequests(): Promise<void> {
+        const tauriProvider = this._deps.bootstrap.tauriProvider;
+        if (!tauriProvider.isTauri() || this._agentOpenPageUnlisten !== null) {
+            return;
+        }
+
+        const unlisten = await tauriProvider.listen<AgentOpenPagePayload>(
+            'agent-control:open-page',
+            (payload) => {
+                void this._applyAgentOpenPageRequest(payload).catch((error: unknown) => {
+                    this._deps.bootstrap.tracer.warn(
+                        '[Core] Failed to apply Agent Control open-page request:',
+                        error,
+                    );
+                });
+            },
+        );
+        if (this._deps.state.isDestroyed()) {
+            unlisten();
+            return;
+        }
+        this._agentOpenPageUnlisten = unlisten;
+    }
+
+    private async _applyAgentOpenPageRequest(payload: AgentOpenPagePayload): Promise<void> {
+        const rawPageId = (payload as { pageId?: unknown }).pageId;
+        if (typeof rawPageId !== 'string') {
+            return;
+        }
+        const pageId = rawPageId.trim();
+        if (pageId === '') {
+            return;
+        }
+        await this._deps.bootstrap.navigationUI.showPage(pageId, null, false, false);
     }
 }

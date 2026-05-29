@@ -7,12 +7,50 @@ import {
     CUSTOM_TEXT_PROVIDER_ID,
 } from '@/shared/utils/customProviderSupport';
 
+const customTextPolicy = {
+    isCloudProvider: true,
+    isCustomProvider: true,
+    isCleanApp: false,
+    secretService: 'custom_text_api_key',
+    keyProviderId: CUSTOM_TEXT_PROVIDER_ID,
+    keyProviderUrl: null,
+    usesCustomProviderKey: true,
+    showApiEndpointSelector: true,
+    showCustomModelComposer: true,
+    showModelStats: false,
+    supportsInternetAccess: false,
+    supportsThinking: false,
+    imageOnly: false,
+};
+
+const customImagePolicy = {
+    ...customTextPolicy,
+    secretService: 'custom_image_api_key',
+    keyProviderId: CUSTOM_IMAGE_PROVIDER_ID,
+    showApiEndpointSelector: false,
+    showCustomModelComposer: false,
+    imageOnly: true,
+};
+
+const localTextPolicy = {
+    ...customTextPolicy,
+    isCloudProvider: false,
+    isCustomProvider: false,
+    secretService: null,
+    keyProviderId: null,
+    keyProviderUrl: null,
+};
+
 function createProviderPolicy(): AIBridgeProviderPolicy {
     return new AIBridgeProviderPolicy(() => ({
         ai: [
-            { id: CUSTOM_TEXT_PROVIDER_ID, capability: 'text' },
-            { id: CUSTOM_IMAGE_PROVIDER_ID, capability: 'image' },
-            { id: 'llamacpp', capability: 'text' },
+            { id: CUSTOM_TEXT_PROVIDER_ID, capability: 'text', providerPolicy: customTextPolicy },
+            {
+                id: CUSTOM_IMAGE_PROVIDER_ID,
+                capability: 'image',
+                providerPolicy: customImagePolicy,
+            },
+            { id: 'llamacpp', capability: 'text', providerPolicy: localTextPolicy },
         ],
     }));
 }
@@ -161,6 +199,29 @@ function createImageController() {
 }
 
 describe('AIBridgeMessageController custom providers', () => {
+    it('routes built-in cloud text providers through their OpenRouter catalog base URL', async () => {
+        const { controller, transport, manager, context } = createTextController();
+        manager.activeProviderId = 'gpt';
+        manager.model = 'openai/gpt-5.5';
+        manager.getProviderBaseUrl.mockReturnValue('https://openrouter.ai/api/v1');
+        context.aiSettings.getInternetAccessEnabled.mockReturnValue(true);
+
+        await controller.sendMessage('What is the latest release today?', 'chat', [], []);
+
+        expect(context.aiSettings.getThinkingLevel).toHaveBeenCalledWith('gpt');
+        expect(context.aiSettings.getInternetAccessEnabled).toHaveBeenCalledWith('gpt');
+        expect(manager.getProviderBaseUrl).toHaveBeenCalledWith('gpt');
+        expect(transport.send).toHaveBeenCalledWith(
+            expect.objectContaining({
+                provider: 'gpt',
+                model: 'openai/gpt-5.5',
+                cloud_api_base_url: 'https://openrouter.ai/api/v1',
+                thinking_level: 'high',
+                web_search: { enabled: true },
+            }),
+        );
+    });
+
     it('routes custom text providers through the custom backend slot without changing model ids', async () => {
         const { controller, transport } = createTextController();
 
@@ -170,29 +231,22 @@ describe('AIBridgeMessageController custom providers', () => {
             expect.objectContaining({
                 provider: CUSTOM_TEXT_PROVIDER_ID,
                 model: 'deepseek/deepseek-r1-0528',
-                thinking_level: 'high',
             }),
         );
     });
 
-    it('uses custom text provider settings for thinking and internet access', async () => {
+    it('does not send OpenRouter-only request options for custom text providers', async () => {
         const { controller, transport, context } = createTextController();
         context.aiSettings.getThinkingLevel.mockReturnValue('off');
         context.aiSettings.getInternetAccessEnabled.mockReturnValue(true);
 
         await controller.sendMessage('What is the latest OpenAI news today?', 'chat', [], []);
 
-        expect(context.aiSettings.getThinkingLevel).toHaveBeenCalledWith(CUSTOM_TEXT_PROVIDER_ID);
-        expect(context.aiSettings.getInternetAccessEnabled).toHaveBeenCalledWith(
-            CUSTOM_TEXT_PROVIDER_ID,
-        );
-        expect(transport.send).toHaveBeenCalledWith(
-            expect.objectContaining({
-                provider: CUSTOM_TEXT_PROVIDER_ID,
-                thinking_level: 'none',
-                web_search: { enabled: true },
-            }),
-        );
+        expect(context.aiSettings.getThinkingLevel).not.toHaveBeenCalled();
+        expect(context.aiSettings.getInternetAccessEnabled).not.toHaveBeenCalled();
+        const request = transport.send.mock.calls[0]?.[0] as Record<string, unknown>;
+        expect(request).not.toHaveProperty('thinking_level');
+        expect(request).not.toHaveProperty('web_search');
     });
 
     it('passes provider base URLs to OpenAI-compatible text requests', async () => {
@@ -427,6 +481,15 @@ describe('AIBridgeMessageController custom providers', () => {
         expect(onLongActivityStart).toHaveBeenCalledOnce();
         expect(onLongActivityEnd).toHaveBeenCalledOnce();
         expect(transport.sendSilent).toHaveBeenCalledOnce();
+    });
+
+    it('does not send OpenRouter-only reasoning options during custom silent prompt preparation', async () => {
+        const { controller, transport } = createTextController();
+
+        await controller.prepareImagePrompt('rewrite image prompt');
+
+        const request = transport.sendSilent.mock.calls[0]?.[0] as Record<string, unknown>;
+        expect(request).not.toHaveProperty('thinking_level');
     });
 
     it('passes provider base URLs to silent prompt preparation requests', async () => {

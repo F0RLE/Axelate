@@ -1,3 +1,5 @@
+/// Trusted local Agent Control profiles and approval policy.
+pub mod agent_control;
 /// AI domain logic
 pub mod ai;
 /// Engine lifecycle and queue management

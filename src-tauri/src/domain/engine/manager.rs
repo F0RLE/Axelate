@@ -18,6 +18,7 @@ use tracing::{error, info, warn};
 use crate::errors::AppError;
 
 use super::engine_args::{build_engine_args, sdcpp_preview_enabled};
+use super::engine_ids::canonical_engine_log_id;
 use super::engine_runtime::{
     diagnose_engine_start_failure, find_available_local_port, is_endpoint_healthy,
     spawn_log_reader, wait_for_health,
@@ -28,6 +29,7 @@ use super::types::{
 };
 
 pub use super::engine_args::resolve_sdcpp_preview_path;
+pub use super::engine_ids::canonical_engine_id;
 
 #[cfg(windows)]
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
@@ -691,25 +693,6 @@ impl EngineManager {
     }
 }
 
-/// Returns the normalized engine registry id.
-pub fn canonical_engine_id(engine_id: &str) -> String {
-    let normalized = engine_id
-        .trim()
-        .to_ascii_lowercase()
-        .replace([' ', '.', '_'], "-");
-
-    let mut normalized = normalized;
-    while normalized.contains("--") {
-        normalized = normalized.replace("--", "-");
-    }
-
-    normalized
-}
-
-fn canonical_engine_log_id(engine_id: &str) -> String {
-    canonical_engine_id(engine_id)
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used, clippy::panic)]
@@ -940,14 +923,5 @@ mod tests {
 
         assert!(sdcpp_preview_enabled(&extra_args));
         assert!(resolve_sdcpp_preview_path(&extra_args).is_none());
-    }
-
-    #[test]
-    fn canonical_engine_id_normalizes_without_remapping_cpp_engines() {
-        assert_eq!(canonical_engine_id(" sdcpp "), "sdcpp");
-        assert_eq!(canonical_engine_id("llama cpp"), "llama-cpp");
-        assert_eq!(canonical_engine_id("llama_cpp"), "llama-cpp");
-        assert_eq!(canonical_engine_id("llama.cpp"), "llama-cpp");
-        assert_eq!(canonical_engine_id("sd.cpp"), "sd-cpp");
     }
 }

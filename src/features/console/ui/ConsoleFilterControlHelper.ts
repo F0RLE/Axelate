@@ -7,6 +7,7 @@ type ConsoleFilterControlHelperDeps<Level extends string> = {
     onCopyLogs: () => void;
     onOpenLogsFolder: () => void;
     onFiltersChanged: () => void;
+    translate: (key: string, fallback: string) => string;
 };
 
 export class ConsoleFilterControlHelper<Level extends string> {
@@ -72,6 +73,7 @@ export class ConsoleFilterControlHelper<Level extends string> {
 
         controls.addEventListener('click', handleClick);
         controls.addEventListener('contextmenu', handleContextMenu);
+        this._resetClearConfirmation();
         this.syncButtons();
         this._deps.registerCleanup(() => {
             controls.removeEventListener('click', handleClick);
@@ -157,8 +159,11 @@ export class ConsoleFilterControlHelper<Level extends string> {
         delete button.dataset['confirmingAll'];
         button.dataset['confirming'] = 'true';
         button.classList.add('confirming');
-        button.setAttribute('aria-label', 'Confirm clear console logs');
-        button.title = 'Click again to clear logs';
+        button.setAttribute(
+            'aria-label',
+            this._t('ui.debug.logs_clear_confirm', 'Confirm clear console logs'),
+        );
+        button.title = this._t('ui.debug.logs_clear_confirm_title', 'Click again to clear logs');
         this._clearConfirmationTimeout = setTimeout(() => {
             this._resetClearConfirmation();
         }, 2200);
@@ -174,8 +179,14 @@ export class ConsoleFilterControlHelper<Level extends string> {
         this._resetClearConfirmation();
         button.dataset['confirmingAll'] = 'true';
         button.classList.add('confirming');
-        button.setAttribute('aria-label', 'Confirm clear all console logs');
-        button.title = 'Right-click again to clear all logs';
+        button.setAttribute(
+            'aria-label',
+            this._t('ui.debug.logs_clear_all_confirm', 'Confirm clear all console logs'),
+        );
+        button.title = this._t(
+            'ui.debug.logs_clear_all_confirm_title',
+            'Right-click again to clear all logs',
+        );
         this._clearConfirmationTimeout = setTimeout(() => {
             this._resetClearConfirmation();
         }, 2200);
@@ -195,7 +206,11 @@ export class ConsoleFilterControlHelper<Level extends string> {
         delete button.dataset['confirming'];
         delete button.dataset['confirmingAll'];
         button.classList.remove('confirming');
-        button.setAttribute('aria-label', 'Clear Console');
-        button.title = 'Clear Console';
+        button.setAttribute('aria-label', this._t('ui.debug.logs_clear', 'Clear Console'));
+        button.title = this._t('ui.debug.logs_clear', 'Clear Console');
+    }
+
+    private _t(key: string, fallback: string): string {
+        return this._deps.translate(key, fallback);
     }
 }

@@ -217,6 +217,110 @@ pub struct ModuleItem {
     pub config_schema: Option<std::collections::HashMap<String, ConfigField>>,
 }
 
+/// Frontend-ready catalog application item.
+#[derive(Debug, Serialize, Deserialize, Clone, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogAppItem {
+    /// Unique item identifier.
+    pub id: String,
+    /// Localization key for name.
+    pub name_key: Option<String>,
+    /// Localization key for description.
+    pub desc_key: Option<String>,
+    /// Display name.
+    pub name: Option<String>,
+    /// Description text.
+    pub desc: Option<String>,
+    /// Icon/emoji.
+    pub icon: Option<String>,
+    /// Optional module-owned card preview metadata.
+    #[serde(default)]
+    pub preview: Option<ModulePreview>,
+    /// Catalog category.
+    pub category: String,
+    /// Runtime type used by the launcher UI.
+    #[serde(rename = "type")]
+    pub type_name: String,
+    /// Primary AI output capability.
+    pub capability: Option<String>,
+    /// Whether item files/runtime are currently present.
+    pub installed: bool,
+    /// Installed compute modes for local engines.
+    #[serde(default)]
+    pub installed_compute_modes: Vec<String>,
+    /// Download repository URL.
+    pub repo_url: Option<String>,
+    /// Expected integrity hash.
+    pub expected_hash: Option<String>,
+    /// Download strategy.
+    pub dl_type: Option<String>,
+    /// Placeholder marker.
+    pub coming_soon: bool,
+    /// Whether runtime is managed outside Axelate.
+    pub managed_externally: bool,
+    /// Semantic version.
+    pub version: String,
+    /// Configuration schema.
+    #[serde(default)]
+    pub config_schema: Option<std::collections::HashMap<String, ConfigField>>,
+    /// Optional module-owned settings UI entry.
+    #[serde(default)]
+    pub settings_ui: Option<String>,
+    /// API provider metadata for provider cards.
+    #[serde(default)]
+    pub api_provider_data: Option<ApiProvider>,
+    /// Backend-owned UI/runtime policy for this catalog item.
+    #[serde(default)]
+    pub provider_policy: Option<CatalogProviderPolicy>,
+    /// Current runtime status for integrations.
+    #[serde(default)]
+    pub status: Option<String>,
+}
+
+/// Frontend rendering/runtime policy derived from backend catalog/provider metadata.
+#[derive(Debug, Serialize, Deserialize, Clone, Type, PartialEq, Eq)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogProviderPolicy {
+    /// Whether the card is a cloud/API provider.
+    pub is_cloud_provider: bool,
+    /// Whether the card is a user-defined OpenAI-compatible provider slot.
+    pub is_custom_provider: bool,
+    /// Whether the card should render as a no-settings module.
+    pub is_clean_app: bool,
+    /// Secure-storage service name used for this provider key.
+    pub secret_service: Option<String>,
+    /// Logical key provider used by the settings UI.
+    pub key_provider_id: Option<String>,
+    /// URL opened when the user clicks the API key label.
+    pub key_provider_url: Option<String>,
+    /// Whether the key field uses a custom-provider label and storage slot.
+    pub uses_custom_provider_key: bool,
+    /// Whether the API endpoint selector should be visible.
+    pub show_api_endpoint_selector: bool,
+    /// Whether custom manual model IDs can be managed in the UI.
+    pub show_custom_model_composer: bool,
+    /// Whether model comparison stats should be shown.
+    pub show_model_stats: bool,
+    /// Whether the internet access toggle should be shown.
+    pub supports_internet_access: bool,
+    /// Whether reasoning controls should be shown for built-in models.
+    pub supports_thinking: bool,
+    /// Whether this provider/card is image-only.
+    pub image_only: bool,
+}
+
+/// Frontend-ready catalog snapshot assembled by the backend.
+#[derive(Debug, Serialize, Deserialize, Clone, Type)]
+#[serde(rename_all = "camelCase")]
+pub struct CatalogSnapshot {
+    /// AI provider and engine cards.
+    pub ai: Vec<CatalogAppItem>,
+    /// Service/integration cards.
+    pub services: Vec<CatalogAppItem>,
+    /// Starred/favorite item ids.
+    pub stars: Vec<String>,
+}
+
 /// AI model configurations grouped by provider
 pub type ConfigModels = HashMap<String, HashMap<String, AiModel>>;
 

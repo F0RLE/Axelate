@@ -476,9 +476,7 @@ fn resolve_module_id(source: &str, message: &str) -> Option<String> {
 }
 
 fn extract_module_id_from_source(source: &str) -> Option<String> {
-    source
-        .strip_prefix("module:")
-        .map(std::string::ToString::to_string)
+    source.strip_prefix("module:").and_then(sanitize_module_id)
 }
 
 fn resolve_module_id_from_text(message: &str) -> Option<String> {
@@ -540,32 +538,28 @@ fn sanitize_module_id(raw: &str) -> Option<String> {
         return None;
     }
 
-    Some(module_id.to_string())
+    Some(module_id.to_ascii_lowercase())
 }
 
 fn infer_runtime_log_source(namespace: RuntimeLogNamespace, runtime_id: &str) -> String {
     match namespace {
         RuntimeLogNamespace::Engine => normalize_engine_id(runtime_id),
-        RuntimeLogNamespace::Module => format!("module:{runtime_id}"),
+        RuntimeLogNamespace::Module => sanitize_module_id(runtime_id).map_or_else(
+            || format!("module:{}", runtime_id.to_ascii_lowercase()),
+            |module_id| format!("module:{module_id}"),
+        ),
     }
 }
 
+#[allow(clippy::cast_precision_loss)]
 fn parse_log_timestamp(line: &str) -> Option<f64> {
     let timestamp_text = line.get(..19)?;
     chrono::NaiveDateTime::parse_from_str(timestamp_text, "%Y-%m-%d %H:%M:%S")
         .ok()
-        .and_then(|timestamp| {
-            let timestamp = chrono::Local
-                .from_local_datetime(&timestamp)
-                .single()
-                .or_else(|| chrono::Local.from_local_datetime(&timestamp).earliest())?;
-            let seconds = timestamp.timestamp().to_string().parse::<f64>().ok()?;
-            let milliseconds = timestamp
-                .timestamp_subsec_millis()
-                .to_string()
-                .parse::<f64>()
-                .ok()?;
-            Some(seconds + milliseconds / 1000.0)
+        .map(|timestamp| {
+            let timestamp = chrono::Utc.from_utc_datetime(&timestamp);
+            let seconds = timestamp.timestamp();
+            seconds as f64 + f64::from(timestamp.timestamp_subsec_millis()) / 1000.0
         })
 }
 
@@ -607,7 +601,10 @@ fn is_entry_in_console_view(entry: &LogEntry, view_id: &str) -> bool {
     }
 
     if let Some(module_id) = view_id.strip_prefix("module:") {
-        return entry.module_id.as_deref() == Some(module_id)
+        let Some(module_id) = sanitize_module_id(module_id) else {
+            return false;
+        };
+        return entry.module_id.as_deref() == Some(module_id.as_str())
             || entry.source == format!("module:{module_id}");
     }
 
@@ -851,13 +848,13 @@ impl ConsoleLogParser {
 
 #[cfg(test)]
 mod tests {
-    use super::{RuntimeLogNamespace, parse_runtime_log_line};
+    use super::{RuntimeLogNamespace, parse_log_timestamp, parse_runtime_log_line};
 
     #[test]
     fn module_runtime_log_line_uses_module_source_namespace() -> Result<(), String> {
         let entry = parse_runtime_log_line(
             RuntimeLogNamespace::Module,
-            "sample-integration",
+            "Sample-Integration",
             "2026-04-24 07:00:00 [INFO] Integration started",
             0,
             0.0,
@@ -899,6 +896,15 @@ mod tests {
         .ok_or_else(|| "engine runtime log entry".to_string())?;
 
         assert_eq!(entry.source, "llama-cpp");
+        Ok(())
+    }
+
+    #[test]
+    fn runtime_log_timestamp_is_interpreted_as_utc() -> Result<(), String> {
+        let timestamp = parse_log_timestamp("2026-04-24 07:00:00 [INFO] model loaded")
+            .ok_or_else(|| "runtime timestamp".to_string())?;
+
+        assert!((timestamp - 1_777_014_000.0).abs() < f64::EPSILON);
         Ok(())
     }
 }

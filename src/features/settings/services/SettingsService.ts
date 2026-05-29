@@ -2,10 +2,15 @@ import type { SecureKeyMeta, TauriProvider } from '@/infrastructure/tauri/TauriP
 import type { IApp } from '@/shared/types/coreTypes';
 
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
-import type { AppSettings, GpuInfo } from '@/shared/types/bindings';
+import type {
+    AgentControlState,
+    AgentProfileTokenResponse,
+    AgentScope,
+    AppSettings,
+    GpuInfo,
+} from '@/shared/types/bindings';
 import { commands } from '@/shared/types/bindings';
 import { invokeSafe } from '@/shared/api/invoke';
-import { resolveProviderSecretService } from '@/shared/utils/providerSupport';
 export type ISettings = AppSettings;
 export type SettingsValue = string | number | boolean;
 type SettingsLogger = Pick<LoggerService, 'error'>;
@@ -17,6 +22,59 @@ export interface ICustomModel {
     name: string;
     provider_id?: string;
     base_model_id?: string;
+}
+
+function appErrorMessage(error: unknown): string {
+    if (error instanceof Error) {
+        return error.message;
+    }
+    if (typeof error === 'string') {
+        return error;
+    }
+    if (typeof error !== 'object' || error === null) {
+        return String(error);
+    }
+
+    const record = error as Record<string, unknown>;
+    if (typeof record['message'] === 'string') {
+        return record['message'];
+    }
+
+    const details = record['details'];
+    if (typeof details === 'object' && details !== null) {
+        return appErrorMessage(details);
+    }
+
+    for (const key of [
+        'Validation',
+        'NotFound',
+        'PermissionDenied',
+        'FrontendSecretForbidden',
+        'Io',
+        'Serialization',
+        'Config',
+    ]) {
+        const value = record[key];
+        if (typeof value === 'string') {
+            return value;
+        }
+    }
+
+    for (const key of ['External', 'Internal']) {
+        const value = record[key];
+        if (typeof value === 'object' && value !== null) {
+            const message = (value as Record<string, unknown>)['message'];
+            if (typeof message === 'string') {
+                return message;
+            }
+        }
+    }
+
+    try {
+        return JSON.stringify(error);
+    } catch {
+        return String(error);
+    }
 }
 
 export class SettingsService {
@@ -99,6 +157,72 @@ export class SettingsService {
         }
     }
 
+    public async getAgentControlState(): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.getAgentControlState());
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to load Agent Control state:', result.error);
+        throw new Error(appErrorMessage(result.error));
+    }
+
+    public async setAgentControlEnabled(enabled: boolean): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.setAgentControlEnabled(enabled));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to update Agent Control:', result.error);
+        throw new Error(appErrorMessage(result.error));
+    }
+
+    public async createAgentProfile(
+        name: string | null = null,
+        scopes: AgentScope[] | null = null,
+    ): Promise<AgentProfileTokenResponse> {
+        const result = await invokeSafe(commands.createAgentProfile(name, scopes));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to create Agent profile:', result.error);
+        throw new Error(appErrorMessage(result.error));
+    }
+
+    public async rotateAgentProfile(id: string): Promise<AgentProfileTokenResponse> {
+        const result = await invokeSafe(commands.rotateAgentProfile(id));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to rotate Agent profile:', result.error);
+        throw new Error(appErrorMessage(result.error));
+    }
+
+    public async copyAgentProfileToken(id: string): Promise<void> {
+        const result = await invokeSafe(commands.copyAgentProfileToken(id));
+        if (result.status === 'ok') {
+            return;
+        }
+        this._tracer.error('[SettingsService] Failed to copy Agent profile token:', result.error);
+        throw new Error(appErrorMessage(result.error));
+    }
+
+    public async deleteAgentProfile(id: string): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.deleteAgentProfile(id));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to delete Agent profile:', result.error);
+        throw new Error(appErrorMessage(result.error));
+    }
+
+    public async decideAgentApproval(id: string, approved: boolean): Promise<AgentControlState> {
+        const result = await invokeSafe(commands.decideAgentApproval(id, approved));
+        if (result.status === 'ok') {
+            return result.data;
+        }
+        this._tracer.error('[SettingsService] Failed to decide Agent approval:', result.error);
+        throw new Error(appErrorMessage(result.error));
+    }
+
     public async loadGpuInfo(): Promise<IGpuInfo> {
         if (this._gpuInfoPromise !== null) {
             return await this._gpuInfoPromise;
@@ -130,11 +254,10 @@ export class SettingsService {
      * Save API key securely using Tauri secure storage.
      * Fallback to localStorage is PROHIBITED for security reasons.
      */
-    public async saveSecureKey(provider: string, key: string): Promise<void> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async saveSecureKey(secretService: string, key: string): Promise<void> {
         try {
             await this._tauri.invoke('save_secure_key', {
-                service: storageKey,
+                service: secretService,
                 key: key,
             });
         } catch (e) {
@@ -146,16 +269,15 @@ export class SettingsService {
     /**
      * Remove a securely stored API key.
      */
-    public async removeSecureKey(provider: string): Promise<void> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async removeSecureKey(secretService: string): Promise<void> {
         try {
             if (typeof this._tauri.removeSecureKey === 'function') {
-                await this._tauri.removeSecureKey(storageKey);
+                await this._tauri.removeSecureKey(secretService);
                 return;
             }
 
             await this._tauri.invoke('remove_secure_key', {
-                service: storageKey,
+                service: secretService,
             });
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to remove secure key:', e);
@@ -166,11 +288,10 @@ export class SettingsService {
     /**
      * Checks whether a secure API key exists without exposing the secret value.
      */
-    public async hasSecureKey(provider: string): Promise<boolean> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async hasSecureKey(secretService: string): Promise<boolean> {
         try {
             return await this._tauri.invoke<boolean>('has_secure_key', {
-                service: storageKey,
+                service: secretService,
             });
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to check secure key presence:', e);
@@ -181,10 +302,9 @@ export class SettingsService {
     /**
      * Returns non-sensitive metadata for a stored key.
      */
-    public async getSecureKeyMeta(provider: string): Promise<SecureKeyMeta> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async getSecureKeyMeta(secretService: string): Promise<SecureKeyMeta> {
         try {
-            return await this._tauri.getSecureKeyMeta(storageKey);
+            return await this._tauri.getSecureKeyMeta(secretService);
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to get secure key metadata:', e);
             return { exists: false, length: 0 };
@@ -194,10 +314,9 @@ export class SettingsService {
     /**
      * Returns the decrypted secure key for explicit user reveal flows.
      */
-    public async getSecureKey(provider: string): Promise<string | null> {
-        const storageKey = this._resolveSecureKeyService(provider);
+    public async getSecureKey(secretService: string): Promise<string | null> {
         try {
-            return await this._tauri.getSecureKey(storageKey);
+            return await this._tauri.getSecureKey(secretService);
         } catch (e) {
             this._tracer.error('[SettingsService] Failed to get secure key:', e);
             return null;
@@ -281,14 +400,5 @@ export class SettingsService {
             this._tracer.error('[SettingsService] Failed to remove custom model:', e);
             throw e;
         }
-    }
-
-    private _resolveSecureKeyService(provider: string): string {
-        const service = resolveProviderSecretService(provider);
-        if (service === null) {
-            throw new Error(`Provider does not support frontend-managed secrets: ${provider}`);
-        }
-
-        return service;
     }
 }

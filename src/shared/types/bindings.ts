@@ -11,8 +11,24 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 export const commands = {
 	/**  Checks backend health status */
 	getHealth: () => typedError<string, AppError>(__TAURI_INVOKE("get_health")),
+	/**  Returns redacted Agent Control state. */
+	getAgentControlState: () => typedError<AgentControlState, AppError>(__TAURI_INVOKE("get_agent_control_state")),
+	/**  Enables or disables trusted local Agent Control profiles. */
+	setAgentControlEnabled: (enabled: boolean) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("set_agent_control_enabled", { enabled })),
+	/**  Creates a trusted local agent profile and returns its one-time token. */
+	createAgentProfile: (name: string | null, scopes: AgentScope[] | null) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("create_agent_profile", { name, scopes })),
+	/**  Rotates a trusted local agent token and returns the replacement token once. */
+	rotateAgentProfile: (id: string) => typedError<AgentProfileTokenResponse, AppError>(__TAURI_INVOKE("rotate_agent_profile", { id })),
+	/**  Copies a one-time agent token to the OS clipboard without exposing it to the frontend. */
+	copyAgentProfileToken: (id: string) => typedError<null, AppError>(__TAURI_INVOKE("copy_agent_profile_token", { id })),
+	/**  Deletes a trusted local agent profile. */
+	deleteAgentProfile: (id: string) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("delete_agent_profile", { id })),
+	/**  Applies a user decision to a pending agent approval request. */
+	decideAgentApproval: (id: string, approved: boolean) => typedError<AgentControlState, AppError>(__TAURI_INVOKE("decide_agent_approval", { id, approved })),
 	/**  Loads application configuration with module installation status */
 	getConfig: () => typedError<AppConfig_Serialize, AppError>(__TAURI_INVOKE("get_config")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,apiProviders:v.data.apiProviders.map(i=>({...i,models:i.models==null?i.models:i.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})),catalog:({...v.data.catalog,ai:v.data.catalog.ai.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema})),services:v.data.catalog.services.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:i.configSchema}))})}) } : v) as typeof v)),
+	/**  Returns a frontend-ready catalog snapshot with backend-owned installation and provider metadata. */
+	getCatalogSnapshot: () => typedError<CatalogSnapshot, AppError>(__TAURI_INVOKE("get_catalog_snapshot")).then((v) => ((v.status === "ok" ? { ...v, data: ({...v.data,ai:v.data.ai.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:Object.fromEntries(Object.entries(i.configSchema).map(([k,v])=>[k,({...v,default:v.default==null?v.default:v.default,min:v.min==null?v.min:v.min,max:v.max==null?v.max:v.max,step:v.step==null?v.step:v.step})])),apiProviderData:i.apiProviderData==null?i.apiProviderData:({...i.apiProviderData,models:i.apiProviderData.models==null?i.apiProviderData.models:i.apiProviderData.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})})),services:v.data.services.map(i=>({...i,configSchema:i.configSchema==null?i.configSchema:Object.fromEntries(Object.entries(i.configSchema).map(([k,v])=>[k,({...v,default:v.default==null?v.default:v.default,min:v.min==null?v.min:v.min,max:v.max==null?v.max:v.max,step:v.step==null?v.step:v.step})])),apiProviderData:i.apiProviderData==null?i.apiProviderData:({...i.apiProviderData,models:i.apiProviderData.models==null?i.apiProviderData.models:i.apiProviderData.models.map(i=>({...i,pricing:i.pricing==null?i.pricing:({...i.pricing,input:i.pricing.input==null?i.pricing.input:i.pricing.input,output:i.pricing.output==null?i.pricing.output:i.pricing.output})}))})}))}) } : v) as typeof v)),
 	/**  Retrieves application settings (theme, language, GPU, debug) */
 	getSettings: () => typedError<AppSettings, AppError>(__TAURI_INVOKE("get_settings")),
 	/**  Saves application settings */
@@ -88,7 +104,7 @@ export const commands = {
 	setMonitoringPaused: (paused: boolean) => typedError<null, AppError>(__TAURI_INVOKE("set_monitoring_paused", { paused })),
 	/**  Retrieves list of all available modules (AI and services) */
 	getModules: () => typedError<Module[], AppError>(__TAURI_INVOKE("get_modules")).then((v) => ((v.status === "ok" ? { ...v, data: v.data.map(i=>({...i,config:Object.fromEntries(Object.entries(i.config).map(([k,v])=>[k,v])),configSchema:i.configSchema==null?i.configSchema:Object.fromEntries(Object.entries(i.configSchema).map(([k,v])=>[k,({...v,default:v.default==null?v.default:v.default,min:v.min==null?v.min:v.min,max:v.max==null?v.max:v.max,step:v.step==null?v.step:v.step})]))})) } : v) as typeof v)),
-	/**  Controls a module (start, stop, restart) */
+	/**  Controls a module (start, stop, restart, repair) */
 	controlModule: (request: ControlRequest) => typedError<ControlResponse, AppError>(__TAURI_INVOKE("control_module", { request })),
 	/**  Retrieves runtime status of a specific module */
 	getModuleStatus: (moduleId: string) => typedError<string, AppError>(__TAURI_INVOKE("get_module_status", { moduleId })),
@@ -232,6 +248,108 @@ export const commands = {
 };
 
 /* Types */
+/**  Risky action request that must not mutate launcher state until approved. */
+export type AgentApprovalRequest = {
+	/**  Stable approval request id. */
+	id: string,
+	/**  Agent profile id. */
+	agentId: string,
+	/**  Agent display name. */
+	agentName: string,
+	/**  Requested action name. */
+	action: string,
+	/**  Target resource id or description. */
+	target: string,
+	/**  Human-readable dry-run or diff summary. */
+	diff: string,
+	/**  Risk label such as high or dangerous. */
+	risk: string,
+	/**  Current decision state. */
+	status: AgentApprovalStatus,
+	/**  Creation timestamp in RFC3339 UTC. */
+	createdAt: string,
+	/**  Decision timestamp in RFC3339 UTC. */
+	decidedAt: string | null,
+};
+
+/**  Approval state for risky agent requests. */
+export type AgentApprovalStatus =
+/**  Waiting for a user decision. */
+"pending" |
+/**  User approved the request. */
+"approved" |
+/**  User denied the request. */
+"denied";
+
+/**  Agent action audit entry. */
+export type AgentAuditEntry = {
+	/**  Stable audit entry id. */
+	id: string,
+	/**  Agent profile id or launcher-env for development tokens. */
+	actorId: string,
+	/**  Agent display name or development token label. */
+	actorName: string,
+	/**  Action name such as module.start. */
+	action: string,
+	/**  Target resource id. */
+	target: string,
+	/**  Result label such as success, denied, or pending-approval. */
+	result: string,
+	/**  Timestamp in RFC3339 UTC. */
+	createdAt: string,
+};
+
+/**  Full public Agent Control state for Settings UI. */
+export type AgentControlState = {
+	/**  Whether trusted local agent profiles are accepted by the local API. */
+	enabled: boolean,
+	/**  Local API base URL. */
+	apiBaseUrl: string,
+	/**  Known agent profiles. */
+	profiles: AgentProfile[],
+	/**  Recent audit entries. */
+	audit: AgentAuditEntry[],
+	/**  Recent approval requests. */
+	approvals: AgentApprovalRequest[],
+};
+
+/**  Public trusted local agent profile metadata. */
+export type AgentProfile = {
+	/**  Stable profile id. */
+	id: string,
+	/**  User-facing agent name. */
+	name: string,
+	/**  Granted capability scopes. */
+	scopes: AgentScope[],
+	/**  Non-secret token prefix for recognition in the UI. */
+	tokenPrefix: string,
+	/**  Creation timestamp in RFC3339 UTC. */
+	createdAt: string,
+	/**  Last successful API authentication timestamp in RFC3339 UTC. */
+	lastSeenAt: string | null,
+	/**  Whether the profile has been revoked. */
+	revoked: boolean,
+};
+
+/**  Agent profile creation/rotation response. Raw bearer tokens stay backend-owned. */
+export type AgentProfileTokenResponse = {
+	/**  Public profile metadata. */
+	profile: AgentProfile,
+};
+
+/**  Agent capability scope. */
+export type AgentScope =
+/**  Read launcher state, statuses, inventories, and sanitized logs. */
+"observe" |
+/**  Start, stop, restart, select, and inspect operational runtime state. */
+"operate" |
+/**  Change non-secret launcher, module, model, and provider settings. */
+"configure" |
+/**  Create integration drafts without installing or running them silently. */
+"draft-create" |
+/**  User-granted full local launcher access. */
+"full-access";
+
 /**  Complete AI model definition */
 export type AiModel = {
 	/**  Model ID (moved from dict key) */
@@ -401,6 +519,96 @@ export type Capability =
 /**  Image understanding (multimodal LLM) */
 "vision";
 
+/**  Frontend-ready catalog application item. */
+export type CatalogAppItem = {
+	/**  Unique item identifier. */
+	id: string,
+	/**  Localization key for name. */
+	nameKey: string | null,
+	/**  Localization key for description. */
+	descKey: string | null,
+	/**  Display name. */
+	name: string | null,
+	/**  Description text. */
+	desc: string | null,
+	/**  Icon/emoji. */
+	icon: string | null,
+	/**  Optional module-owned card preview metadata. */
+	preview?: ModulePreview | null,
+	/**  Catalog category. */
+	category: string,
+	/**  Runtime type used by the launcher UI. */
+	type: string,
+	/**  Primary AI output capability. */
+	capability: string | null,
+	/**  Whether item files/runtime are currently present. */
+	installed: boolean,
+	/**  Installed compute modes for local engines. */
+	installedComputeModes?: string[],
+	/**  Download repository URL. */
+	repoUrl: string | null,
+	/**  Expected integrity hash. */
+	expectedHash: string | null,
+	/**  Download strategy. */
+	dlType: string | null,
+	/**  Placeholder marker. */
+	comingSoon: boolean,
+	/**  Whether runtime is managed outside Axelate. */
+	managedExternally: boolean,
+	/**  Semantic version. */
+	version: string,
+	/**  Configuration schema. */
+	configSchema?: { [key in string]: ConfigField } | null,
+	/**  Optional module-owned settings UI entry. */
+	settingsUi?: string | null,
+	/**  API provider metadata for provider cards. */
+	apiProviderData?: ApiProvider | null,
+	/**  Backend-owned UI/runtime policy for this catalog item. */
+	providerPolicy?: CatalogProviderPolicy | null,
+	/**  Current runtime status for integrations. */
+	status?: string | null,
+};
+
+/**  Frontend rendering/runtime policy derived from backend catalog/provider metadata. */
+export type CatalogProviderPolicy = {
+	/**  Whether the card is a cloud/API provider. */
+	isCloudProvider: boolean,
+	/**  Whether the card is a user-defined OpenAI-compatible provider slot. */
+	isCustomProvider: boolean,
+	/**  Whether the card should render as a no-settings module. */
+	isCleanApp: boolean,
+	/**  Secure-storage service name used for this provider key. */
+	secretService: string | null,
+	/**  Logical key provider used by the settings UI. */
+	keyProviderId: string | null,
+	/**  URL opened when the user clicks the API key label. */
+	keyProviderUrl: string | null,
+	/**  Whether the key field uses a custom-provider label and storage slot. */
+	usesCustomProviderKey: boolean,
+	/**  Whether the API endpoint selector should be visible. */
+	showApiEndpointSelector: boolean,
+	/**  Whether custom manual model IDs can be managed in the UI. */
+	showCustomModelComposer: boolean,
+	/**  Whether model comparison stats should be shown. */
+	showModelStats: boolean,
+	/**  Whether the internet access toggle should be shown. */
+	supportsInternetAccess: boolean,
+	/**  Whether reasoning controls should be shown for built-in models. */
+	supportsThinking: boolean,
+	/**  Whether this provider/card is image-only. */
+	imageOnly: boolean,
+};
+
+/**  Frontend-ready catalog snapshot assembled by the backend. */
+export type CatalogSnapshot = {
+	/**  AI provider and engine cards. */
+	ai: CatalogAppItem[],
+	/**  Service/integration cards. */
+	services: CatalogAppItem[],
+	/**  Starred/favorite item ids. */
+	stars: string[],
+};
+
 /**  AI chat message with role and content */
 export type ChatMessage = {
 	/**  Unique message identifier (UUID v4) */
@@ -561,7 +769,7 @@ export type ConsoleStatusItem = {
 export type ControlRequest = {
 	/**  Module identifier (optional for global actions) */
 	module_id: string | null,
-	/**  Control action ("start", "stop", "restart") */
+	/**  Control action ("start", "stop", "restart", "repair") */
 	action: string,
 };
 

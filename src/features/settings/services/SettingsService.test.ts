@@ -8,6 +8,13 @@ const mocks = vi.hoisted(() => ({
     invokeSafe: vi.fn(),
     commands: {
         controlModule: vi.fn(),
+        getAgentControlState: vi.fn(),
+        setAgentControlEnabled: vi.fn(),
+        createAgentProfile: vi.fn(),
+        rotateAgentProfile: vi.fn(),
+        copyAgentProfileToken: vi.fn(),
+        deleteAgentProfile: vi.fn(),
+        decideAgentApproval: vi.fn(),
     },
 }));
 
@@ -22,6 +29,13 @@ vi.mock('@/shared/types/bindings', async (importOriginal) => {
         commands: {
             ...actual.commands,
             controlModule: mocks.commands.controlModule,
+            getAgentControlState: mocks.commands.getAgentControlState,
+            setAgentControlEnabled: mocks.commands.setAgentControlEnabled,
+            createAgentProfile: mocks.commands.createAgentProfile,
+            rotateAgentProfile: mocks.commands.rotateAgentProfile,
+            copyAgentProfileToken: mocks.commands.copyAgentProfileToken,
+            deleteAgentProfile: mocks.commands.deleteAgentProfile,
+            decideAgentApproval: mocks.commands.decideAgentApproval,
         },
     };
 });
@@ -56,6 +70,18 @@ describe('SettingsService', () => {
             }),
         );
         mocks.invokeSafe.mockImplementation((promise: Promise<unknown>) => promise);
+        mocks.commands.getAgentControlState.mockReturnValue(
+            Promise.resolve({
+                status: 'ok',
+                data: {
+                    enabled: false,
+                    apiBaseUrl: 'http://127.0.0.1:17878',
+                    profiles: [],
+                    audit: [],
+                    approvals: [],
+                },
+            }),
+        );
     });
 
     describe('loadSettings', () => {
@@ -168,6 +194,108 @@ describe('SettingsService', () => {
         });
     });
 
+    describe('Agent Control', () => {
+        it('should load redacted agent control state', async () => {
+            const result = await service.getAgentControlState();
+
+            expect(result.apiBaseUrl).toBe('http://127.0.0.1:17878');
+            expect(mocks.commands.getAgentControlState).toHaveBeenCalled();
+        });
+
+        it('should create trusted local profiles through generated commands', async () => {
+            mocks.commands.createAgentProfile.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'ok',
+                    data: {
+                        profile: {
+                            id: 'agent-1',
+                            name: 'Trusted Local',
+                            scopes: ['observe', 'operate'],
+                            tokenPrefix: 'axl_agent_123',
+                            createdAt: '2026-05-22T00:00:00Z',
+                            lastSeenAt: null,
+                            revoked: false,
+                        },
+                    },
+                }),
+            );
+
+            const result = await service.createAgentProfile('Trusted Local', [
+                'observe',
+                'operate',
+            ]);
+
+            expect(result.profile.tokenPrefix).toBe('axl_agent_123');
+            expect(mocks.commands.createAgentProfile).toHaveBeenCalledWith('Trusted Local', [
+                'observe',
+                'operate',
+            ]);
+        });
+
+        it('should rotate, delete, toggle, and decide approvals via backend-owned state', async () => {
+            const stateResponse = Promise.resolve({
+                status: 'ok',
+                data: {
+                    enabled: true,
+                    apiBaseUrl: 'http://127.0.0.1:17878',
+                    profiles: [],
+                    audit: [],
+                    approvals: [],
+                },
+            });
+            mocks.commands.setAgentControlEnabled.mockReturnValueOnce(stateResponse);
+            mocks.commands.deleteAgentProfile.mockReturnValueOnce(stateResponse);
+            mocks.commands.decideAgentApproval.mockReturnValueOnce(stateResponse);
+            mocks.commands.rotateAgentProfile.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'ok',
+                    data: {
+                        profile: {
+                            id: 'agent-1',
+                            name: 'Trusted Local',
+                            scopes: ['observe'],
+                            tokenPrefix: 'axl_agent_456',
+                            createdAt: '2026-05-22T00:00:00Z',
+                            lastSeenAt: null,
+                            revoked: false,
+                        },
+                    },
+                }),
+            );
+            mocks.commands.copyAgentProfileToken.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'ok',
+                    data: null,
+                }),
+            );
+
+            await service.setAgentControlEnabled(true);
+            await service.rotateAgentProfile('agent-1');
+            await service.copyAgentProfileToken('agent-1');
+            await service.deleteAgentProfile('agent-1');
+            await service.decideAgentApproval('approval-1', false);
+
+            expect(mocks.commands.setAgentControlEnabled).toHaveBeenCalledWith(true);
+            expect(mocks.commands.rotateAgentProfile).toHaveBeenCalledWith('agent-1');
+            expect(mocks.commands.copyAgentProfileToken).toHaveBeenCalledWith('agent-1');
+            expect(mocks.commands.deleteAgentProfile).toHaveBeenCalledWith('agent-1');
+            expect(mocks.commands.decideAgentApproval).toHaveBeenCalledWith('approval-1', false);
+        });
+
+        it('should preserve AppError messages from generated command failures', async () => {
+            mocks.commands.copyAgentProfileToken.mockReturnValueOnce(
+                Promise.resolve({
+                    status: 'error',
+                    error: { Validation: 'token unavailable' },
+                }),
+            );
+
+            await expect(service.copyAgentProfileToken('agent-1')).rejects.toThrow(
+                'token unavailable',
+            );
+        });
+    });
+
     describe('loadGpuInfo', () => {
         it('should return GPU info from backend', async () => {
             const gpuInfo = {
@@ -226,30 +354,23 @@ describe('SettingsService', () => {
     });
 
     describe('saveSecureKey', () => {
-        it('should store cloud provider keys in the shared OpenRouter slot', async () => {
-            await service.saveSecureKey('gemini', 'my-api-key');
+        it('should store keys in the backend-provided secure service slot', async () => {
+            await service.saveSecureKey('cloud_api_key', 'my-api-key');
             expect(tauri.invoke).toHaveBeenCalledWith('save_secure_key', {
                 service: 'cloud_api_key',
                 key: 'my-api-key',
             });
         });
 
-        it('should reject unknown provider secure key storage', async () => {
-            await expect(service.saveSecureKey('unknown-provider', 'my-api-key')).rejects.toThrow(
-                'Provider does not support frontend-managed secrets',
-            );
-            expect(tauri.invoke).not.toHaveBeenCalledWith('save_secure_key', expect.anything());
-        });
-
         it('should handle error gracefully', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
-            await expect(service.saveSecureKey('gemini', 'k')).rejects.toThrow('fail');
+            await expect(service.saveSecureKey('cloud_api_key', 'k')).rejects.toThrow('fail');
         });
     });
 
     describe('removeSecureKey', () => {
         it('should remove secure key through tauri provider helper', async () => {
-            await service.removeSecureKey('gemini');
+            await service.removeSecureKey('cloud_api_key');
 
             expect(tauri.removeSecureKey).toHaveBeenCalledWith('cloud_api_key');
             expect(tauri.invoke).not.toHaveBeenCalledWith('remove_secure_key', expect.anything());
@@ -258,7 +379,7 @@ describe('SettingsService', () => {
         it('should fall back to invoke when helper is unavailable', async () => {
             delete (tauri as unknown as { removeSecureKey?: unknown }).removeSecureKey;
 
-            await service.removeSecureKey('gemini');
+            await service.removeSecureKey('cloud_api_key');
 
             expect(tauri.invoke).toHaveBeenCalledWith('remove_secure_key', {
                 service: 'cloud_api_key',
@@ -270,7 +391,7 @@ describe('SettingsService', () => {
                 new Error('fail'),
             );
 
-            await expect(service.removeSecureKey('gemini')).rejects.toThrow('fail');
+            await expect(service.removeSecureKey('cloud_api_key')).rejects.toThrow('fail');
         });
     });
 
@@ -314,7 +435,7 @@ describe('SettingsService', () => {
         it('should return true when a stored key exists', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockResolvedValue(true);
 
-            const result = await service.hasSecureKey('gemini');
+            const result = await service.hasSecureKey('cloud_api_key');
 
             expect(result).toBe(true);
             expect(tauri.invoke).toHaveBeenCalledWith('has_secure_key', {
@@ -325,7 +446,7 @@ describe('SettingsService', () => {
         it('should return false on error', async () => {
             (tauri.invoke as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
-            const result = await service.hasSecureKey('gemini');
+            const result = await service.hasSecureKey('cloud_api_key');
 
             expect(result).toBe(false);
         });
@@ -336,7 +457,7 @@ describe('SettingsService', () => {
             const meta = { exists: true, length: 24 };
             (tauri.getSecureKeyMeta as ReturnType<typeof vi.fn>).mockResolvedValue(meta);
 
-            const result = await service.getSecureKeyMeta('gemini');
+            const result = await service.getSecureKeyMeta('cloud_api_key');
 
             expect(result).toEqual(meta);
             expect(tauri.getSecureKeyMeta).toHaveBeenCalledWith('cloud_api_key');
@@ -347,7 +468,7 @@ describe('SettingsService', () => {
                 new Error('fail'),
             );
 
-            const result = await service.getSecureKeyMeta('gemini');
+            const result = await service.getSecureKeyMeta('cloud_api_key');
 
             expect(result).toEqual({ exists: false, length: 0 });
         });
@@ -357,7 +478,7 @@ describe('SettingsService', () => {
         it('should return the decrypted key from backend', async () => {
             (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockResolvedValue('secret');
 
-            const result = await service.getSecureKey('gemini');
+            const result = await service.getSecureKey('cloud_api_key');
 
             expect(result).toBe('secret');
             expect(tauri.getSecureKey).toHaveBeenCalledWith('cloud_api_key');
@@ -366,7 +487,7 @@ describe('SettingsService', () => {
         it('should return null on error', async () => {
             (tauri.getSecureKey as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('fail'));
 
-            const result = await service.getSecureKey('gemini');
+            const result = await service.getSecureKey('cloud_api_key');
 
             expect(result).toBeNull();
         });

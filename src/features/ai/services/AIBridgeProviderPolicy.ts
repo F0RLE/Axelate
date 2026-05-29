@@ -1,4 +1,3 @@
-import { isCloudProviderId } from '@/shared/utils/providerSupport';
 import type { IApp } from '@/shared/types/coreTypes';
 
 type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
@@ -23,7 +22,8 @@ export class AIBridgeProviderPolicy {
     public constructor(private readonly _getCatalog?: ProviderCatalogGetter) {}
 
     public isCloudProvider(providerId: string): boolean {
-        return isCloudProviderId(providerId);
+        const policy = this._catalogProvider(providerId)?.providerPolicy;
+        return policy?.isCloudProvider === true;
     }
 
     public isImageProvider(providerId: string): boolean {
@@ -31,11 +31,19 @@ export class AIBridgeProviderPolicy {
     }
 
     public isManagedLocalImageEngine(providerId: string): boolean {
-        return !this.isCloudProvider(providerId) && this.isImageProvider(providerId);
+        return (
+            this._catalogProvider(providerId) !== null &&
+            !this.isCloudProvider(providerId) &&
+            this.isImageProvider(providerId)
+        );
     }
 
     public isLocalTextProvider(providerId: string): boolean {
-        return !this.isCloudProvider(providerId) && !this.isImageProvider(providerId);
+        return (
+            this._catalogProvider(providerId) !== null &&
+            !this.isCloudProvider(providerId) &&
+            !this.isImageProvider(providerId)
+        );
     }
 
     public buildRequestOptions(input: RequestOptionInput): AIBridgeRequestOptions {
@@ -67,20 +75,24 @@ export class AIBridgeProviderPolicy {
     }
 
     private _catalogCapability(providerId: string): IApp['capability'] | null {
+        return this._catalogProvider(providerId)?.capability ?? null;
+    }
+
+    private _catalogProvider(providerId: string): Partial<IApp> | null {
         const catalog = this._getCatalog?.();
         const ai = catalog?.ai;
         if (!Array.isArray(ai)) {
             return null;
         }
 
-        const provider = ai.find((entry): entry is Partial<IApp> => {
-            return (
-                typeof entry === 'object' &&
-                entry !== null &&
-                (entry as Partial<IApp>).id === providerId
-            );
-        });
-        const capability = provider?.capability;
-        return capability === 'image' || capability === 'text' ? capability : null;
+        return (
+            ai.find((entry): entry is Partial<IApp> => {
+                return (
+                    typeof entry === 'object' &&
+                    entry !== null &&
+                    (entry as Partial<IApp>).id === providerId
+                );
+            }) ?? null
+        );
     }
 }

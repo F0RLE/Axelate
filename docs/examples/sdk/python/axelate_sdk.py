@@ -61,7 +61,7 @@ class AxelateClient:
 
     def save_settings(self, settings: dict[str, Any]) -> dict[str, Any]:
         return self.request(
-            "PUT",
+            "PATCH",
             f"/v1/modules/{self.encoded_module_id}/settings",
             settings,
         )

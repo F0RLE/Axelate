@@ -126,10 +126,14 @@ pub fn create_main_window(app: &tauri::AppHandle) -> Option<tauri::WebviewWindow
     .title("Axelate (Nightly)")
     .resizable(true)
     .fullscreen(false)
-    .transparent(false)
     .visible(false) // Start invisible to avoid flicker while moving/resizing
     .decorations(false) // Custom titlebar
     .inner_size(f64::from(settings.width), f64::from(settings.height));
+
+    #[cfg(not(target_os = "macos"))]
+    {
+        builder = builder.transparent(false);
+    }
 
     // Restore position if valid
     if let (Some(x), Some(y)) = (settings.x, settings.y) {

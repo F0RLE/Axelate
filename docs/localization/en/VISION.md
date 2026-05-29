@@ -1,6 +1,6 @@
 # Axelate Vision
 
-> Product direction as of 2026-05-06.
+> Product direction as of 2026-05-21.
 > Planning document only. Use `CURRENT_STATE.md`, `GETTING_STARTED.md`, and
 > `DEVELOPMENT_WORKFLOW.md` for the repository as it works today.
 
@@ -36,6 +36,7 @@ Axelate wins only if it stays narrow and honest:
 - one desktop shell for local and cloud AI work
 - one integration runtime for user-installed AI tools
 - one local API surface for chat, image, settings, status, logs, and lifecycle
+- one agent-facing control layer for safe launcher automation
 - one trust model for secrets, permissions, runtime folders, updates, and future
   verified packages
 
@@ -69,6 +70,7 @@ It should provide:
 - backend-owned credential storage
 - integration settings, runtime folders, and logs
 - downloads, console logs, monitoring, and repair actions
+- agent-readable status, logs, and health reports through backend-owned APIs
 
 The workstation core should stay Windows-first until the product model is proven.
 
@@ -106,6 +108,30 @@ The current repository does not yet ship full package signing, publisher
 verification, package review, or managed execution. Those belong to later
 platform layers.
 
+### 4. Agent Control Layer
+
+Agents should be able to help users operate the launcher, but they should not
+become an invisible admin account.
+
+The useful version is practical and limited:
+
+- inspect launcher state
+- read sanitized logs
+- start, stop, and restart integrations
+- update integration settings
+- run text and image requests through the same backend paths as the UI
+- create integration drafts from templates
+
+The unsafe version is easy to imagine and should be avoided:
+
+- no direct access to provider secrets
+- no silent package installs or deletes
+- no filesystem access outside documented runtime and log folders
+- no hidden MCP tools that mutate state without user approval
+
+This layer should start as a local Agent Control API. MCP can sit on top of it
+once permissions, audit logs, and approval flows are in place.
+
 ## Immediate Focus
 
 The next product work should prioritize:
@@ -113,10 +139,11 @@ The next product work should prioritize:
 1. runtime reliability
 2. custom integration import and lifecycle
 3. OpenAI-compatible local API
-4. TypeScript and Python SDKs
-5. integration templates and examples
-6. visible trust and permission UX
-7. MCP foundation after runtime and permissions are stable
+4. Agent Control API for observe and operate workflows
+5. TypeScript and Python SDKs
+6. integration templates and examples
+7. visible trust and permission UX
+8. MCP foundation after runtime, agent scopes, and permissions are stable
 
 Package discovery, account-backed ownership, and managed execution should not
 lead the roadmap until the workstation and local integration path are reliable.
@@ -145,17 +172,21 @@ Ship a reliable Windows desktop with:
 
 This phase proves product value to users and developers.
 
-### Phase 2: Trusted Package Layer
+### Phase 2: Integration, Agent Control, And Package Foundation
 
 Ship:
 
+- stable local Integration API contract
+- Agent Control API scopes for observe, operate, configure, and draft-create
+- audit logging and approval flow for agent-initiated actions
 - package manifest and permission model
 - verified package metadata
 - signing and update trust
 - reviewed package install/update/remove flow
 - user-visible execution mode labels
 
-This phase proves that Axelate can safely move beyond manual local imports.
+This phase proves that Axelate can safely move beyond manual local imports and
+UI-only operation.
 
 ### Phase 3: Platform Layer
 

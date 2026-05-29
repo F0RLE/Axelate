@@ -187,18 +187,11 @@ fn default_probe() -> GpuInfo {
     }
 }
 
+#[cfg(target_os = "windows")]
 async fn probe_windows_gpu_names() -> Option<Vec<String>> {
-    #[cfg(target_os = "windows")]
-    {
-        tokio::task::spawn_blocking(query_windows_gpu_names_wmi)
-            .await
-            .ok()?
-    }
-
-    #[cfg(not(target_os = "windows"))]
-    {
-        None
-    }
+    tokio::task::spawn_blocking(query_windows_gpu_names_wmi)
+        .await
+        .ok()?
 }
 
 #[cfg(target_os = "windows")]
@@ -257,7 +250,7 @@ async fn probe_linux_lspci_names() -> Option<Vec<String>> {
 #[cfg(target_os = "linux")]
 async fn probe_linux_drm_names() -> Option<Vec<String>> {
     let mut entries = tokio::fs::read_dir("/sys/class/drm").await.ok()?;
-    let mut names = Vec::new();
+    let mut vendor_ids = Vec::new();
 
     while let Ok(Some(entry)) = entries.next_entry().await {
         let filename = entry.file_name().to_string_lossy().to_string();
@@ -267,13 +260,11 @@ async fn probe_linux_drm_names() -> Option<Vec<String>> {
 
         let vendor_path = entry.path().join("device").join("vendor");
         if let Ok(vendor_id) = tokio::fs::read_to_string(vendor_path).await {
-            if let Some(name) = linux_vendor_name(vendor_id.trim()) {
-                names.push(name.to_string());
-            }
+            vendor_ids.push(vendor_id);
         }
     }
 
-    normalize_names(names)
+    parse_linux_vendor_ids(&vendor_ids.join("\n"))
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]

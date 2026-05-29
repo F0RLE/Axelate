@@ -757,6 +757,8 @@ pub fn open_chat_image_location(file_path: String, folder_path: String) -> Resul
     let requested_folder = PathBuf::from(&folder_path);
     let (file, open_folder_only) = resolve_image_open_target(&requested_file, &requested_folder)?;
     let path = image_open_directory(&file, open_folder_only)?;
+    #[cfg(target_os = "macos")]
+    let _ = &path;
 
     #[cfg(target_os = "windows")]
     {

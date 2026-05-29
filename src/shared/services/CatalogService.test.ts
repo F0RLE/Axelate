@@ -1,16 +1,53 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { CatalogService } from './CatalogService';
-import type { IModule } from '@/shared/types/coreTypes';
+import type {
+    CatalogAppItem,
+    CatalogProviderPolicy,
+    CatalogSnapshot,
+} from '@/shared/types/bindings';
 import {
     createCatalogHarness,
-    createMockAppConfig,
+    createMockCatalogSnapshot,
     setupBridgeMocks,
     type MockCatalogBridge,
 } from '@/test/helpers/catalogTestUtils';
 
+function catalogItem(overrides: Partial<CatalogAppItem>): CatalogAppItem {
+    return {
+        id: 'item',
+        nameKey: null,
+        descKey: null,
+        name: null,
+        desc: null,
+        icon: null,
+        preview: null,
+        category: 'services',
+        type: 'local',
+        capability: 'text',
+        installed: false,
+        installedComputeModes: [],
+        repoUrl: null,
+        expectedHash: null,
+        dlType: null,
+        comingSoon: false,
+        managedExternally: false,
+        version: '1.0.0',
+        configSchema: null,
+        settingsUi: null,
+        apiProviderData: null,
+        status: null,
+        ...overrides,
+    };
+}
+
 describe('CatalogService', () => {
     let mockBridge: MockCatalogBridge;
     let service: CatalogService;
+    const expectedOpenAiPolicy: Partial<CatalogProviderPolicy> = {
+        isCloudProvider: true,
+        secretService: 'cloud_api_key',
+        supportsInternetAccess: true,
+    };
 
     beforeEach(() => {
         ({ mockBridge, service } = createCatalogHarness());
@@ -21,341 +58,184 @@ describe('CatalogService', () => {
     });
 
     describe('Initialization', () => {
-        it('should correctly initialize catalog state on instantiation', () => {
+        it('initializes with empty catalog arrays', () => {
             const catalog = service.getCatalog();
-            expect(Array.isArray(catalog.ai)).toBe(true);
-            expect(Array.isArray(catalog.services)).toBe(true);
+
+            expect(catalog.ai).toEqual([]);
+            expect(catalog.services).toEqual([]);
         });
     });
 
     describe('loadCatalog', () => {
-        it('should load config and modules from bridge when in Tauri environment', async () => {
-            const mockConfig = createMockAppConfig({
-                catalog: { ai: [{ id: 'test-ai', name: 'Test AI' }], services: [] },
-            });
-
-            const mockModules: IModule[] = [
-                { id: 'test-ai', configSchema: { setting: {} } } as unknown as IModule,
-            ];
-
-            setupBridgeMocks(mockBridge, mockConfig, mockModules);
-
-            await service.loadCatalog();
-
-            expect(mockBridge.invoke).toHaveBeenCalledWith('get_config');
-            expect(mockBridge.invoke).toHaveBeenCalledWith('get_modules');
-
-            const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBe(1);
-            expect(catalog.ai[0]?.id).toBe('test-ai');
-            expect(catalog.ai[0]?.configSchema).toEqual({ setting: {} });
-            expect(catalog.ai[0]?.type).toBe('api'); // is mapped to api if no type provided in AI
-        });
-
-        it('should preserve comingSoon placeholders as non-installed AI apps', async () => {
-            const mockConfig = createMockAppConfig({
-                catalog: {
-                    ai: [
-                        {
-                            id: 'future-image',
-                            name: 'Future Image',
-                            type: 'local',
-                            comingSoon: true,
+        it('loads the backend-owned catalog snapshot through one command', async () => {
+            const snapshot = createMockCatalogSnapshot({
+                ai: [
+                    catalogItem({
+                        id: 'openai',
+                        name: 'OpenAI',
+                        category: 'ai',
+                        type: 'api',
+                        installed: true,
+                        apiProviderData: {
+                            id: 'openai',
+                            name: 'OpenAI',
+                            type: 'openai-compatible',
+                            models: [],
                         },
-                    ],
-                    services: [],
+                        providerPolicy: {
+                            isCloudProvider: true,
+                            isCustomProvider: false,
+                            isCleanApp: false,
+                            secretService: 'cloud_api_key',
+                            keyProviderId: 'cloud',
+                            keyProviderUrl: 'https://openrouter.ai/settings/keys',
+                            usesCustomProviderKey: false,
+                            showApiEndpointSelector: false,
+                            showCustomModelComposer: false,
+                            showModelStats: true,
+                            supportsInternetAccess: true,
+                            supportsThinking: false,
+                            imageOnly: false,
+                        },
+                    }),
+                ],
+                services: [
+                    catalogItem({
+                        id: 'sample-integration',
+                        name: 'Sample Integration',
+                        desc: 'Runs external workflows.',
+                        icon: 'plug',
+                        installed: true,
+                        settingsUi: 'settings-ui/index.html',
+                        status: 'stopped',
+                    }),
+                ],
+                stars: ['openai'],
+            });
+
+            setupBridgeMocks(mockBridge, snapshot);
+
+            await service.loadCatalog();
+
+            expect(mockBridge.invoke).toHaveBeenCalledTimes(1);
+            expect(mockBridge.invoke).toHaveBeenCalledWith('get_catalog_snapshot');
+
+            const catalog = service.getCatalog();
+            expect(catalog.stars).toEqual(['openai']);
+            expect(catalog.ai.at(0)).toMatchObject({
+                id: 'openai',
+                type: 'api',
+                installed: true,
+                apiProviderData: {
+                    id: 'openai',
+                    name: 'OpenAI',
+                    type: 'openai-compatible',
+                    models: [],
                 },
             });
-
-            setupBridgeMocks(mockBridge, mockConfig);
-
-            await service.loadCatalog();
-
-            const app = service.getAppById('future-image');
-            expect(app?.comingSoon).toBe(true);
-            expect(app?.installed).toBe(false);
-            expect(app?.type).toBe('local');
-        });
-
-        it('should keep an explicitly empty catalog empty', async () => {
-            const invalidConfig = createMockAppConfig();
-
-            setupBridgeMocks(mockBridge, invalidConfig);
-
-            await service.loadCatalog();
-
-            const catalog = service.getCatalog();
-
-            expect(catalog.ai).toHaveLength(0);
-            expect(catalog.services).toHaveLength(0);
-        });
-
-        it('should inject apiProviderData for API modules', async () => {
-            const mockApiConfig = createMockAppConfig({
-                catalog: { ai: [{ id: 'gpt-4', name: 'GPT 4', type: 'api' }], services: [] },
-                apiProviders: [{ id: 'gpt-4', models: { default: 'gpt-4' } }],
+            expect(catalog.ai.at(0)?.providerPolicy).toMatchObject(expectedOpenAiPolicy);
+            expect(catalog.services.at(0)).toMatchObject({
+                id: 'sample-integration',
+                category: 'services',
+                type: 'local',
+                installed: true,
+                settingsUi: 'settings-ui/index.html',
+                status: 'stopped',
             });
-
-            setupBridgeMocks(mockBridge, mockApiConfig);
-
-            await service.loadCatalog();
-
-            const app = service.getAppById('gpt-4');
-            expect(app).toBeDefined();
-            expect(app?.type).toBe('api');
-            expect(app?.installed).toBe(true);
-            expect(app?.apiProviderData).toEqual({ id: 'gpt-4', models: { default: 'gpt-4' } });
-        });
-    });
-
-    describe('getAppById', () => {
-        it('should return undefined for unknown app id', () => {
-            expect(service.getAppById('non-existent')).toBeUndefined();
         });
 
-        it('should correctly retrieve an app by ID from loaded catalog', async () => {
-            const mockConfig = createMockAppConfig({
-                catalog: {
-                    ai: [{ id: 'ai-app', name: 'AI App' }],
-                    services: [{ id: 'service-app', name: 'Service App' }],
-                },
-            });
-
-            setupBridgeMocks(mockBridge, mockConfig);
-
-            await service.loadCatalog();
-
-            expect(service.getAppById('ai-app')).toBeDefined();
-            expect(service.getAppById('service-app')).toBeDefined();
-            expect(service.getAppById('service-app')?.id).toBe('service-app');
-        });
-    });
-
-    describe('getCatalogCategory defaults', () => {
-        it('should return empty array for unknown category', () => {
-            // getCatalogCategory is now on GlobalBridge, not CatalogService
-            // Test service-level method instead
-            const catalog = service.getCatalog();
-            expect(Array.isArray(catalog.ai)).toBe(true);
-            expect(Array.isArray(catalog.services)).toBe(true);
-        });
-
-        it('should return services array for services category', async () => {
-            const mockConfig = createMockAppConfig({
-                catalog: {
-                    ai: [],
-                    services: [{ id: 'svc', name: 'Service' }],
-                },
-            });
-
-            setupBridgeMocks(mockBridge, mockConfig);
-
-            await service.loadCatalog();
-
-            const catalog = service.getCatalog();
-            expect(catalog.services.length).toBe(1);
-            expect(catalog.services.at(0)?.id).toBe('svc');
-        });
-    });
-
-    describe('bridge failure handling', () => {
-        it('should load config through bridge even when isTauri=false', async () => {
-            const mockConfig = createMockAppConfig({
-                catalog: { ai: [{ id: 'fetched-ai', name: 'Fetched AI' }], services: [] },
-            });
-
-            mockBridge.isTauri.mockReturnValue(false);
-            setupBridgeMocks(mockBridge, mockConfig);
-
-            await service.loadCatalog();
-
-            const catalog = service.getCatalog();
-            expect(catalog.ai.length).toBeGreaterThan(0);
-            expect(mockBridge.invoke).toHaveBeenCalledWith('get_config');
-        });
-
-        it('should use an empty catalog when bridge returns null config', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-            setupBridgeMocks(mockBridge, null);
-
-            await service.loadCatalog();
-
-            const catalog = service.getCatalog();
-            expect(catalog.ai).toHaveLength(0);
-            expect(catalog.services).toHaveLength(0);
-        });
-
-        it('should use an empty catalog when bridge throws', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-            mockBridge.invoke.mockRejectedValue(new Error('Bridge error'));
-
-            await service.loadCatalog();
-
-            const catalog = service.getCatalog();
-            expect(catalog.ai).toHaveLength(0);
-            expect(catalog.services).toHaveLength(0);
-        });
-
-        it('should use an empty catalog when bridge returns malformed catalog shape', async () => {
+        it('preserves backend decisions for coming soon and installed compute modes', async () => {
             setupBridgeMocks(
                 mockBridge,
-                createMockAppConfig({
-                    catalog: { ai: null, services: undefined },
-                    apiProviders: null,
+                createMockCatalogSnapshot({
+                    ai: [
+                        catalogItem({
+                            id: 'future-image',
+                            name: 'Future Image',
+                            category: 'ai',
+                            type: 'local',
+                            capability: 'image',
+                            comingSoon: true,
+                            installed: false,
+                        }),
+                        catalogItem({
+                            id: 'llamacpp',
+                            name: 'Llama.cpp',
+                            category: 'ai',
+                            type: 'local',
+                            installed: true,
+                            installedComputeModes: ['gpu', 'cpu', 'bad-mode'],
+                        }),
+                    ],
                 }),
             );
 
             await service.loadCatalog();
 
-            const catalog = service.getCatalog();
-            expect(catalog.ai).toHaveLength(0);
-            expect(catalog.services).toHaveLength(0);
-            expect(globalThis.dispatchEvent).toHaveBeenCalledWith(
-                expect.objectContaining({ type: 'catalog-loaded' }),
-            );
-        });
-    });
-
-    describe('_ensureValidConfig null config', () => {
-        it('should use an empty catalog when bridge invoke returns null', async () => {
-            setupBridgeMocks(mockBridge, null);
-
-            await service.loadCatalog();
-
-            const catalog = service.getCatalog();
-            expect(catalog.ai).toHaveLength(0);
-            expect(catalog.services).toHaveLength(0);
-        });
-    });
-
-    // ---------------------------------------------------------- loadCatalog inner error (line 94)
-    describe('loadCatalog inner error handling', () => {
-        it('should catch errors in inner processing (e.g. stars access fail)', async () => {
-            // Provide a valid config but with a stars getter that throws inside the try block
-            const badConfig = createMockAppConfig({
-                catalog: {
-                    ai: [{ id: 'ok', name: 'OK' }],
-                    services: [],
-                    get stars() {
-                        throw new Error('Stars access fail');
-                    },
-                },
+            expect(service.getAppById('future-image')).toMatchObject({
+                comingSoon: true,
+                installed: false,
+                capability: 'image',
             });
-
-            setupBridgeMocks(mockBridge, badConfig);
-
-            // The inner try-catch at line 56-95 catches the error
-            await expect(service.loadCatalog()).resolves.not.toThrow();
+            expect(service.getAppById('llamacpp')?.installedComputeModes).toEqual(['gpu', 'cpu']);
         });
-    });
 
-    describe('catalog hydration', () => {
-        it('should mark api-type apps as installed=true', async () => {
-            const config = createMockAppConfig({
-                catalog: {
-                    ai: [
-                        { id: 'api-mod', name: 'API Module', type: 'api' },
-                        { id: 'local-mod', name: 'Local Module', type: 'local' },
+        it('passes backend-provided schema, preview, and localized keys through to the UI model', async () => {
+            setupBridgeMocks(
+                mockBridge,
+                createMockCatalogSnapshot({
+                    services: [
+                        catalogItem({
+                            id: 'worker',
+                            nameKey: 'catalog.worker.name',
+                            descKey: 'catalog.worker.desc',
+                            preview: {
+                                title: 'Worker',
+                                description: 'Worker integration',
+                                sticker: '*',
+                                image: null,
+                            },
+                            configSchema: {
+                                timeout: {
+                                    fieldType: 'number',
+                                    label: 'Timeout',
+                                    default: 30,
+                                    required: false,
+                                },
+                            },
+                        }),
                     ],
-                    services: [],
-                },
-                apiProviders: [{ id: 'api-mod', models: { default: 'model-1' } }],
-            });
-
-            setupBridgeMocks(mockBridge, config);
-
-            await service.loadCatalog();
-
-            const apiApp = service.getAppById('api-mod');
-            const localApp = service.getAppById('local-mod');
-
-            expect(apiApp?.installed).toBe(true);
-            expect(localApp?.installed).not.toBe(true);
-        });
-
-        it('should mark non-engine local modules as installed when present in installed modules', async () => {
-            const config = createMockAppConfig({
-                catalog: {
-                    ai: [],
-                    services: [{ id: 'local-mod', name: 'Local Module', type: 'local' }],
-                },
-            });
-
-            setupBridgeMocks(mockBridge, config, [
-                { id: 'local-mod', configSchema: { setting: {} } } as unknown as IModule,
-            ]);
-
-            await service.loadCatalog();
-
-            const localApp = service.getAppById('local-mod');
-            expect(localApp?.installed).toBe(true);
-            expect(localApp?.configSchema).toEqual({ setting: {} });
-        });
-
-        it('should add discovered integration folders with manifest metadata to services', async () => {
-            const config = createMockAppConfig({
-                catalog: {
-                    ai: [{ id: 'gpt', name: 'GPT', type: 'api' }],
-                    services: [],
-                },
-                apiProviders: [{ id: 'gpt', models: { default: 'gpt-5' } }],
-            });
-
-            setupBridgeMocks(mockBridge, config, [
-                {
-                    id: 'sample-integration',
-                    name: 'Sample Integration',
-                    description: 'Sample integration workflow module for Axelate.',
-                    version: '0.3.0',
-                    icon: 'plug',
-                    preview: {
-                        title: 'Sample Integration',
-                        description:
-                            'Runs an external workflow and processes discovered information through Axelate AI.',
-                        sticker: '🤖',
-                    },
-                    settingsUi: 'settings-ui/index.html',
-                    status: 'stopped',
-                    configSchema: undefined,
-                } as unknown as IModule,
-            ]);
-
-            await service.loadCatalog();
-
-            const integration = service.getAppById('sample-integration');
-            expect(integration).toBeDefined();
-            expect(integration?.category).toBe('services');
-            expect(integration?.type).toBe('local');
-            expect(integration?.installed).toBe(true);
-            expect(integration?.name).toBe('Sample Integration');
-            expect(integration?.desc).toContain('Runs an external workflow');
-            expect(integration?.icon).toBe('🤖');
-            expect(integration?.settingsUi).toBe('settings-ui/index.html');
-            expect(service.getCatalog().services.some((app) => app.id === integration?.id)).toBe(
-                true,
+                }),
             );
-        });
 
-        it('should reload catalog when backend reports integration folder changes', async () => {
-            const config = createMockAppConfig({
-                catalog: {
-                    ai: [],
-                    services: [{ id: 'catalog-anchor', name: 'Catalog Anchor', type: 'local' }],
-                    stars: [],
+            await service.loadCatalog();
+
+            expect(service.getAppById('worker')).toMatchObject({
+                nameKey: 'catalog.worker.name',
+                descKey: 'catalog.worker.desc',
+                preview: {
+                    title: 'Worker',
+                    description: 'Worker integration',
+                    sticker: '*',
+                },
+                configSchema: {
+                    timeout: {
+                        fieldType: 'number',
+                        label: 'Timeout',
+                        default: 30,
+                        required: false,
+                    },
                 },
             });
-            const firstModules = [
-                {
-                    id: 'parser',
-                    name: 'Parser',
-                    description: 'Parser integration',
-                    version: '1.0.0',
-                    icon: '🤖',
-                } as unknown as IModule,
-            ];
-            const secondModules: IModule[] = [];
+        });
+
+        it('reloads the snapshot when backend reports integration folder changes', async () => {
+            const firstSnapshot = createMockCatalogSnapshot({
+                services: [catalogItem({ id: 'parser', name: 'Parser', installed: true })],
+            });
+            const secondSnapshot = createMockCatalogSnapshot({ services: [] });
             const listener = { integrationsChanged: null as null | (() => void) };
-            let moduleListCalls = 0;
+            let snapshotCalls = 0;
 
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.listen.mockImplementation((event: string, callback: () => void) => {
@@ -365,40 +245,96 @@ describe('CatalogService', () => {
                 return Promise.resolve(() => {});
             });
             mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(config);
-                if (cmd === 'get_engine_definitions') return Promise.resolve([]);
-                if (cmd === 'get_modules') {
-                    moduleListCalls += 1;
-                    return Promise.resolve(moduleListCalls === 1 ? firstModules : secondModules);
-                }
-                return Promise.resolve(undefined);
+                if (cmd !== 'get_catalog_snapshot') return Promise.resolve(undefined);
+                snapshotCalls += 1;
+                return Promise.resolve(snapshotCalls === 1 ? firstSnapshot : secondSnapshot);
             });
 
             await service.loadCatalog();
             await Promise.resolve();
+
             expect(service.getAppById('parser')).toBeDefined();
 
             if (listener.integrationsChanged === null) {
                 throw new Error('integrations_changed listener was not registered');
             }
+
             listener.integrationsChanged();
-            await Promise.resolve();
-            await Promise.resolve();
-            await Promise.resolve();
             await new Promise((resolve) => globalThis.setTimeout(resolve, 0));
 
-            expect(moduleListCalls).toBe(2);
+            expect(snapshotCalls).toBe(2);
             expect(service.getAppById('parser')).toBeUndefined();
             expect(mockBridge.listen).toHaveBeenCalledTimes(1);
         });
 
-        it('should unsubscribe the integration watcher if destroy runs while binding is pending', async () => {
+        it('uses an empty catalog when the backend snapshot is unavailable', async () => {
+            setupBridgeMocks(mockBridge, null);
+
+            await service.loadCatalog();
+
+            expect(service.getCatalog().ai).toEqual([]);
+            expect(service.getCatalog().services).toEqual([]);
+            expect(globalThis.dispatchEvent).toHaveBeenCalledWith(
+                expect.objectContaining({ type: 'catalog-loaded' }),
+            );
+        });
+
+        it('uses an empty catalog when the backend snapshot shape is malformed', async () => {
+            setupBridgeMocks(mockBridge, {
+                ai: null,
+                services: undefined,
+                stars: null,
+            } as unknown as CatalogSnapshot);
+
+            await service.loadCatalog();
+
+            expect(service.getCatalog().ai).toEqual([]);
+            expect(service.getCatalog().services).toEqual([]);
+        });
+
+        it('does not throw when snapshot processing fails', async () => {
+            const snapshot = createMockCatalogSnapshot();
+            Object.defineProperty(snapshot, 'stars', {
+                get() {
+                    throw new Error('Stars access fail');
+                },
+            });
+
+            setupBridgeMocks(mockBridge, snapshot);
+
+            await expect(service.loadCatalog()).resolves.not.toThrow();
+        });
+    });
+
+    describe('getAppById', () => {
+        it('returns undefined for unknown app id', () => {
+            expect(service.getAppById('non-existent')).toBeUndefined();
+        });
+
+        it('retrieves apps by id after loading the snapshot', async () => {
+            setupBridgeMocks(
+                mockBridge,
+                createMockCatalogSnapshot({
+                    ai: [catalogItem({ id: 'ai-app', category: 'ai', type: 'api' })],
+                    services: [catalogItem({ id: 'service-app' })],
+                }),
+            );
+
+            await service.loadCatalog();
+
+            expect(service.getAppById('ai-app')).toBeDefined();
+            expect(service.getAppById('service-app')?.id).toBe('service-app');
+        });
+    });
+
+    describe('watcher cleanup', () => {
+        it('unsubscribes the integration watcher if destroy runs while binding is pending', async () => {
             let resolveListen: (unlisten: () => void) => void = () => {
                 throw new Error('listen promise was not started');
             };
             const unlisten = vi.fn();
 
-            setupBridgeMocks(mockBridge, createMockAppConfig());
+            setupBridgeMocks(mockBridge, createMockCatalogSnapshot());
             mockBridge.isTauri.mockReturnValue(true);
             mockBridge.listen.mockReturnValue(
                 new Promise((resolve) => {
@@ -413,49 +349,6 @@ describe('CatalogService', () => {
             await Promise.resolve();
 
             expect(unlisten).toHaveBeenCalledTimes(1);
-        });
-    });
-
-    describe('_initGlobalExposures DEV branch (L29)', () => {
-        it('should skip __DEV_CATALOG when DEV is false', () => {
-            const origDev = import.meta.env['DEV'];
-            (import.meta.env as Record<string, unknown>)['DEV'] = false;
-
-            const { service: s } = createCatalogHarness();
-            expect(s).toBeDefined();
-
-            (import.meta.env as Record<string, unknown>)['DEV'] = origDev;
-        });
-    });
-
-    describe('_loadModuleList bridge branches (L126)', () => {
-        const webConfig = createMockAppConfig({
-            catalog: { ai: [{ id: 'ai1', name: 'AI' }], services: [] },
-        });
-
-        it('should return modules when bridge response is ok (L126 true branch)', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-            setupBridgeMocks(mockBridge, webConfig, [
-                { id: 'mod1', name: 'Module 1' },
-            ] as IModule[]);
-
-            await service.loadCatalog();
-
-            expect(mockBridge.invoke).toHaveBeenCalledWith('get_modules');
-        });
-
-        it('should return empty array when bridge response fails (L126 false branch)', async () => {
-            mockBridge.isTauri.mockReturnValue(false);
-            mockBridge.invoke.mockImplementation((cmd: string) => {
-                if (cmd === 'get_config') return Promise.resolve(webConfig);
-                if (cmd === 'get_modules') return Promise.reject(new Error('modules failed'));
-                if (cmd === 'get_engine_definitions') return Promise.resolve([]);
-                return Promise.resolve(undefined);
-            });
-
-            await service.loadCatalog();
-
-            expect(service.getCatalog().ai.length).toBeGreaterThan(0);
         });
     });
 });

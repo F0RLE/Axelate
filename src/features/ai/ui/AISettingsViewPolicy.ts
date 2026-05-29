@@ -1,38 +1,33 @@
-import {
-    CUSTOM_TEXT_PROVIDER_ID,
-    isCustomProviderId,
-    isCustomImageProviderId,
-} from '@/shared/utils/customProviderSupport';
-import type { IAIModelData } from '../types/aiTypes';
+import type { IApp } from '@/shared/types/coreTypes';
 
 export class AISettingsViewPolicy {
-    private static readonly _cleanAppIds = new Set(['axelate', 'axelate-platform']);
+    public isCleanApp(app: IApp | string): boolean {
+        const policy = typeof app === 'string' ? null : app.providerPolicy;
+        if (policy?.isCleanApp !== undefined) {
+            return policy.isCleanApp;
+        }
 
-    public isCleanApp(appId: string): boolean {
-        return AISettingsViewPolicy._cleanAppIds.has(appId);
+        return false;
     }
 
-    public supportsInternetAccess(appId: string, capability?: 'text' | 'image'): boolean {
-        return !this.isCleanApp(appId) && capability !== 'image' && !isCustomImageProviderId(appId);
+    public supportsInternetAccess(app: IApp): boolean {
+        return app.providerPolicy?.supportsInternetAccess ?? false;
     }
 
-    public supportsThinking(appId: string, models: readonly IAIModelData[] = []): boolean {
-        return (
-            models.some((model) => model.capabilities?.reasoning === true) ||
-            appId === CUSTOM_TEXT_PROVIDER_ID
-        );
+    public supportsThinking(app: IApp): boolean {
+        return app.providerPolicy?.supportsThinking ?? false;
     }
 
-    public isImageOnlyProvider(appId: string, capability?: 'text' | 'image'): boolean {
-        return capability === 'image' || isCustomImageProviderId(appId);
+    public isImageOnlyProvider(app: IApp): boolean {
+        return app.providerPolicy?.imageOnly ?? app.capability === 'image';
     }
 
-    public shouldShowModelStats(appId: string): boolean {
-        return !isCustomProviderId(appId);
+    public shouldShowModelStats(app: IApp): boolean {
+        return app.providerPolicy?.showModelStats ?? true;
     }
 
-    public shouldForceThinkingVisibility(appId: string): boolean {
-        return appId === CUSTOM_TEXT_PROVIDER_ID;
+    public shouldForceThinkingVisibility(app: IApp): boolean {
+        return app.providerPolicy?.supportsThinking === true && this.supportsThinking(app);
     }
 
     public formatCompactContext(contextWindow: number): string {

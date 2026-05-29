@@ -49,16 +49,6 @@ fn detect_blocking_requirement() -> Option<StartupRequirement> {
         }
     }
 
-    #[cfg(target_os = "macos")]
-    {
-        return None;
-    }
-
-    #[cfg(not(any(target_os = "windows", target_os = "linux", target_os = "macos")))]
-    {
-        return None;
-    }
-
     None
 }
 

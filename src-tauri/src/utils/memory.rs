@@ -4,6 +4,7 @@
  * @description Utilities for managing process memory footprint
  */
 #[cfg(target_os = "windows")]
+/// Requests the operating system to trim the launcher process working set.
 pub fn trim_memory() {
     use windows_sys::Win32::System::Threading::{GetCurrentProcess, SetProcessWorkingSetSize};
 
@@ -17,6 +18,7 @@ pub fn trim_memory() {
 }
 
 #[cfg(not(target_os = "windows"))]
+/// Requests a memory trim when the current platform supports it.
 pub fn trim_memory() {
     // No-op for other OSs
 }
