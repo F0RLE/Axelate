@@ -4,6 +4,7 @@
  */
 
 import { GeneralSettingsRenderer } from './GeneralSettingsRenderer';
+import { AgentControlSettingsRenderer } from './AgentControlSettingsRenderer';
 import type { IAppSettingsUIContext } from './SettingsContext';
 import type { SettingsService } from '../services/SettingsService';
 import type { UISettingsService } from '@/shared/services/ui/UISettingsService';
@@ -19,24 +20,36 @@ type SettingsUIDeps = {
     tracer: LoggerService;
 };
 
+const SECTION_SCROLL_DURATION_MS = 460;
+const WHEEL_LOCK_RELEASE_DELAY_MS = 120;
+const WHEEL_SECTION_DELTA_THRESHOLD = 8;
+
+function easeInOutCubic(progress: number): number {
+    return progress < 0.5 ? 4 * progress ** 3 : 1 - (-2 * progress + 2) ** 3 / 2;
+}
+
 export class SettingsUI {
     private readonly _generalRenderer: GeneralSettingsRenderer;
+    private readonly _agentControlRenderer: AgentControlSettingsRenderer;
     private _context!: IAppSettingsUIContext;
     private _isInitialized = false;
     private _isDestroyed = false;
     private _initAbortController: AbortController | null = null;
+    private _agentControlUnlisten: (() => void) | null = null;
+    private _sectionJumpUnlisten: (() => void) | null = null;
 
     public constructor(
-        _service: SettingsService,
+        service: SettingsService,
         uiSettings: UISettingsService,
         _aiSettings: AISettingsService,
         private readonly _i18n: I18nService,
         private readonly _i18nUI: I18nUI,
-        _tauri: TauriProvider,
+        private readonly _tauri: TauriProvider,
         _navigation: NavigationService,
         private readonly _deps: SettingsUIDeps,
     ) {
         this._generalRenderer = new GeneralSettingsRenderer(uiSettings, this._deps.tracer);
+        this._agentControlRenderer = new AgentControlSettingsRenderer(service, this._deps.tracer);
     }
 
     public async init(): Promise<void> {
@@ -77,6 +90,9 @@ export class SettingsUI {
         }
 
         this._generalRenderer.init(this._context);
+        this._agentControlRenderer.init(this._context);
+        this._setupSectionJump();
+        await this._listenForAgentControlChanges();
     }
 
     public close(): void {
@@ -89,8 +105,181 @@ export class SettingsUI {
         this._isInitialized = false;
         this._initAbortController?.abort();
         this._initAbortController = null;
+        this._agentControlUnlisten?.();
+        this._agentControlUnlisten = null;
+        this._sectionJumpUnlisten?.();
+        this._sectionJumpUnlisten = null;
         this._generalRenderer.destroy();
+        this._agentControlRenderer.destroy();
         this._deps.tracer.info('[SettingsUI] Destroyed.');
+    }
+
+    private _setupSectionJump(): void {
+        if (this._sectionJumpUnlisten !== null) {
+            return;
+        }
+
+        const page = document.getElementById('page-settings');
+        const button = document.getElementById('settings-section-jump');
+        if (!(page instanceof HTMLElement) || !(button instanceof HTMLButtonElement)) {
+            return;
+        }
+
+        const sections = Array.from(page.querySelectorAll<HTMLElement>('.settings-section')).filter(
+            (section) => section.offsetParent !== null || section.getClientRects().length > 0,
+        );
+        if (sections.length < 2) {
+            button.hidden = true;
+            return;
+        }
+
+        const label = this._i18n.t('ui.launcher.settings.section_jump');
+        button.title = label;
+        button.setAttribute('aria-label', label);
+
+        const sectionScrollTop = (section: HTMLElement | undefined) =>
+            Math.min(
+                Math.max(0, page.scrollHeight - page.clientHeight),
+                Math.max(0, (section?.offsetTop ?? 0) - page.offsetTop),
+            );
+        const getTopScroll = () => sectionScrollTop(sections[0]);
+        const getAgentScroll = () => sectionScrollTop(sections[1]);
+        const getIsAgentSection = () => page.scrollTop >= (getTopScroll() + getAgentScroll()) / 2;
+        const syncButtonPosition = () => {
+            button.style.top = `${page.scrollTop + page.clientHeight - 48}px`;
+        };
+
+        const update = () => {
+            const isAgentSection = getIsAgentSection();
+            button.classList.toggle('is-up', isAgentSection);
+            syncButtonPosition();
+        };
+
+        let animationFrame: number | null = null;
+        let unlockTimer: ReturnType<typeof globalThis.setTimeout> | null = null;
+        let wheelLocked = false;
+
+        const clearUnlockTimer = () => {
+            if (unlockTimer !== null) {
+                globalThis.clearTimeout(unlockTimer);
+                unlockTimer = null;
+            }
+        };
+
+        const releaseWheelLockSoon = () => {
+            clearUnlockTimer();
+            unlockTimer = globalThis.setTimeout(() => {
+                wheelLocked = false;
+                unlockTimer = null;
+            }, WHEEL_LOCK_RELEASE_DELAY_MS);
+        };
+
+        const finishAnimation = (releaseLock = true) => {
+            if (animationFrame !== null) {
+                cancelAnimationFrame(animationFrame);
+                animationFrame = null;
+            }
+            page.classList.remove('is-section-scrolling');
+            if (releaseLock) {
+                clearUnlockTimer();
+                wheelLocked = false;
+            }
+        };
+
+        const scrollToSection = (toTop: boolean) => {
+            const target = toTop ? getTopScroll() : getAgentScroll();
+            const start = page.scrollTop;
+            const distance = target - start;
+            finishAnimation(false);
+            clearUnlockTimer();
+
+            if (Math.abs(distance) < 1) {
+                page.scrollTop = target;
+                update();
+                wheelLocked = false;
+                return;
+            }
+
+            wheelLocked = true;
+            const reduceMotion = globalThis.matchMedia('(prefers-reduced-motion: reduce)').matches;
+            if (reduceMotion === true) {
+                page.scrollTop = target;
+                update();
+                releaseWheelLockSoon();
+                return;
+            }
+
+            const startedAt = performance.now();
+            page.classList.add('is-section-scrolling');
+
+            const tick = (now: number) => {
+                const elapsed = now - startedAt;
+                const progress = Math.min(1, elapsed / SECTION_SCROLL_DURATION_MS);
+                page.scrollTop = start + distance * easeInOutCubic(progress);
+                update();
+
+                if (progress < 1) {
+                    animationFrame = requestAnimationFrame(tick);
+                    return;
+                }
+
+                page.scrollTop = target;
+                update();
+                finishAnimation(false);
+                releaseWheelLockSoon();
+            };
+
+            animationFrame = requestAnimationFrame(tick);
+        };
+
+        const handleClick = () => {
+            scrollToSection(getIsAgentSection());
+        };
+
+        const handleWheel = (event: WheelEvent) => {
+            if (wheelLocked) {
+                event.preventDefault();
+                return;
+            }
+            if (Math.abs(event.deltaY) < WHEEL_SECTION_DELTA_THRESHOLD) {
+                return;
+            }
+            event.preventDefault();
+            scrollToSection(event.deltaY < 0);
+        };
+
+        page.addEventListener('scroll', update, { passive: true });
+        page.addEventListener('wheel', handleWheel, { passive: false });
+        globalThis.addEventListener('resize', update);
+        button.addEventListener('click', handleClick);
+        update();
+
+        this._sectionJumpUnlisten = () => {
+            page.removeEventListener('scroll', update);
+            page.removeEventListener('wheel', handleWheel);
+            globalThis.removeEventListener('resize', update);
+            button.removeEventListener('click', handleClick);
+            finishAnimation();
+        };
+    }
+
+    private async _listenForAgentControlChanges(): Promise<void> {
+        if (this._agentControlUnlisten !== null) {
+            return;
+        }
+        try {
+            this._agentControlUnlisten = await this._tauri.listen(
+                'agent-control:state-changed',
+                () => {
+                    this._agentControlRenderer.refresh();
+                },
+            );
+        } catch (error) {
+            this._deps.tracer.warn(
+                '[SettingsUI] Failed to listen for Agent Control updates:',
+                error,
+            );
+        }
     }
 
     private async _waitForContainer(

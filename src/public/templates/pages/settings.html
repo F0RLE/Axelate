@@ -1,23 +1,32 @@
 <div class="settings-wrapper">
-    <div id="settings-grid" class="settings-grid">
-        <div class="module-card">
-            <div class="module-title" data-i18n="ui.launcher.settings.taskbar_title">
-                Sidebar Management
+    <section class="settings-section settings-section--launcher">
+        <div id="settings-grid" class="settings-grid">
+            <div class="module-card">
+                <div class="module-title" data-i18n="ui.launcher.settings.taskbar_title"></div>
+                <div class="module-desc" data-i18n="ui.launcher.settings.taskbar_desc"></div>
+                <div id="taskbar-toggles" class="settings-toggle-grid"></div>
             </div>
-            <div class="module-desc" data-i18n="ui.launcher.settings.taskbar_desc">
-                Configure sidebar page visibility
-            </div>
-            <div id="taskbar-toggles" class="settings-toggle-grid"></div>
-        </div>
 
-        <div class="module-card">
-            <div class="module-title" data-i18n="ui.launcher.settings.monitor_title">
-                Monitoring Management
+            <div class="module-card">
+                <div class="module-title" data-i18n="ui.launcher.settings.monitor_title"></div>
+                <div class="module-desc" data-i18n="ui.launcher.settings.monitor_desc"></div>
+                <div id="monitor-toggles" class="settings-toggle-grid"></div>
             </div>
-            <div class="module-desc" data-i18n="ui.launcher.settings.monitor_desc">
-                System monitor visibility settings
-            </div>
-            <div id="monitor-toggles" class="settings-toggle-grid"></div>
         </div>
-    </div>
+    </section>
+
+    <section class="settings-section settings-section--agent">
+        <div class="module-card module-card--agent-control">
+            <div class="module-title" data-i18n="ui.launcher.settings.agent_control_title"></div>
+            <div id="agent-control-panel"></div>
+        </div>
+    </section>
+
+    <button
+        id="settings-section-jump"
+        class="settings-section-jump"
+        type="button"
+        data-i18n-title="ui.launcher.settings.section_jump"
+        data-i18n-aria-label="ui.launcher.settings.section_jump"
+    ></button>
 </div>

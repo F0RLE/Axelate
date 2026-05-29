@@ -1,6 +1,7 @@
 import type { I18nUI } from '@/infrastructure/i18n/I18nUI';
 import type { ThinkingLevel } from '@/shared/services/state/UiStateStore';
 import type { AISettingsService } from '@/shared/services/ai/AISettingsService';
+import type { IApp } from '@/shared/types/coreTypes';
 import type { IAIModelData } from '../types/aiTypes';
 import { getModelDataFromModels } from '../utils/catalogHelpers';
 import { renderModelStats } from './AISettingsMarkup';
@@ -16,6 +17,7 @@ type AISettingsSelectionRenderState = {
 };
 
 type AISettingsSelectionSyncOptions = {
+    app: IApp;
     appId: string;
     modelKey: string;
     aiSettings: AISettingsService | null;
@@ -79,7 +81,7 @@ export class AISettingsSelectionController {
         const modelData = this.getModelData(options.appId, options.modelKey);
         const hasReasoning =
             modelData?.capabilities?.reasoning === true ||
-            options.viewPolicy.shouldForceThinkingVisibility(options.appId);
+            options.viewPolicy.shouldForceThinkingVisibility(options.app);
         const statsMarkup = this.renderModelStats(
             options.appId,
             options.modelKey,

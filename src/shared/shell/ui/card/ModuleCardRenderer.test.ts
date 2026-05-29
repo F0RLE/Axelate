@@ -340,4 +340,23 @@ describe('ModuleCardRenderer', () => {
         expect(card.querySelector('.app-card-overlay')).toBeNull();
         expect(configureActionBtn).toHaveBeenCalled();
     });
+
+    it('maps dashboard runtime status to selected card marker classes', () => {
+        const card = document.createElement('div');
+
+        renderer.updateSlotCardRuntimeStatus(card, 'running');
+        expect(card.dataset['runtimeStatus']).toBe('running');
+        expect(card.classList.contains('module-running')).toBe(true);
+        expect(card.classList.contains('engine-error')).toBe(false);
+
+        renderer.updateSlotCardRuntimeStatus(card, 'failed');
+        expect(card.dataset['runtimeStatus']).toBe('error');
+        expect(card.classList.contains('module-running')).toBe(false);
+        expect(card.classList.contains('engine-error')).toBe(true);
+
+        renderer.updateSlotCardRuntimeStatus(card, undefined);
+        expect(card.dataset['runtimeStatus']).toBe('stopped');
+        expect(card.classList.contains('module-stopped')).toBe(true);
+        expect(card.classList.contains('engine-error')).toBe(false);
+    });
 });

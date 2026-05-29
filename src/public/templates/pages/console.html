@@ -3,22 +3,22 @@
         <button
             class="console-tab-scroll console-tab-scroll-left"
             type="button"
-            aria-label="Previous log tabs"
-            title="Previous"
+            data-i18n-aria-label="ui.debug.logs_tabs_previous"
+            data-i18n-title="ui.debug.logs_tabs_previous"
             hidden
         >
             ‹
         </button>
         <div class="console-toolbar-left">
             <button class="console-tab active" data-view="general">
-                <span data-i18n="ui.launcher.web.logs_general">General</span>
+                <span data-i18n="ui.launcher.web.logs_general"></span>
             </button>
         </div>
         <button
             class="console-tab-scroll console-tab-scroll-right"
             type="button"
-            aria-label="Next log tabs"
-            title="Next"
+            data-i18n-aria-label="ui.debug.logs_tabs_next"
+            data-i18n-title="ui.debug.logs_tabs_next"
             hidden
         >
             ›
@@ -32,39 +32,73 @@
             </div>
         </div>
 
-        <aside class="console-controls-panel" aria-label="Console controls">
+        <aside
+            class="console-controls-panel"
+            data-i18n-aria-label="ui.debug.logs_controls"
+        >
             <div class="console-controls-group">
-                <div class="console-controls-label">Levels</div>
+                <div class="console-controls-label" data-i18n="ui.debug.logs_levels"></div>
                 <div class="console-level-filters">
-                    <button class="console-filter-chip active" data-level="ERROR" type="button">
-                        Error
+                    <button
+                        class="console-filter-chip active"
+                        data-level="ERROR"
+                        type="button"
+                        data-i18n="ui.debug.logs_level_error"
+                    >
                     </button>
-                    <button class="console-filter-chip active" data-level="WARN" type="button">
-                        Warn
+                    <button
+                        class="console-filter-chip active"
+                        data-level="WARN"
+                        type="button"
+                        data-i18n="ui.debug.logs_level_warn"
+                    >
                     </button>
-                    <button class="console-filter-chip active" data-level="INFO" type="button">
-                        Info
+                    <button
+                        class="console-filter-chip active"
+                        data-level="INFO"
+                        type="button"
+                        data-i18n="ui.debug.logs_level_info"
+                    >
                     </button>
-                    <button class="console-filter-chip active" data-level="DEBUG" type="button">
-                        Debug
+                    <button
+                        class="console-filter-chip active"
+                        data-level="DEBUG"
+                        type="button"
+                        data-i18n="ui.debug.logs_level_debug"
+                    >
                     </button>
                 </div>
             </div>
 
             <div class="console-controls-group">
-                <div class="console-controls-label">Actions</div>
+                <div class="console-controls-label" data-i18n="ui.debug.logs_actions"></div>
                 <div class="console-action-buttons">
-                    <button id="copy-logs-btn" class="console-btn" title="Copy Logs">
+                    <button
+                        id="copy-logs-btn"
+                        class="console-btn"
+                        data-i18n-title="ui.debug.logs_copy"
+                        data-i18n-aria-label="ui.debug.logs_copy"
+                    >
                         <svg class="icon">
                             <use href="#icon-clipboard"></use>
                         </svg>
                     </button>
-                    <button id="open-logs-folder-btn" class="console-btn" title="Open Logs Folder">
+                    <button
+                        id="open-logs-folder-btn"
+                        class="console-btn"
+                        data-i18n-title="ui.debug.logs_open_folder"
+                        data-i18n-aria-label="ui.debug.logs_open_folder"
+                    >
                         <svg class="icon">
                             <use href="#icon-folder"></use>
                         </svg>
                     </button>
-                    <button id="clear-logs-btn" class="console-btn" title="Clear Console">
+                    <button
+                        id="clear-logs-btn"
+                        class="console-btn"
+                        data-i18n-title="ui.debug.logs_clear"
+                        data-i18n-aria-label="ui.debug.logs_clear"
+                    >
                         <svg class="icon">
                             <use href="#icon-trash"></use>
                         </svg>

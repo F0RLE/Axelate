@@ -1,66 +1,21 @@
-use crate::domain::engine::manager::canonical_engine_id;
-use crate::domain::engine::types::EngineDefinition;
 use crate::errors::AppError;
 use crate::infrastructure::logging::logger;
 use crate::infrastructure::logging::{self as logs, LogEntry};
-use crate::models::{SelectedModule, UIState};
-use std::collections::{BTreeMap, BTreeSet};
+use crate::models::UIState;
 use std::fs;
-use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::Arc;
 use tauri::State;
 
-struct ConsoleOverviewBuilder;
+use super::log_targets::{
+    canonical_console_view_id, clear_all_console_log_files, clear_console_log_target,
+    resolve_console_log_target,
+};
 
-struct ConsoleLabelFormatter;
-
-/// Console log view metadata for frontend tabs.
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-pub struct ConsoleLogView {
-    /// Stable view identifier.
-    pub id: String,
-    /// Human-readable label.
-    pub label: String,
-}
-
-/// Runtime status used by the console overview.
-#[derive(Debug, Clone, Copy, serde::Serialize, specta::Type)]
-#[serde(rename_all = "lowercase")]
-pub enum ConsoleRuntimeStatus {
-    /// Process is currently running.
-    Running,
-    /// Process is starting or switching.
-    Starting,
-    /// Process failed or status lookup failed.
-    Failed,
-    /// Process is stopped.
-    Stopped,
-}
-
-/// Console status row for engines or modules.
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-pub struct ConsoleStatusItem {
-    /// Stable item identifier.
-    pub id: String,
-    /// Human-readable label.
-    pub label: String,
-    /// Status category discriminator.
-    pub kind: String,
-    /// Runtime status.
-    pub status: ConsoleRuntimeStatus,
-    /// Additional detail text.
-    pub detail: String,
-}
-
-/// Aggregated console metadata payload.
-#[derive(Debug, Clone, serde::Serialize, specta::Type)]
-pub struct ConsoleOverview {
-    /// Available log views including the default general tab.
-    pub views: Vec<ConsoleLogView>,
-    /// Runtime status rows for engines and modules.
-    pub status_items: Vec<ConsoleStatusItem>,
-}
+use super::console_overview::ConsoleOverviewBuilder;
+pub use super::console_overview::{
+    ConsoleLogView, ConsoleOverview, ConsoleRuntimeStatus, ConsoleStatusItem,
+};
 
 #[tauri::command]
 #[specta::specta]
@@ -194,430 +149,6 @@ fn trace_frontend_log(level: &str, message: &str) {
     }
 }
 
-const fn describe_status(status: ConsoleRuntimeStatus) -> &'static str {
-    match status {
-        ConsoleRuntimeStatus::Running => "Running",
-        ConsoleRuntimeStatus::Starting => "Starting…",
-        ConsoleRuntimeStatus::Failed => "Failed",
-        ConsoleRuntimeStatus::Stopped => "Stopped",
-    }
-}
-
-fn resolve_console_log_target(view_id: &str) -> Result<PathBuf, AppError> {
-    if let Some(engine_id) = view_id.strip_prefix("engine:") {
-        let engine_id = canonical_engine_id(engine_id);
-        validate_console_log_segment(&engine_id, "Engine ID")?;
-        return Ok(crate::utils::paths::ENGINE_LOGS_DIR.join(engine_id));
-    }
-
-    if let Some(module_id) = view_id.strip_prefix("module:") {
-        crate::domain::modules::downloader::validate_module_id(module_id)?;
-        return Ok(crate::utils::paths::INTEGRATION_LOGS_DIR.join(module_id));
-    }
-
-    Ok(crate::utils::paths::LOG_DIR.clone())
-}
-
-fn validate_console_log_segment(value: &str, label: &str) -> Result<(), AppError> {
-    if value.is_empty() {
-        return Err(AppError::Validation(format!("{label} cannot be empty")));
-    }
-
-    if !value
-        .chars()
-        .all(|character| character.is_ascii_alphanumeric() || character == '-')
-    {
-        return Err(AppError::Validation(format!(
-            "{label} contains invalid characters"
-        )));
-    }
-
-    Ok(())
-}
-
-fn canonical_console_view_id(view_id: &str) -> String {
-    if let Some(engine_id) = view_id.strip_prefix("engine:") {
-        return format!("engine:{}", canonical_engine_id(engine_id));
-    }
-
-    view_id.trim().to_string()
-}
-
-fn clear_console_log_target(view_id: &str, target: &Path) -> Result<(), AppError> {
-    if view_id == "general" {
-        clear_log_file(&target.join("axelate.log"))?;
-        return Ok(());
-    }
-
-    if !target.exists() {
-        return Ok(());
-    }
-
-    for entry in fs::read_dir(target)? {
-        let path = entry?.path();
-        if path
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("log"))
-        {
-            clear_log_file(&path)?;
-        }
-    }
-
-    Ok(())
-}
-
-fn clear_log_file(path: &Path) -> Result<(), AppError> {
-    if !path.exists() {
-        return Ok(());
-    }
-
-    fs::OpenOptions::new()
-        .write(true)
-        .truncate(true)
-        .open(path)?;
-    Ok(())
-}
-
-fn clear_all_console_log_files(root: &Path) -> Result<(), AppError> {
-    if !root.exists() {
-        return Ok(());
-    }
-
-    for entry in fs::read_dir(root)? {
-        let path = entry?.path();
-        if path.is_dir() {
-            clear_all_console_log_files(&path)?;
-            continue;
-        }
-
-        if path
-            .extension()
-            .is_some_and(|extension| extension.eq_ignore_ascii_case("log"))
-        {
-            clear_log_file(&path)?;
-        }
-    }
-
-    Ok(())
-}
-
-impl ConsoleOverviewBuilder {
-    async fn build(
-        engine_state: &crate::domain::engine::types::EngineState,
-        engine_definitions: &[EngineDefinition],
-        ui_state: &UIState,
-        logs: &[LogEntry],
-    ) -> ConsoleOverview {
-        let registry_engine_labels = Self::collect_registry_engine_labels(engine_definitions);
-        let module_labels = Self::collect_module_labels(&ui_state.selected_modules);
-        let module_ids = Self::collect_module_ids(logs, &module_labels);
-        let mut engine_labels = Self::collect_engine_labels(engine_state);
-        engine_labels.extend(Self::collect_selected_engine_labels(
-            &ui_state.selected_modules,
-        ));
-        engine_labels.extend(Self::collect_logged_engine_labels(
-            logs,
-            &registry_engine_labels,
-        ));
-        let views = Self::build_views(&engine_labels, &module_labels, &module_ids);
-        let status_items = Self::build_status_items(
-            engine_state,
-            &registry_engine_labels,
-            &engine_labels,
-            &module_labels,
-            &module_ids,
-        )
-        .await;
-
-        ConsoleOverview {
-            views,
-            status_items,
-        }
-    }
-
-    fn collect_registry_engine_labels(
-        engine_definitions: &[EngineDefinition],
-    ) -> BTreeMap<String, String> {
-        engine_definitions
-            .iter()
-            .map(|definition| {
-                (
-                    canonical_engine_id(&definition.id),
-                    definition.name.trim().to_string(),
-                )
-            })
-            .filter(|(_, name)| !name.is_empty())
-            .collect()
-    }
-
-    fn collect_module_labels(
-        modules: &std::collections::HashMap<String, SelectedModule>,
-    ) -> BTreeMap<String, String> {
-        modules
-            .iter()
-            .filter(|(category, module)| category.as_str() == "services" && module.type_ != "api")
-            .map(|(_, module)| (module.id.clone(), module.name.clone()))
-            .collect()
-    }
-
-    fn collect_selected_engine_labels(
-        modules: &std::collections::HashMap<String, SelectedModule>,
-    ) -> BTreeMap<String, String> {
-        modules
-            .iter()
-            .filter(|(category, module)| {
-                matches!(category.as_str(), "ai_text" | "ai_image") && module.type_ != "api"
-            })
-            .map(|(_, module)| (canonical_engine_id(&module.id), module.name.clone()))
-            .collect()
-    }
-
-    fn collect_module_ids(
-        logs: &[LogEntry],
-        module_labels: &BTreeMap<String, String>,
-    ) -> BTreeSet<String> {
-        let mut module_ids: BTreeSet<String> = module_labels.keys().cloned().collect();
-        module_ids.extend(
-            logs.iter()
-                .filter_map(|entry| entry.module_id.as_ref())
-                .filter(|module_id| module_labels.contains_key(*module_id))
-                .cloned(),
-        );
-        module_ids
-    }
-
-    fn collect_engine_labels(
-        state: &crate::domain::engine::types::EngineState,
-    ) -> BTreeMap<String, String> {
-        let mut labels = BTreeMap::new();
-
-        if let crate::domain::engine::types::EngineState::Ready { slots } = state {
-            labels.extend(slots.iter().map(|slot| {
-                (
-                    canonical_engine_id(&slot.engine.id),
-                    slot.engine.name.clone(),
-                )
-            }));
-        }
-
-        labels
-    }
-
-    fn collect_logged_engine_labels(
-        logs: &[LogEntry],
-        registry_engine_labels: &BTreeMap<String, String>,
-    ) -> BTreeMap<String, String> {
-        logs.iter()
-            .filter(|entry| entry.module_id.is_none() && !entry.source.starts_with("module:"))
-            .filter_map(|entry| {
-                let engine_id = canonical_engine_id(&entry.source);
-                let label = registry_engine_labels.get(&engine_id)?;
-                Some((engine_id, label.clone()))
-            })
-            .collect()
-    }
-
-    fn build_views(
-        engine_labels: &BTreeMap<String, String>,
-        module_labels: &BTreeMap<String, String>,
-        module_ids: &BTreeSet<String>,
-    ) -> Vec<ConsoleLogView> {
-        let mut views = Vec::with_capacity(engine_labels.len() + module_ids.len() + 1);
-        let mut view_ids = BTreeSet::new();
-        let mut view_labels = BTreeSet::new();
-        views.push(ConsoleLogView {
-            id: "general".to_string(),
-            label: "Platform".to_string(),
-        });
-        view_ids.insert("general".to_string());
-        view_labels.insert(Self::normalize_view_label("Platform"));
-
-        for (id, label) in engine_labels {
-            Self::push_unique_view(
-                &mut views,
-                &mut view_ids,
-                &mut view_labels,
-                ConsoleLogView {
-                    id: format!("engine:{id}"),
-                    label: label.clone(),
-                },
-            );
-        }
-
-        for module_id in module_ids {
-            Self::push_unique_view(
-                &mut views,
-                &mut view_ids,
-                &mut view_labels,
-                ConsoleLogView {
-                    id: format!("module:{module_id}"),
-                    label: module_labels
-                        .get(module_id)
-                        .cloned()
-                        .unwrap_or_else(|| ConsoleLabelFormatter::format_module_label(module_id)),
-                },
-            );
-        }
-
-        views
-    }
-
-    fn push_unique_view(
-        views: &mut Vec<ConsoleLogView>,
-        view_ids: &mut BTreeSet<String>,
-        view_labels: &mut BTreeSet<String>,
-        view: ConsoleLogView,
-    ) {
-        let normalized_label = Self::normalize_view_label(&view.label);
-        if view_ids.insert(view.id.clone()) && view_labels.insert(normalized_label) {
-            views.push(view);
-        }
-    }
-
-    fn normalize_view_label(label: &str) -> String {
-        label
-            .trim()
-            .to_ascii_lowercase()
-            .split_whitespace()
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-
-    async fn build_status_items(
-        engine_state: &crate::domain::engine::types::EngineState,
-        registry_engine_labels: &BTreeMap<String, String>,
-        engine_labels: &BTreeMap<String, String>,
-        module_labels: &BTreeMap<String, String>,
-        module_ids: &BTreeSet<String>,
-    ) -> Vec<ConsoleStatusItem> {
-        let mut status_items =
-            Self::build_engine_status_items(engine_state, registry_engine_labels);
-        let known_status_ids = status_items
-            .iter()
-            .map(|item| item.id.clone())
-            .collect::<BTreeSet<_>>();
-        for (engine_id, label) in engine_labels {
-            let status_id = format!("engine:{engine_id}");
-            if !known_status_ids.contains(&status_id) {
-                status_items.push(ConsoleStatusItem {
-                    id: status_id,
-                    label: label.clone(),
-                    kind: "engine".to_string(),
-                    status: ConsoleRuntimeStatus::Stopped,
-                    detail: describe_status(ConsoleRuntimeStatus::Stopped).to_string(),
-                });
-            }
-        }
-        for module_id in module_ids {
-            status_items.push(
-                Self::build_module_status_item(module_id, engine_labels, module_labels).await,
-            );
-        }
-        status_items
-    }
-
-    async fn build_module_status_item(
-        module_id: &str,
-        engine_labels: &BTreeMap<String, String>,
-        module_labels: &BTreeMap<String, String>,
-    ) -> ConsoleStatusItem {
-        let status_text = crate::domain::modules::controller::get_module_status(module_id).await;
-        let status = if status_text == "running" {
-            ConsoleRuntimeStatus::Running
-        } else {
-            ConsoleRuntimeStatus::Stopped
-        };
-
-        ConsoleStatusItem {
-            id: format!("module:{module_id}"),
-            label: module_labels
-                .get(module_id)
-                .cloned()
-                .or_else(|| engine_labels.get(module_id).cloned())
-                .unwrap_or_else(|| ConsoleLabelFormatter::format_module_label(module_id)),
-            kind: "module".to_string(),
-            status,
-            detail: describe_status(status).to_string(),
-        }
-    }
-
-    fn build_engine_status_items(
-        state: &crate::domain::engine::types::EngineState,
-        registry_engine_labels: &BTreeMap<String, String>,
-    ) -> Vec<ConsoleStatusItem> {
-        use crate::domain::engine::types::EngineState;
-
-        match state {
-            EngineState::Idle => vec![ConsoleStatusItem {
-                id: "engine:idle".to_string(),
-                label: "AI Engines".to_string(),
-                kind: "engine".to_string(),
-                status: ConsoleRuntimeStatus::Stopped,
-                detail: "No active engines".to_string(),
-            }],
-            EngineState::Starting { engine_id } => vec![ConsoleStatusItem {
-                id: format!("engine:{}", canonical_engine_id(engine_id)),
-                label: Self::engine_label_for_id(engine_id, registry_engine_labels),
-                kind: "engine".to_string(),
-                status: ConsoleRuntimeStatus::Starting,
-                detail: "Starting…".to_string(),
-            }],
-            EngineState::Swapping { from, to } => vec![ConsoleStatusItem {
-                id: format!("engine:{}", canonical_engine_id(to)),
-                label: Self::engine_label_for_id(to, registry_engine_labels),
-                kind: "engine".to_string(),
-                status: ConsoleRuntimeStatus::Starting,
-                detail: format!("Switching from {from}"),
-            }],
-            EngineState::Error { engine_id, message } => vec![ConsoleStatusItem {
-                id: format!("engine:{}", canonical_engine_id(engine_id)),
-                label: Self::engine_label_for_id(engine_id, registry_engine_labels),
-                kind: "engine".to_string(),
-                status: ConsoleRuntimeStatus::Failed,
-                detail: message.clone(),
-            }],
-            EngineState::Ready { slots } => {
-                let mut items: BTreeMap<String, ConsoleStatusItem> = BTreeMap::new();
-                let mut label_to_id: BTreeMap<String, String> = BTreeMap::new();
-                for slot in slots {
-                    let label_key = Self::normalize_view_label(&slot.engine.name);
-                    let id = label_to_id
-                        .entry(label_key)
-                        .or_insert_with(|| canonical_engine_id(&slot.engine.id))
-                        .clone();
-                    let detail = ConsoleLabelFormatter::format_capability(slot.capability);
-                    items
-                        .entry(id.clone())
-                        .and_modify(|item| {
-                            if !item.detail.split(", ").any(|part| part == detail) {
-                                item.detail.push_str(", ");
-                                item.detail.push_str(&detail);
-                            }
-                        })
-                        .or_insert_with(|| ConsoleStatusItem {
-                            id: format!("engine:{id}"),
-                            label: slot.engine.name.clone(),
-                            kind: "engine".to_string(),
-                            status: ConsoleRuntimeStatus::Running,
-                            detail,
-                        });
-                }
-                items.into_values().collect()
-            }
-        }
-    }
-
-    fn engine_label_for_id(
-        engine_id: &str,
-        registry_engine_labels: &BTreeMap<String, String>,
-    ) -> String {
-        registry_engine_labels
-            .get(&canonical_engine_id(engine_id))
-            .cloned()
-            .unwrap_or_else(|| ConsoleLabelFormatter::format_module_label(engine_id))
-    }
-}
-
 fn open_folder(path: &std::path::Path) -> std::io::Result<()> {
     #[cfg(target_os = "windows")]
     {
@@ -635,47 +166,16 @@ fn open_folder(path: &std::path::Path) -> std::io::Result<()> {
     }
 }
 
-impl ConsoleLabelFormatter {
-    fn format_module_label(module_id: &str) -> String {
-        module_id
-            .trim_start_matches("axelate-")
-            .split('-')
-            .filter(|part| !part.is_empty())
-            .map(Self::format_label_part)
-            .collect::<Vec<_>>()
-            .join(" ")
-    }
-
-    fn format_capability(capability: crate::domain::engine::types::Capability) -> String {
-        match capability {
-            crate::domain::engine::types::Capability::Text => "text".to_string(),
-            crate::domain::engine::types::Capability::Image => "image".to_string(),
-            crate::domain::engine::types::Capability::Vision => "vision".to_string(),
-        }
-    }
-
-    fn format_label_part(part: &str) -> String {
-        let mut chars = part.chars();
-        match chars.next() {
-            Some(first) => {
-                let mut label = first.to_uppercase().to_string();
-                label.push_str(chars.as_str());
-                label
-            }
-            None => String::new(),
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     #![allow(clippy::unwrap_used)]
 
+    use super::super::console_overview::{ConsoleLabelFormatter, ConsoleOverviewBuilder};
     use super::{
-        ConsoleLabelFormatter, ConsoleOverviewBuilder, ConsoleRuntimeStatus,
-        canonical_console_view_id, canonical_engine_id, clear_all_console_log_files,
+        ConsoleRuntimeStatus, canonical_console_view_id, clear_all_console_log_files,
         clear_console_log_target, resolve_console_log_target,
     };
+    use crate::domain::engine::manager::canonical_engine_id;
     use crate::domain::engine::types::EngineDefinition;
     use crate::domain::engine::types::{Capability, EngineState, EngineStatus, SlotStatus};
     use crate::infrastructure::logging::LogEntry;
@@ -800,6 +300,13 @@ mod tests {
     }
 
     #[test]
+    fn rejects_unknown_console_log_targets() {
+        let error = resolve_console_log_target("unknown").unwrap_err();
+
+        assert!(error.to_string().contains("invalid console view id"));
+    }
+
+    #[test]
     fn clears_general_and_nested_console_logs_only() {
         let temp = tempfile::tempdir().unwrap();
         let root = temp.path();
@@ -834,6 +341,39 @@ mod tests {
         clear_console_log_target("module:target", &target).unwrap();
 
         assert_eq!(fs::read_to_string(text_file).unwrap(), "keep");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn clear_console_log_files_skips_symlinked_entries() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("root");
+        let external = temp.path().join("external.log");
+        let linked_log = root.join("linked.log");
+        let regular_log = root.join("regular.log");
+        fs::create_dir_all(&root).unwrap();
+        fs::write(&external, "external").unwrap();
+        fs::write(&regular_log, "regular").unwrap();
+        std::os::unix::fs::symlink(&external, &linked_log).unwrap();
+
+        clear_all_console_log_files(&root).unwrap();
+
+        assert_eq!(fs::read_to_string(external).unwrap(), "external");
+        assert_eq!(fs::read_to_string(regular_log).unwrap(), "");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn rejects_symlinked_console_log_roots() {
+        let temp = tempfile::tempdir().unwrap();
+        let root = temp.path().join("root");
+        let symlink_root = temp.path().join("linked-root");
+        fs::create_dir_all(&root).unwrap();
+        std::os::unix::fs::symlink(&root, &symlink_root).unwrap();
+
+        let error = clear_all_console_log_files(&symlink_root).unwrap_err();
+
+        assert!(error.to_string().contains("cannot be a symlink"));
     }
 
     #[tokio::test]
@@ -892,6 +432,51 @@ mod tests {
             ConsoleRuntimeStatus::Running
         ));
         assert_eq!(engine_status.detail, "image, vision");
+    }
+
+    #[tokio::test]
+    async fn console_overview_deduplicates_running_engines_by_id_not_label() {
+        let shared_name = "Local Engine";
+        let state = EngineState::Ready {
+            slots: vec![
+                SlotStatus {
+                    capability: Capability::Text,
+                    engine: EngineStatus {
+                        id: "engine-a".to_string(),
+                        name: shared_name.to_string(),
+                        capabilities: vec![Capability::Text],
+                        endpoint: "http://127.0.0.1:8001".to_string(),
+                        healthy: true,
+                    },
+                },
+                SlotStatus {
+                    capability: Capability::Image,
+                    engine: EngineStatus {
+                        id: "engine-b".to_string(),
+                        name: shared_name.to_string(),
+                        capabilities: vec![Capability::Image],
+                        endpoint: "http://127.0.0.1:8002".to_string(),
+                        healthy: true,
+                    },
+                },
+            ],
+        };
+
+        let overview = ConsoleOverviewBuilder::build(
+            &state,
+            &Vec::new(),
+            &UIState::default(),
+            &Vec::<LogEntry>::new(),
+        )
+        .await;
+        let status_ids = overview
+            .status_items
+            .iter()
+            .map(|item| item.id.as_str())
+            .collect::<Vec<_>>();
+
+        assert!(status_ids.contains(&"engine:engine-a"));
+        assert!(status_ids.contains(&"engine:engine-b"));
     }
 
     #[tokio::test]

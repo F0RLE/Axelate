@@ -23,6 +23,7 @@ type AISettingsRenderContext = {
     savedModel: string;
     apiBaseUrl: string;
     showApiEndpointSelector: boolean;
+    usesCustomProviderKey: boolean;
     showModelStats: boolean;
     showCustomModelComposer: boolean;
     translate: TranslateFunc;
@@ -105,7 +106,7 @@ export class AISettingsContentRenderer {
     }
 
     private _buildMarkup(context: AISettingsRenderContext): string {
-        if (context.viewPolicy.isCleanApp(context.appId)) {
+        if (context.viewPolicy.isCleanApp(context.app)) {
             return this._buildCleanAppMarkup(context);
         }
 
@@ -128,15 +129,26 @@ export class AISettingsContentRenderer {
     private _buildProviderMarkup(context: AISettingsRenderContext): string {
         const { appId, savedModel, translate, viewPolicy } = context;
         const models = sortModelsByPrice(context.models);
-        const apiKeyLabel = context.showApiEndpointSelector
+        const apiKeyLabel = context.usesCustomProviderKey
             ? translate('ui.settings.api_key_label_custom', 'Custom provider API key')
             : translate('ui.settings.api_key_label_openrouter', 'OpenRouter API key');
-        const apiKeyNote = context.showApiEndpointSelector
+        const apiKeyNote = context.usesCustomProviderKey
             ? translate('ui.settings.keys_encrypted_custom', 'Uses a custom provider key.')
             : translate(
                   'ui.settings.keys_encrypted_openrouter',
                   'Built-in cloud cards use OpenRouter.',
               );
+        const apiKeyLinkTitle = translate(
+            'ui.settings.manage_openrouter_keys_title',
+            'Manage your OpenRouter API keys',
+        );
+        const apiKeyTitle = context.usesCustomProviderKey
+            ? `<span>${apiKeyLabel}</span>`
+            : `
+                                    <a href="#" id="${appId}-api-link" class="api-key-link" title="${apiKeyLinkTitle}">
+                                        <span>${apiKeyLabel}</span>
+                                    </a>
+                                `;
 
         return `
             <div class="ai-module-config universal-api-theme" data-provider-id="${appId}">
@@ -144,11 +156,7 @@ export class AISettingsContentRenderer {
                     <section class="ai-key-section centered" aria-labelledby="${appId}-api-title">
                         <div class="ai-content-panel">
                             <div class="settings-card-header-center">
-                                <h3 id="${appId}-api-title">🔑 
-                                    <a href="#" id="${appId}-api-link" class="api-key-link" title="Manage your OpenRouter API Keys">
-                                        <span>${apiKeyLabel}</span>
-                                    </a>
-                                </h3>
+                                <h3 id="${appId}-api-title">🔑 ${apiKeyTitle}</h3>
                             </div>
                             <div class="ai-key-input-row">
                                 <input id="${appId}-api-key-input" class="ai-key-editor is-masked" type="text" placeholder="${translate('ui.settings.enter_key_placeholder', 'Enter your API key here')}" data-i18n-placeholder="ui.settings.enter_key_placeholder" spellcheck="false" autocomplete="off" />
@@ -184,7 +192,7 @@ export class AISettingsContentRenderer {
                         translate,
                         context.supportsThinking,
                         context.thinkingLevel,
-                        context.viewPolicy.shouldForceThinkingVisibility(appId),
+                        context.viewPolicy.shouldForceThinkingVisibility(context.app),
                     )}
                     ${context.supportsInternetAccess ? renderInternetAccessSection(appId, translate, context.internetAccessEnabled) : ''}
 

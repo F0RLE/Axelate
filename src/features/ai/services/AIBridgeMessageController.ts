@@ -50,6 +50,10 @@ export class AIBridgeMessageController {
             return this._handleMissingProvider(source);
         }
 
+        if (this._deps.getContext() === null) {
+            return this._handleMissingContext();
+        }
+
         await this._deps.manager.refreshActiveApiKey();
 
         if (this._deps.manager.apiKey === null && this._deps.manager.isActive() === false) {
@@ -103,7 +107,7 @@ export class AIBridgeMessageController {
             const requestOptions = this._deps.providerPolicy.buildRequestOptions({
                 hasApiKey: this._deps.manager.apiKey !== null,
                 maxOutputTokens: Math.min(this._deps.manager.maxOutputTokens ?? 320, 420),
-                thinkingLevel: 'off',
+                thinkingLevel: this._usesOpenRouterRequestOptions(providerId) ? 'off' : undefined,
                 webSearchEnabled: false,
             });
             const request = constructChatRequest(
@@ -150,6 +154,11 @@ export class AIBridgeMessageController {
             ok: false,
             error: this._deps.translate('ui.ai.missing_api_key', 'API key missing'),
         };
+    }
+
+    private _handleMissingContext(): IBridgeResponse {
+        const msg = this._deps.translate('ui.ai.bridge_not_ready', 'AI bridge is not ready');
+        return { ok: false, error: msg };
     }
 
     private async _sendImageMessage(
@@ -238,11 +247,16 @@ export class AIBridgeMessageController {
             return this._handleMissingModel();
         }
         const cloudApiBaseUrl = this._deps.manager.getProviderBaseUrl(providerId);
+        const usesOpenRouterRequestOptions = this._usesOpenRouterRequestOptions(providerId);
         const requestOptions = this._deps.providerPolicy.buildRequestOptions({
             hasApiKey: this._deps.manager.apiKey !== null,
             maxOutputTokens: this._deps.manager.maxOutputTokens,
-            thinkingLevel: context?.aiSettings.getThinkingLevel(providerId),
-            webSearchEnabled: context?.aiSettings.getInternetAccessEnabled(providerId),
+            thinkingLevel: usesOpenRouterRequestOptions
+                ? context?.aiSettings.getThinkingLevel(providerId)
+                : undefined,
+            webSearchEnabled:
+                usesOpenRouterRequestOptions &&
+                context?.aiSettings.getInternetAccessEnabled(providerId),
         });
         const request = constructChatRequest(requestHistory, newMessage, requestAttachments, {
             providerId: backendProviderId,
@@ -308,6 +322,10 @@ export class AIBridgeMessageController {
         }
 
         return this._deps.providerPolicy.isLocalTextProvider(providerId) ? 'default' : null;
+    }
+
+    private _usesOpenRouterRequestOptions(providerId: string): boolean {
+        return providerId !== CUSTOM_TEXT_PROVIDER_ID;
     }
 
     private _withModelContext(

@@ -8,6 +8,46 @@ import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import { CUSTOM_TEXT_PROVIDER_ID } from '@/shared/utils/customProviderSupport';
 import type { AIProviderManagerContext } from './AIBridgeContext';
 
+const cloudProviderPolicy = {
+    isCloudProvider: true,
+    isCustomProvider: false,
+    isCleanApp: false,
+    secretService: 'cloud_api_key',
+    keyProviderId: 'cloud',
+    keyProviderUrl: 'https://openrouter.ai/settings/keys',
+    usesCustomProviderKey: false,
+    showApiEndpointSelector: false,
+    showCustomModelComposer: false,
+    showModelStats: true,
+    supportsInternetAccess: true,
+    supportsThinking: true,
+    imageOnly: false,
+};
+
+const customTextProviderPolicy = {
+    ...cloudProviderPolicy,
+    isCustomProvider: true,
+    secretService: 'custom_text_api_key',
+    keyProviderId: CUSTOM_TEXT_PROVIDER_ID,
+    keyProviderUrl: null,
+    usesCustomProviderKey: true,
+    showApiEndpointSelector: true,
+    showCustomModelComposer: true,
+    showModelStats: false,
+    supportsInternetAccess: false,
+    supportsThinking: false,
+};
+
+const localProviderPolicy = {
+    ...cloudProviderPolicy,
+    isCloudProvider: false,
+    secretService: null,
+    keyProviderId: null,
+    keyProviderUrl: null,
+    supportsInternetAccess: false,
+    supportsThinking: false,
+};
+
 // Mock catalogHelpers used internally
 vi.mock('@/features/ai/utils/catalogHelpers', () => ({
     getModelData: vi.fn(() => null),
@@ -31,7 +71,19 @@ function createMockCore(
             hasSecureKey: vi.fn(hasKeyFn),
         },
         catalog: {
-            getCatalog: vi.fn().mockReturnValue({ ai: [] }),
+            getCatalog: vi.fn().mockReturnValue({
+                ai: [
+                    { id: 'gpt', capability: 'text', providerPolicy: cloudProviderPolicy },
+                    { id: 'gemini', capability: 'text', providerPolicy: cloudProviderPolicy },
+                    { id: 'local', capability: 'text', providerPolicy: localProviderPolicy },
+                    { id: 'llamacpp', capability: 'text', providerPolicy: localProviderPolicy },
+                    {
+                        id: CUSTOM_TEXT_PROVIDER_ID,
+                        capability: 'text',
+                        providerPolicy: customTextProviderPolicy,
+                    },
+                ],
+            }),
         },
         aiSettings: {
             setSelectedAIModel: vi.fn(),
@@ -66,7 +118,7 @@ describe('AIProviderManager', () => {
     describe('init', () => {
         it('should generate and save a new session ID if none exists', async () => {
             const mockCore = createMockCore(() => Promise.resolve(null));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.init();
 
@@ -79,7 +131,7 @@ describe('AIProviderManager', () => {
 
         it('should restore existing session ID without saving', async () => {
             const mockCore = createMockCore(() => Promise.resolve('existing-session-abc'));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.init();
 
@@ -89,7 +141,7 @@ describe('AIProviderManager', () => {
 
         it('should generate session ID when secure storage is empty', async () => {
             const mockCore = createMockCore(() => Promise.resolve(null));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.init();
 
@@ -102,7 +154,7 @@ describe('AIProviderManager', () => {
 
         it('should generate session ID when secure read fails', async () => {
             const mockCore = createMockCore(() => Promise.reject(new Error('secure read failed')));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.init();
 
@@ -123,7 +175,7 @@ describe('AIProviderManager', () => {
             vi.mocked(mockCore.tauriProvider.saveSecureKey ?? vi.fn()).mockRejectedValueOnce(
                 new Error('secure unavailable'),
             );
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await expect(manager.init()).resolves.toBeUndefined();
 
@@ -143,7 +195,7 @@ describe('AIProviderManager', () => {
     describe('startProvider', () => {
         it('should return true immediately if same provider already active', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
             await manager.startProvider('gemini');
 
             const result = await manager.startProvider('gemini');
@@ -157,7 +209,7 @@ describe('AIProviderManager', () => {
                 () => Promise.resolve(hasKey ? 'sk-key' : null),
                 () => Promise.resolve(hasKey),
             );
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
             await manager.startProvider('gemini');
 
             hasKey = false;
@@ -171,7 +223,7 @@ describe('AIProviderManager', () => {
 
         it('should stop previous provider when switching', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.startProvider('gemini');
             await manager.startProvider('gpt');
@@ -181,7 +233,7 @@ describe('AIProviderManager', () => {
 
         it('should return false if API key is empty for non-local provider', async () => {
             const mockCore = createMockCore(() => Promise.resolve(''));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             const result = await manager.startProvider('gemini');
             expect(result).toBe(false);
@@ -191,7 +243,7 @@ describe('AIProviderManager', () => {
 
         it('should succeed for local provider without a key', async () => {
             const mockCore = createMockCore(() => Promise.resolve(''));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             const result = await manager.startProvider('local');
             expect(result).toBe(true);
@@ -201,7 +253,7 @@ describe('AIProviderManager', () => {
             const mockCore = createMockCore(() =>
                 Promise.reject(new Error('Secure storage crash')),
             );
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             const result = await manager.startProvider('gemini');
             expect(result).toBe(false);
@@ -209,7 +261,7 @@ describe('AIProviderManager', () => {
 
         it('should persist the resolved model via aiSettings', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-test'));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.startProvider('gemini');
 
@@ -224,7 +276,7 @@ describe('AIProviderManager', () => {
     describe('stopProvider', () => {
         it('should clear state when active', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
             await manager.startProvider('gemini');
 
             manager.stopProvider();
@@ -248,7 +300,7 @@ describe('AIProviderManager', () => {
 
         it('should return true for local engine without key', async () => {
             const mockCore = createMockCore(() => Promise.resolve(''));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
             await manager.startProvider('llamacpp');
 
             expect(manager.isActive()).toBe(true);
@@ -256,7 +308,7 @@ describe('AIProviderManager', () => {
 
         it('should treat custom providers as cloud providers requiring their own key', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             const result = await manager.startProvider(CUSTOM_TEXT_PROVIDER_ID);
 
@@ -274,7 +326,7 @@ describe('AIProviderManager', () => {
                 () => Promise.resolve('original-key'),
                 () => Promise.resolve(hasKey),
             );
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
             await manager.startProvider('gemini');
 
             hasKey = false;
@@ -294,7 +346,7 @@ describe('AIProviderManager', () => {
     describe('_saveSecureVal (via init)', () => {
         it('should save session ID when core is present and no session exists', async () => {
             const mockCore = createMockCore(() => Promise.resolve(null));
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.init();
 
@@ -330,7 +382,7 @@ describe('AIProviderManager', () => {
                     { id: 'gemini', name: 'Google Gemini' },
                 ],
             });
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             expect(manager.getProviderDisplayName('gpt')).toBe('OpenAI GPT');
             expect(manager.getProviderDisplayName('gemini')).toBe('Google Gemini');
@@ -360,7 +412,7 @@ describe('AIProviderManager', () => {
                     },
                 ],
             });
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             expect(manager.getProviderBaseUrl('gpt')).toBe('https://openrouter.ai/api/v1');
             expect(manager.getProviderBaseUrl(CUSTOM_TEXT_PROVIDER_ID)).toBe(
@@ -374,7 +426,7 @@ describe('AIProviderManager', () => {
         it('should use persisted model from aiSettings when available (L143)', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
             vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('custom-model');
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.startProvider('gemini');
 
@@ -389,27 +441,23 @@ describe('AIProviderManager', () => {
             vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue(
                 null as unknown as string,
             );
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.startProvider('gemini');
 
             expect(manager.model).toBe('catalog-best-model');
         });
 
-        it('should return null from _getPersistedModel when core is not set (L143 true branch)', async () => {
-            // No setCore() called — _core is null → _getPersistedModel returns null
-            // startProvider('local') resolves with fallback model from _getDefaultModel
-            //  'local' provider: _resolveApiKey returns '' (no core), isLocal=true → proceeds
+        it('should fail closed when core is not set', async () => {
             const result = await manager.startProvider('local');
-            expect(result).toBe(true);
-            // Model comes from _getDefaultModel since _getPersistedModel returned null
-            expect(manager.model).toBe('default');
+            expect(result).toBe(false);
+            expect(manager.model).toBe('');
         });
 
         it('should ignore empty persisted local models and fall back to a non-empty default', async () => {
             const mockCore = createMockCore(() => Promise.resolve(''));
             vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('');
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             const result = await manager.startProvider('llamacpp');
 
@@ -417,16 +465,17 @@ describe('AIProviderManager', () => {
             expect(manager.model).toBe('default');
         });
 
-        it('should not invent a cloud model when catalog and persisted settings are empty', async () => {
+        it('should deny providers without backend policy', async () => {
             const mockCore = createMockCore(() => Promise.resolve('sk-key'));
+            vi.mocked(mockCore.catalog.getCatalog).mockReturnValue({ ai: [] });
             vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockReturnValue('');
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             const result = await manager.startProvider('gemini');
 
-            expect(result).toBe(true);
+            expect(result).toBe(false);
             expect(manager.model).toBe('');
-            expect(mockCore.aiSettings.setSelectedAIModel).toHaveBeenCalledWith('gemini', '');
+            expect(mockCore.aiSettings.setSelectedAIModel).not.toHaveBeenCalled();
         });
 
         it('should reflect model changes from settings without restarting the provider', async () => {
@@ -435,7 +484,7 @@ describe('AIProviderManager', () => {
             vi.mocked(mockCore.aiSettings.getSelectedAIModel).mockImplementation(
                 () => selectedModel,
             );
-            manager.setCore(mockCore);
+            manager.setContext(mockCore);
 
             await manager.startProvider('gemini');
             expect(manager.model).toBe('gemini-3.1-pro');

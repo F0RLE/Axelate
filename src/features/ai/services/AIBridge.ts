@@ -18,6 +18,7 @@ import type { AIBridgeContext } from './AIBridgeContext';
 import { AIBridgeRuntime } from './AIBridgeRuntime';
 import { AIBridgeInactivityController } from './AIBridgeInactivityController';
 import { AIBridgeMessageController } from './AIBridgeMessageController';
+import { AI_BRIDGE_INACTIVITY_TIMEOUT_MS } from './AIBridgeConfig';
 
 export type { MessageSource, MessageHandler, IChunkHandler } from '../types/aiTypes';
 
@@ -33,7 +34,6 @@ export class AIBridge implements IAIBridge {
     private readonly _unlisteners: (() => void)[] = [];
     private readonly _localContextWindows = new Map<string, number>();
     private _initialized = false;
-    private readonly INACTIVITY_TIMEOUT_MS = 10 * 60 * 1000; // 10 minutes
     private readonly _events = new AIBridgeEvents();
     private readonly _transport: IChatTransport;
     private readonly _manager: AIProviderManager;
@@ -51,7 +51,7 @@ export class AIBridge implements IAIBridge {
         this._engineStatus = new EngineStatusService(this._tracer);
         this._runtime = new AIBridgeRuntime(this._tracer);
         this._inactivityController = new AIBridgeInactivityController(
-            this.INACTIVITY_TIMEOUT_MS,
+            AI_BRIDGE_INACTIVITY_TIMEOUT_MS,
             this._tracer,
             () => {
                 this.stopProvider();
@@ -88,10 +88,6 @@ export class AIBridge implements IAIBridge {
         this._engineStatus.setContext(context);
     }
 
-    public setCore(context: AIBridgeContext): void {
-        this.setContext(context);
-    }
-
     /**
      * Initializes the bridge singleton and registries.
      */
@@ -102,8 +98,11 @@ export class AIBridge implements IAIBridge {
         }
 
         if (this._context === null) {
-            this._tracer.error('[AIBridge] Initialization aborted: Core dependency is missing');
-            return;
+            const error = new Error(
+                '[AIBridge] Initialization aborted: context dependency is missing',
+            );
+            this._tracer.error(error.message);
+            throw error;
         }
 
         const context = this._context;
@@ -132,6 +131,7 @@ export class AIBridge implements IAIBridge {
         } catch (error: unknown) {
             this._tracer.error('[AIBridge] Critical IPC initialization failure:', error);
             this._cleanupTransportState();
+            throw error;
         }
     }
 

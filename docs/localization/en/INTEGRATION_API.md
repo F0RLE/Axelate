@@ -1,9 +1,14 @@
 # Integration API
 
-This guide describes the current versioned contract external integrations use to
-control Axelate. The contract is language-neutral: every integration talks to the
-launcher through a local HTTP API. Language clients can wrap this contract later,
-but the HTTP API is the source of truth.
+This guide describes the current versioned contract launcher-managed
+integrations use to talk to Axelate. The contract is language-neutral: every
+integration talks to the launcher through a local HTTP API. Language clients can
+wrap this contract later, but the HTTP API is the source of truth.
+
+This API is also the base for Agent Control. Module-scoped integration tokens
+remain conservative. Trusted local agent profiles use separate launcher-wide
+tokens with scopes, audit logging, and approval requests for risky work. See
+[Agent Control](AGENT_CONTROL.md) for the agent-facing contract.
 
 For scaffolding, validation, and examples, start with
 [Integration Development](INTEGRATION_DEVELOPMENT.md).
@@ -33,6 +38,16 @@ variables:
 Standalone tools that are not launched by Axelate are not the primary public
 contract yet. They should use a launcher-managed integration flow instead of
 persisting or guessing local API credentials.
+
+External agents should not scrape the desktop UI or read Axelate data files
+directly. The supported path is a launcher-issued agent profile token and
+documented `/v1` endpoints.
+
+For local development and explicit agent testing, Axelate also accepts
+`AXELATE_AGENT_API_TOKEN` as a launcher-wide bearer token when the launcher
+process is started with that environment variable. Use a high-entropy temporary
+value and do not persist it in the repository. Normal desktop usage should create
+tokens from Settings instead.
 
 Script integrations declare their runtime in `axelate-module.toml`.
 
@@ -66,6 +81,18 @@ Authorization: Bearer <AXELATE_HTTP_API_TOKEN>
 Module-scoped tokens can access shared AI endpoints and only that module's own
 `/v1/modules/{moduleId}/...` routes. They are not durable credentials and should
 not be stored outside the running process.
+
+Agent profile tokens do not reuse module tokens. They have their own scopes:
+
+- `observe`: read health, status, module lists, and sanitized console logs
+- `operate`: open launcher pages, select cards, start, stop, restart, repair, and
+  run AI requests
+- `configure`: update settings after user approval where needed
+- `draft-create`: create integration draft folders without installing or running
+  them
+- `full-access`: user-granted local override for advanced workflows
+
+Secrets stay out of agent responses.
 
 ## Client Rules
 
@@ -179,13 +206,70 @@ settings = requests.get(
 
 Does not require authentication. Returns whether the local API server is alive.
 
+### Agent Control
+
+The current `/v1/modules` and `/v1/ai` endpoints are used by both
+launcher-managed integrations and trusted local agents. Launcher-wide agent
+state uses an agent profile token, not a module-scoped integration token.
+
+`GET /v1/agent/state`
+
+Returns a safer launcher snapshot:
+
+- selected module cards
+- installed module summaries without module paths or settings
+- provider/model inventory without secrets or provider endpoints
+- current engine state
+
+Module-scoped integration tokens cannot call this route.
+
+`GET /v1/agent/logs?viewId=engine:llama-cpp&since=0&limit=200`
+
+Returns recent sanitized console logs from memory for one explicit console view.
+`viewId` is required for useful log output. If it is omitted, the route returns
+an empty `logs` array instead of a combined stream. This keeps agent access from
+accidentally mixing unrelated debug or info logs. `limit` defaults to 200 and is
+capped at 1000. Raw log files are not exposed through this route.
+
+Module-scoped integration tokens cannot call this route.
+
+`GET /v1/agent/approvals`
+
+Returns pending and recent approval requests.
+
+`POST /v1/agent/approval-requests`
+
+Creates a pending approval request for dangerous work. The request should include
+an action, target, dry-run or diff text, and risk label. It returns `202
+Accepted`; it does not run the requested action.
+
+`POST /v1/launcher/open-page`
+
+Requires `operate`. Opens a launcher page by id.
+
+`POST /v1/launcher/select-module`
+
+Requires `operate`. Selects a visible card/module for `ai_text`, `ai_image`, or
+`services`.
+
+`POST /v1/integration-drafts`
+
+Requires `draft-create`. Creates a local draft folder with a manifest, README,
+and minimal runtime entry file. It does not install or run the draft.
+
+Mutating operations should stay behind explicit scopes and user approval where
+the action can install code, delete data, expose logs, or change credentials.
+
+For the complete Agent Control contract, see [AGENT_CONTROL.md](AGENT_CONTROL.md).
+
 ### Integrations
 
 `GET /v1/modules`
 
 Returns installed integrations with launcher status, category, install state, and
 metadata. A launcher-wide token can see all installed integrations. A
-module-scoped token only sees the integration that received the token.
+module-scoped token only sees the integration that received the token. Agents
+that need a safer launcher snapshot should use `/v1/agent/state`.
 
 `GET /v1/modules/{moduleId}/status`
 
@@ -217,20 +301,14 @@ platform-specific strings and use path utilities such as `path.join` and
 
 Returns the JSON settings object owned by the integration.
 
-`PUT /v1/modules/{moduleId}/settings`
-
-Replaces the integration settings object.
-
-```json
-{
-    "chatId": "12345",
-    "enabled": true
-}
-```
-
 `PATCH /v1/modules/{moduleId}/settings`
 
 Merges the request JSON object into the existing integration settings object.
+This is the only public write path for module settings. Full replacement through
+`PUT /v1/modules/{moduleId}/settings` is intentionally blocked by the launcher
+because it can erase unknown settings or secret references. Agents also cannot
+write sensitive keys such as tokens, API keys, passwords, or secrets through
+this route.
 
 `POST /v1/modules/{moduleId}/stage`
 
@@ -261,6 +339,13 @@ Stops the running module script.
 `POST /v1/modules/{moduleId}/restart`
 
 Restarts the module script.
+
+`POST /v1/modules/{moduleId}/repair`
+
+Stops the module, rebuilds the launcher-managed dependency environment for
+Python, Node, and Bun modules, then starts the module again. For modules with
+custom lifecycle commands, repair behaves like a controlled restart. It does not
+delete the integration folder, settings, logs, or module runtime data.
 
 ### AI Text
 

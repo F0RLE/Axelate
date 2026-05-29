@@ -39,7 +39,9 @@ pub fn is_running(pid: usize) -> bool {
         // On Unix, kill(pid, 0) is the standard way to check if a process exists.
         // If it returns 0, the process exists.
         // If it returns -1 and errno is EPERM, the process exists but we can't signal it.
+        #[allow(unsafe_code)]
         unsafe {
+            // SAFETY: kill(pid, 0) only checks signal permission/existence and does not send a signal.
             let res = libc::kill(pid as libc::pid_t, 0);
             if res == 0 {
                 return true;
@@ -123,7 +125,9 @@ pub fn kill_orphan(pid: usize) -> Result<String, String> {
 
     #[cfg(not(target_os = "windows"))]
     {
+        #[allow(unsafe_code)]
         unsafe {
+            // SAFETY: PID is rechecked above and SIGKILL is the intended fallback for orphan cleanup.
             if libc::kill(pid as libc::pid_t, libc::SIGKILL) == 0 {
                 Ok(format!("Successfully killed orphan PID {pid}"))
             } else {

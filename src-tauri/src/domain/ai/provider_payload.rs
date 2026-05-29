@@ -177,18 +177,36 @@ pub(super) fn should_attach_web_search(req: &ChatRequest) -> bool {
 pub(super) fn extract_message_text(content: &serde_json::Value) -> String {
     match content {
         serde_json::Value::String(text) => text.clone(),
-        serde_json::Value::Array(parts) => parts
-            .iter()
-            .filter_map(|part| {
-                (part.get("type")?.as_str()? == "text")
-                    .then(|| part.get("text")?.as_str())
-                    .flatten()
-                    .map(ToOwned::to_owned)
-            })
-            .collect::<Vec<_>>()
-            .join("\n"),
+        serde_json::Value::Array(parts) => {
+            let mut text = String::with_capacity(multimodal_text_capacity_hint(parts));
+            for part in parts {
+                let Some(value) = multimodal_text_part(part) else {
+                    continue;
+                };
+                if !text.is_empty() {
+                    text.push('\n');
+                }
+                text.push_str(value);
+            }
+            text
+        }
         _ => String::new(),
     }
+}
+
+fn multimodal_text_capacity_hint(parts: &[serde_json::Value]) -> usize {
+    let text_bytes = parts
+        .iter()
+        .filter_map(multimodal_text_part)
+        .map(str::len)
+        .sum::<usize>();
+    text_bytes.saturating_add(parts.len().saturating_sub(1))
+}
+
+fn multimodal_text_part(part: &serde_json::Value) -> Option<&str> {
+    (part.get("type")?.as_str()? == "text")
+        .then(|| part.get("text")?.as_str())
+        .flatten()
 }
 
 pub(super) fn build_web_search_tool(options: &WebSearchOptions) -> serde_json::Value {

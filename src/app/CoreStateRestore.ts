@@ -3,7 +3,6 @@ import type { CatalogService } from '@/shared/services/CatalogService';
 import type { ModuleSettingsService } from '@/shared/services/modules/ModuleSettingsService';
 import type { AppUI } from '@/shared/shell/AppUI';
 import type { IApp } from '@/shared/types/coreTypes';
-import { appendCustomProviderApps } from '@/shared/utils/customProviderSupport';
 
 type RestoreLogger = Pick<LoggerService, 'warn'>;
 
@@ -86,13 +85,13 @@ function resolveRestoredApp(
         return catalogApp;
     }
 
-    if (!category.startsWith('ai')) {
-        return null;
+    if (isAiCategory(category) && typeof selectedModule.name === 'string') {
+        return selectedModule as IApp;
     }
 
-    return (
-        appendCustomProviderApps(catalog.getCatalog().ai).find(
-            (app) => app.id === selectedModule.id,
-        ) ?? null
-    );
+    return null;
+}
+
+function isAiCategory(category: string): boolean {
+    return category === 'ai_text' || category === 'ai_image';
 }

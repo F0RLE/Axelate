@@ -2,11 +2,22 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const initRenderer = vi.fn();
 const destroyRenderer = vi.fn();
+const initAgentRenderer = vi.fn();
+const destroyAgentRenderer = vi.fn();
+const refreshAgentRenderer = vi.fn();
 
 vi.mock('./GeneralSettingsRenderer', () => ({
     GeneralSettingsRenderer: class {
         public init = initRenderer;
         public destroy = destroyRenderer;
+    },
+}));
+
+vi.mock('./AgentControlSettingsRenderer', () => ({
+    AgentControlSettingsRenderer: class {
+        public init = initAgentRenderer;
+        public destroy = destroyAgentRenderer;
+        public refresh = refreshAgentRenderer;
     },
 }));
 
@@ -27,6 +38,9 @@ describe('SettingsUI page lifecycle', () => {
     beforeEach(() => {
         initRenderer.mockReset();
         destroyRenderer.mockReset();
+        initAgentRenderer.mockReset();
+        destroyAgentRenderer.mockReset();
+        refreshAgentRenderer.mockReset();
         document.body.innerHTML = '';
         (
             globalThis as unknown as {
@@ -41,6 +55,7 @@ describe('SettingsUI page lifecycle', () => {
         settingsUI = null;
         document.body.innerHTML = '';
         vi.clearAllMocks();
+        vi.restoreAllMocks();
     });
 
     function createSettingsUI(): SettingsUI {
@@ -50,11 +65,15 @@ describe('SettingsUI page lifecycle', () => {
             {} as AISettingsService,
             { t: (_key: string, defaultValue = '') => defaultValue } as unknown as I18nService,
             { applyTranslations: vi.fn() } as unknown as I18nUI,
-            {} as TauriProvider,
+            {
+                writeToClipboard: vi.fn().mockResolvedValue(undefined),
+                listen: vi.fn().mockResolvedValue(vi.fn()),
+            } as unknown as TauriProvider,
             {} as NavigationService,
             {
                 tracer: {
                     info: vi.fn(),
+                    warn: vi.fn(),
                     error: vi.fn(),
                 } as unknown as LoggerService,
                 showToast: (message: string, type?: 'success' | 'error' | 'warning' | 'info') => {
@@ -78,6 +97,43 @@ describe('SettingsUI page lifecycle', () => {
         await ui.init();
 
         expect(initRenderer).toHaveBeenCalledTimes(1);
+        expect(initAgentRenderer).toHaveBeenCalledTimes(1);
+    });
+
+    it('refreshes Agent Control when backend reports agent state changes', async () => {
+        let listener: () => void = () => {
+            throw new Error('Expected Agent Control listener to be registered');
+        };
+        const tauri = {
+            writeToClipboard: vi.fn().mockResolvedValue(undefined),
+            listen: vi.fn().mockImplementation((_event: string, callback: () => void) => {
+                listener = callback;
+                return Promise.resolve(vi.fn());
+            }),
+        } as unknown as TauriProvider;
+        document.body.innerHTML = '<div id="settings-grid"></div>';
+        settingsUI = new SettingsUI(
+            {} as SettingsService,
+            {} as UISettingsService,
+            {} as AISettingsService,
+            { t: (_key: string, defaultValue = '') => defaultValue } as unknown as I18nService,
+            { applyTranslations: vi.fn() } as unknown as I18nUI,
+            tauri,
+            {} as NavigationService,
+            {
+                tracer: {
+                    info: vi.fn(),
+                    warn: vi.fn(),
+                    error: vi.fn(),
+                } as unknown as LoggerService,
+                showToast: vi.fn(),
+            },
+        );
+
+        await settingsUI.init();
+        listener();
+
+        expect(refreshAgentRenderer).toHaveBeenCalledTimes(1);
     });
 
     it('should wait for container insertion without polling loops', async () => {
@@ -93,6 +149,7 @@ describe('SettingsUI page lifecycle', () => {
         await initPromise;
 
         expect(initRenderer).toHaveBeenCalledTimes(1);
+        expect(initAgentRenderer).toHaveBeenCalledTimes(1);
     });
 
     it('should abort pending wait when destroyed before container appears', async () => {
@@ -103,6 +160,43 @@ describe('SettingsUI page lifecycle', () => {
         await initPromise;
 
         expect(initRenderer).not.toHaveBeenCalled();
+        expect(initAgentRenderer).not.toHaveBeenCalled();
         expect(destroyRenderer).toHaveBeenCalledTimes(1);
+        expect(destroyAgentRenderer).toHaveBeenCalledTimes(1);
+    });
+
+    it('should keep jump control geometry in the already zoom-compensated page viewport', async () => {
+        document.documentElement.style.setProperty('--app-zoom', '1.25');
+        document.body.innerHTML = `
+            <div id="page-settings">
+                <button id="settings-section-jump" type="button"></button>
+                <div id="settings-grid"></div>
+                <section class="settings-section"></section>
+                <section class="settings-section"></section>
+            </div>
+        `;
+
+        const page = document.getElementById('page-settings') as HTMLElement;
+        Object.defineProperty(page, 'clientHeight', {
+            configurable: true,
+            value: 800,
+        });
+        Object.defineProperty(page, 'scrollHeight', {
+            configurable: true,
+            value: 1600,
+        });
+        Object.defineProperty(page, 'offsetTop', {
+            configurable: true,
+            value: 0,
+        });
+        vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue({ length: 1 } as never);
+
+        const ui = createSettingsUI();
+
+        await ui.init();
+
+        expect(
+            (document.getElementById('settings-section-jump') as HTMLButtonElement).style.top,
+        ).toBe('752px');
     });
 });

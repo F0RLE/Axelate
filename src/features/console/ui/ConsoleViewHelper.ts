@@ -28,8 +28,12 @@ export class ConsoleViewHelper {
     public createViewButton(view: IConsoleLogView, activeViewId: string): HTMLButtonElement {
         const button = document.createElement('button');
         button.className = 'console-tab';
+        button.type = 'button';
         button.dataset['view'] = view.id;
         button.textContent = view.label;
+        if (view.id === 'agent') {
+            button.classList.add('console-tab--agent');
+        }
         if (view.id === activeViewId) {
             button.classList.add('active');
         }
@@ -40,6 +44,9 @@ export class ConsoleViewHelper {
         const pane = document.createElement('div');
         pane.id = `logs-${view.id}`;
         pane.className = 'logs-pane';
+        if (view.id === 'agent') {
+            pane.classList.add('logs-pane--agent');
+        }
         if (view.id === activeViewId) {
             pane.classList.add('active');
         }

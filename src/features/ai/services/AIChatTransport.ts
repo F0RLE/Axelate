@@ -9,7 +9,6 @@ import type {
 import type { LoggerService } from '@/infrastructure/logging/LoggerService';
 import type { StreamChunkPayload } from '@/shared/types/bindings';
 import type { AITransportContext } from './AIBridgeContext';
-import { isCloudProviderId } from '@/shared/utils/providerSupport';
 
 type AIChatTransportLogger = Pick<LoggerService, 'debug' | 'info' | 'warn' | 'error'>;
 const STALE_REQUEST_CANCEL_TIMEOUT_MS = 750;
@@ -61,10 +60,6 @@ export class AIChatTransport implements IChatTransport {
 
     public setContext(context: AITransportContext): void {
         this._context = context;
-    }
-
-    public setCore(context: AITransportContext): void {
-        this.setContext(context);
     }
 
     public async init(): Promise<void> {
@@ -437,9 +432,56 @@ export class AIChatTransport implements IChatTransport {
     }
 
     private _chatRequestTimeoutMs(request: IChatRequest): number {
-        return isCloudProviderId(request.provider)
-            ? CLOUD_CHAT_REQUEST_TIMEOUT_MS
-            : LOCAL_CHAT_REQUEST_TIMEOUT_MS;
+        const baseUrl = request.cloud_api_base_url?.trim() ?? '';
+        if (baseUrl.length === 0 || this._isLocalChatEndpoint(request)) {
+            return LOCAL_CHAT_REQUEST_TIMEOUT_MS;
+        }
+
+        return CLOUD_CHAT_REQUEST_TIMEOUT_MS;
+    }
+
+    private _isLocalChatEndpoint(request: IChatRequest): boolean {
+        const provider = request.provider.trim().toLowerCase();
+        if (['llamacpp', 'llama-cpp', 'ollama', 'sdcpp', 'comfyui'].includes(provider)) {
+            return true;
+        }
+
+        const baseUrl = request.cloud_api_base_url?.trim();
+        if (baseUrl === undefined || baseUrl === '') {
+            return true;
+        }
+
+        try {
+            const hostname = new URL(baseUrl).hostname.toLowerCase();
+            return this._isLocalHostname(hostname);
+        } catch {
+            return false;
+        }
+    }
+
+    private _isLocalHostname(hostname: string): boolean {
+        const normalizedHostname = hostname.replace(/^\[(.*)\]$/u, '$1');
+        if (
+            normalizedHostname === 'localhost' ||
+            normalizedHostname === '::1' ||
+            normalizedHostname === '0.0.0.0' ||
+            normalizedHostname.endsWith('.local') ||
+            normalizedHostname.startsWith('127.')
+        ) {
+            return true;
+        }
+
+        if (normalizedHostname.startsWith('10.') || normalizedHostname.startsWith('192.168.')) {
+            return true;
+        }
+
+        const match = /^172\.(\d+)\./u.exec(normalizedHostname);
+        if (match?.[1] === undefined) {
+            return false;
+        }
+
+        const secondOctet = Number.parseInt(match[1], 10);
+        return secondOctet >= 16 && secondOctet <= 31;
     }
 
     public destroy(): void {

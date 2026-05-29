@@ -209,6 +209,7 @@ Use these as current truth:
 - [Releases](RELEASES.md)
 - [Current State](CURRENT_STATE.md)
 - [Trust Model](TRUST_MODEL.md)
+- [Agent Control](AGENT_CONTROL.md)
 
 Use these as planning-only documents:
 
@@ -225,7 +226,9 @@ When changing behavior, update docs in the same scope:
   bindings
 - integration runtime behavior: update `INTEGRATION_API`,
   `INTEGRATION_DEVELOPMENT`, and `CUSTOM_INTEGRATIONS`
-- secrets, filesystem, shell, process, token, or permission behavior: update
-  `TRUST_MODEL` and the relevant user/developer guide
+- agent API behavior: update `AGENT_CONTROL`, `INTEGRATION_API`, and
+  `TRUST_MODEL`
+- secrets, filesystem, shell, process, token, or permission behavior outside
+  Agent Control: update `TRUST_MODEL` and the relevant user/developer guide
 - future product direction only: update `VISION` or `ROADMAP`, not current-state
   onboarding docs

@@ -35,7 +35,7 @@ export class AxelateClient {
 
     saveSettings(settings) {
         return this.request(
-            'PUT',
+            'PATCH',
             `/v1/modules/${encodeURIComponent(this.moduleId)}/settings`,
             settings,
         );

@@ -363,7 +363,9 @@ impl<'a> LifecycleExecutor<'a> {
             {
                 let pid = child.id().unwrap_or(0);
                 if pid > 0 {
+                    #[allow(unsafe_code)]
                     unsafe {
+                        // SAFETY: SIGTERM is sent to the registered child PID before falling back to tokio kill.
                         libc::kill(pid as libc::pid_t, libc::SIGTERM);
                     }
                 }

@@ -45,8 +45,14 @@ describe('CoreStateRestore', () => {
         expect(updateModuleCard).toHaveBeenNthCalledWith(4, 'ai_text', textApp);
     });
 
-    it('should restore custom AI providers that only exist in the frontend catalog augmentation', () => {
+    it('should restore custom AI providers from the backend catalog snapshot', () => {
         const updateModuleCard = vi.fn();
+        const customTextApp = {
+            id: CUSTOM_TEXT_PROVIDER_ID,
+            name: 'Custom',
+            type: 'api',
+            capability: 'text',
+        };
 
         restoreSelectedModules({
             tracer: {
@@ -58,20 +64,43 @@ describe('CoreStateRestore', () => {
                 }),
             } as never,
             catalog: {
-                getAppById: () => undefined,
-                getCatalog: () => ({
-                    ai: [{ id: 'gpt', name: 'GPT', type: 'api', capability: 'text' }],
-                    services: [],
-                }),
+                getAppById: (appId: string) =>
+                    appId === CUSTOM_TEXT_PROVIDER_ID ? customTextApp : undefined,
             } as never,
             appUI: {
                 updateModuleCard,
             } as never,
         });
 
-        expect(updateModuleCard).toHaveBeenCalledWith(
-            'ai_text',
-            expect.objectContaining({ id: CUSTOM_TEXT_PROVIDER_ID }),
-        );
+        expect(updateModuleCard).toHaveBeenCalledWith('ai_text', customTextApp);
+    });
+
+    it('should preserve persisted AI selections that are not in the catalog snapshot', () => {
+        const updateModuleCard = vi.fn();
+        const selectedTextApp = {
+            id: 'external-ai-provider',
+            name: 'External Provider',
+            type: 'api',
+            capability: 'text',
+        };
+
+        restoreSelectedModules({
+            tracer: {
+                warn: vi.fn(),
+            },
+            moduleSettings: {
+                getSelectedModules: () => ({
+                    ai_text: selectedTextApp,
+                }),
+            } as never,
+            catalog: {
+                getAppById: () => undefined,
+            } as never,
+            appUI: {
+                updateModuleCard,
+            } as never,
+        });
+
+        expect(updateModuleCard).toHaveBeenCalledWith('ai_text', selectedTextApp);
     });
 });

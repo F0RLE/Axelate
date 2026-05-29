@@ -27,7 +27,7 @@ pub struct ModulePreview {
 pub struct ControlRequest {
     /// Module identifier (optional for global actions)
     pub module_id: Option<String>,
-    /// Control action ("start", "stop", "restart")
+    /// Control action ("start", "stop", "restart", "repair")
     pub action: String,
 }
 

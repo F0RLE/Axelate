@@ -9,6 +9,7 @@ mod downloader_service;
 mod downloader_support;
 mod downloader_transfer;
 mod github_release_selection;
+mod github_release_targets;
 /// Open-Source engine GitHub releases parsing
 pub mod github_releases;
 /// Filesystem watcher for externally changed integrations.

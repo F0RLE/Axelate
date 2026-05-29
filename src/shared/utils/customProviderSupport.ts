@@ -1,5 +1,3 @@
-import type { IApp } from '@/shared/types/coreTypes';
-
 export const CUSTOM_TEXT_PROVIDER_ID = 'custom-text';
 export const CUSTOM_IMAGE_PROVIDER_ID = 'custom-image';
 
@@ -54,35 +52,4 @@ export function resolveCustomProviderBackendId(providerId: string): string {
 
 export function getCustomProviderDisplayName(providerId: string): string | null {
     return CUSTOM_PROVIDER_SPECS.find((provider) => provider.id === providerId)?.name ?? null;
-}
-
-export function appendCustomProviderApps(apps: IApp[]): IApp[] {
-    const byId = new Map(apps.map((app) => [app.id, app]));
-
-    CUSTOM_PROVIDER_SPECS.forEach((provider) => {
-        if (byId.has(provider.id)) {
-            return;
-        }
-
-        byId.set(provider.id, {
-            id: provider.id,
-            name: provider.name,
-            nameKey: provider.nameKey,
-            desc: provider.desc,
-            descKey: provider.descKey,
-            icon: provider.icon,
-            category: 'ai',
-            type: 'api',
-            capability: provider.capability,
-            installed: true,
-            apiProviderData: {
-                id: provider.id,
-                type: 'api',
-                baseUrl: 'https://openrouter.ai/api/v1',
-                models: [],
-            },
-        });
-    });
-
-    return Array.from(byId.values());
 }
