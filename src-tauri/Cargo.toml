@@ -84,7 +84,7 @@ base64  = "0.22.1"
 hex     = "0.4.3"
 
 # --- AI & Logic Utilities ---
-tiktoken-rs = "0.11.0" # Token counting
+tiktoken-rs = "0.12.0" # Token counting
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json", "time"] }
 tracing-appender = "0.2.5"
