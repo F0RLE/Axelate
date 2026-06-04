@@ -91,11 +91,11 @@ tracing-appender = "0.2.5"
 chrono      = { version = "0.4.44", features = ["serde"] }
 zip         = "8.6.0"
 tempfile    = "3.27.0"
-log         = "0.4.30"
+log         = "0.4.31"
 # env_logger = "0.11.8" - Replaced by tracing
 dashmap = "6.2.1"
 uuid = { version = "1.23.2", features = ["v4", "serde"] }
-bitflags = { version = "2.11.1", features = ["serde"] }
+bitflags = { version = "2.12.1", features = ["serde"] }
 async-trait = "0.1.89"
 flate2 = "1.1.9"
 tar = "0.4.46"
