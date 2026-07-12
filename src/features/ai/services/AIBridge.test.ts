@@ -445,8 +445,7 @@ describe('AIBridge', () => {
                 ([command]) => command === 'send_chat_message',
             );
             const payload = sendChatCall?.[1] as
-                | { request?: { web_search?: { enabled?: boolean } } }
-                | undefined;
+                { request?: { web_search?: { enabled?: boolean } } } | undefined;
 
             expect(payload?.request?.web_search).toEqual({ enabled: true });
         });

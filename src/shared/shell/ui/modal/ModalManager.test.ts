@@ -448,8 +448,7 @@ describe('ModalManager lifecycle', () => {
         modalManager.updateSelection('svc-b');
 
         const reopen = vi.mocked(navigation.pushBackAction).mock.calls[0]?.[2] as
-            | (() => void)
-            | undefined;
+            (() => void) | undefined;
         expect(reopen).toBeTypeOf('function');
 
         modalManager.closeAppSelection();

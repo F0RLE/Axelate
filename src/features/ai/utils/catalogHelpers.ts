@@ -169,8 +169,7 @@ export function resolveProviderModel(
 ): string {
     const providerApp = catalog.find((a) => a.id === providerId);
     const data = providerApp?.apiProviderData as
-        | { models?: Record<string, IProviderModelEntry> }
-        | undefined;
+        { models?: Record<string, IProviderModelEntry> } | undefined;
     const models: Record<string, IProviderModelEntry> = data?.models ?? {};
 
     // 1. Saved model key from state

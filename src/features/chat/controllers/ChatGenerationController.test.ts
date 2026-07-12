@@ -39,8 +39,7 @@ describe('ChatGenerationController', () => {
         vi.useFakeTimers();
 
         let resolvePreview:
-            | ((value: { data_url: string; updated_at_ms: number }) => void)
-            | undefined;
+            ((value: { data_url: string; updated_at_ms: number }) => void) | undefined;
         aiBridge.getImageGenerationPreview.mockImplementation(
             () =>
                 new Promise((resolve) => {

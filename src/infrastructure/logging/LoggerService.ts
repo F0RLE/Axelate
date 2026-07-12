@@ -33,8 +33,7 @@ export class LoggerService {
         null;
     /** Optional early-boot transport used before the main transport is wired. */
     private _fallbackTransport:
-        | ((logs: { level: string; message: string }[]) => Promise<void>)
-        | null = null;
+        ((logs: { level: string; message: string }[]) => Promise<void>) | null = null;
 
     constructor() {
         // We defer capturing original methods until init() so that any environment patches
