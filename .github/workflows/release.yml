@@ -31,7 +31,7 @@ jobs:
 
     steps:
       - name: Checkout repository
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@9c091bb21b7c1c1d1991bb908d89e4e9dddfe3e0 # v6
         with:
           persist-credentials: false
           fetch-depth: 0
@@ -72,7 +72,7 @@ jobs:
           toolchain: 1.95.0
 
       - name: Rust Cache
-        uses: Swatinem/rust-cache@65012b490220f477f20ab979e35ae732e6de4e68 # node24
+        uses: Swatinem/rust-cache@baf1a810e98b6a3001d0d7234864ed75a17c42fb # node24
         continue-on-error: true
         with:
           workspaces: "src-tauri -> target"
@@ -97,7 +97,7 @@ jobs:
           cargo audit
 
       - name: Build and publish with official Tauri action
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # action-v0.6.2
+        uses: tauri-apps/tauri-action@1deb371b0cd8bd54025b384f1cd735e725c4060f # action-v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
