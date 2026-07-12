@@ -91,7 +91,8 @@ impl SecureStorage {
 
         let mut nonce_bytes = [0u8; 12];
         rand::fill(&mut nonce_bytes);
-        let nonce = Nonce::clone_from_slice(&nonce_bytes);
+        let nonce = Nonce::try_from(nonce_bytes.as_slice())
+            .map_err(|_| AppError::Validation("Invalid encryption nonce".to_string()))?;
 
         let ciphertext =
             cipher
@@ -254,7 +255,8 @@ impl SecureStorage {
 
         // Split Nonce and Ciphertext
         let (nonce_bytes, ciphertext) = file_content.split_at(12);
-        let nonce = Nonce::clone_from_slice(nonce_bytes);
+        let nonce = Nonce::try_from(nonce_bytes)
+            .map_err(|_| AppError::Validation("Invalid encryption nonce".to_string()))?;
 
         let key_bytes = Self::get_encryption_key()?;
         let cipher = Aes256Gcm::new(&key_bytes.into());
