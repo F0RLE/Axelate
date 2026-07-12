@@ -224,9 +224,7 @@ class AISettingsRenderer extends BaseComponent {
         const secretService = this._getSecretService(appId);
 
         const input = container.querySelector(`#${appId}-api-key-input`) as
-            | HTMLInputElement
-            | HTMLTextAreaElement
-            | null;
+            HTMLInputElement | HTMLTextAreaElement | null;
 
         if (input !== null && secretService !== null) {
             await this._keyController.hydrateStoredMask(input, secretService);

@@ -125,8 +125,7 @@ describe('ChatSendController', () => {
         expect(aiBridge.onChunk).toHaveBeenCalledOnce();
 
         const onChunkHandler = aiBridge.onChunk.mock.calls[0]?.[1] as
-            | ((chunk: string) => void)
-            | undefined;
+            ((chunk: string) => void) | undefined;
         onChunkHandler?.('   ');
 
         onChunkHandler?.('hi');

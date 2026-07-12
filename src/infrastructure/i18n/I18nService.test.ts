@@ -439,8 +439,7 @@ describe('I18nService', () => {
             expect(saveUiStateCall).toBeDefined();
 
             const payload = saveUiStateCall?.[1] as
-                | { state?: { preferred_language?: string } }
-                | undefined;
+                { state?: { preferred_language?: string } } | undefined;
             expect(payload?.state?.preferred_language).toBe('ru');
         });
 
