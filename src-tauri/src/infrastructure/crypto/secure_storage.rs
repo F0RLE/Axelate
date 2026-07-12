@@ -91,11 +91,11 @@ impl SecureStorage {
 
         let mut nonce_bytes = [0u8; 12];
         rand::fill(&mut nonce_bytes);
-        let nonce = Nonce::from_slice(&nonce_bytes);
+        let nonce = Nonce::clone_from_slice(&nonce_bytes);
 
         let ciphertext =
             cipher
-                .encrypt(nonce, json_bytes.as_ref())
+                .encrypt(&nonce, json_bytes.as_ref())
                 .map_err(|e| AppError::External {
                     request_id: None,
                     message: format!("Encryption failure: {e}"),
@@ -254,13 +254,13 @@ impl SecureStorage {
 
         // Split Nonce and Ciphertext
         let (nonce_bytes, ciphertext) = file_content.split_at(12);
-        let nonce = Nonce::from_slice(nonce_bytes);
+        let nonce = Nonce::clone_from_slice(nonce_bytes);
 
         let key_bytes = Self::get_encryption_key()?;
         let cipher = Aes256Gcm::new(&key_bytes.into());
 
         let plaintext = cipher
-            .decrypt(nonce, ciphertext)
+            .decrypt(&nonce, ciphertext)
             .map_err(|_| AppError::External {
                 request_id: None,
                 message: "Decryption failed".to_string(),
