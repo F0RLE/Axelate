@@ -51,8 +51,8 @@
         "@tauri-apps/api": "~2.11.1",
         "@tauri-apps/plugin-dialog": "~2.7.1",
         "@tauri-apps/plugin-fs": "~2.5.1",
-        "dompurify": "^3.4.11",
-        "marked": "^18.0.5",
+        "dompurify": "^3.4.12",
+        "marked": "^18.0.6",
         "marked-alert": "^2.1.2",
         "marked-footnote": "^1.4.0",
         "wawoff2": "^2.0.1"
